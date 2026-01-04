@@ -1,0 +1,252 @@
+import { useState, useEffect, useCallback } from 'react';
+import { albumService } from '../../services';
+import { useAuth } from '../../context';
+import { encryptFilename, decryptFilename } from '../../utils/crypto';
+
+const AlbumsSection = ({ onAlbumSelect }) => {
+  const { getMasterKey, hasMasterKey } = useAuth();
+  const [albums, setAlbums] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const fetchAlbums = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await albumService.listAlbums();
+      const albumsData = response.albums || [];
+
+      // Decrypt album titles if master key is available
+      if (hasMasterKey()) {
+        const masterKey = getMasterKey();
+        const decryptedAlbums = await Promise.all(
+          albumsData.map(async (album) => {
+            try {
+              const decryptedTitle = await decryptFilename(
+                album.titleEncrypted,
+                masterKey
+              );
+              return { ...album, title: decryptedTitle };
+            } catch (error) {
+              console.warn('Failed to decrypt album title:', error);
+              return { ...album, title: 'Encrypted Album' };
+            }
+          })
+        );
+        setAlbums(decryptedAlbums);
+      } else {
+        setAlbums(
+          albumsData.map((album) => ({ ...album, title: 'Encrypted Album' }))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to fetch albums:', error);
+      setAlbums([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [getMasterKey, hasMasterKey]);
+
+  // Fetch albums on mount
+  useEffect(() => {
+    fetchAlbums();
+  }, [fetchAlbums]);
+
+  const handleCreateAlbum = async () => {
+    if (!newAlbumName.trim() || !hasMasterKey()) return;
+
+    setCreating(true);
+    try {
+      const masterKey = getMasterKey();
+      const titleEncrypted = await encryptFilename(
+        newAlbumName.trim(),
+        masterKey
+      );
+
+      await albumService.createAlbum({ titleEncrypted });
+      setNewAlbumName('');
+      setShowCreateModal(false);
+      await fetchAlbums();
+    } catch (error) {
+      console.error('Failed to create album:', error);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteAlbum = async (albumId) => {
+    if (!confirm('Delete this album? Photos will not be deleted.')) return;
+
+    try {
+      await albumService.deleteAlbum(albumId);
+      await fetchAlbums();
+    } catch (error) {
+      console.error('Failed to delete album:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="aspect-square bg-gray-200 dark:bg-zinc-800 rounded-xl animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Create Album Button */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowCreateModal(true)}
+          disabled={!hasMasterKey()}
+          className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg
+            className="w-4 h-4 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          New Album
+        </button>
+      </div>
+
+      {/* Albums Grid */}
+      {albums.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
+            <svg
+              className="w-12 h-12 text-gray-300 dark:text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            No albums yet
+          </h3>
+          <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
+            Create your first album to organize your photos.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          {albums.map((album) => (
+            <div
+              key={album.albumId}
+              className="group relative aspect-square bg-gradient-to-br from-blue-500 to-blue-600 overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => onAlbumSelect?.(album)}
+            >
+              {/* Album Cover */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                <svg
+                  className="w-12 h-12 text-white/80 mb-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                  />
+                </svg>
+                <span className="text-white font-medium text-center text-sm truncate w-full">
+                  {album.title}
+                </span>
+                <span className="text-white/70 text-xs mt-1">
+                  {album.fileCount || 0} photos
+                </span>
+              </div>
+
+              {/* Delete button on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteAlbum(album.albumId);
+                }}
+                className="absolute top-2 right-2 w-8 h-8 bg-black/50 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <svg
+                  className="w-4 h-4 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Album Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-800 p-6 w-full max-w-md mx-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Create Album
+            </h2>
+            <input
+              type="text"
+              value={newAlbumName}
+              onChange={(e) => setNewAlbumName(e.target.value)}
+              placeholder="Album name"
+              className="w-full px-4 py-3 border border-gray-200 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-zinc-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateAlbum();
+                if (e.key === 'Escape') setShowCreateModal(false);
+              }}
+            />
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAlbum}
+                disabled={!newAlbumName.trim() || creating}
+                className="px-4 py-2 bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
+              >
+                {creating ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AlbumsSection;

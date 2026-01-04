@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+/* Enable class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Dark mode base styles - applied when html has dark class */
+  html.dark body {
+    @apply bg-zinc-900 text-gray-100;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+/* Custom scrollbar - Light mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* Custom scrollbar - Dark mode */
+html.dark ::-webkit-scrollbar-track {
+  @apply bg-zinc-800;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  @apply bg-zinc-600 rounded-full;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-500;
+}
