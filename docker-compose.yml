@@ -11,16 +11,6 @@ services:
     networks:
       - aamenn-network
     restart: unless-stopped
-    depends_on:
-      - backend
-
-  backend:
-    image: aamenn-backend:latest
-    container_name: aamenn-backend
-    external_links:
-      - aamenn-backend
-    networks:
-      - aamenn-network
 
 networks:
   aamenn-network:
