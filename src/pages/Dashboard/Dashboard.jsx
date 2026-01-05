@@ -16,6 +16,7 @@ import {
   UploadProgressPanel,
   VirtualizedPhotoGrid,
 } from '../../components/gallery';
+import { StorageBar } from '../../components/ui';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import { useUpload } from '../../hooks';
@@ -326,6 +327,7 @@ const Dashboard = () => {
               onUpload={() => setShowUploadModal(true)}
               onDelete={handleDeleteSelected}
               onAddToAlbum={handleAddToAlbumBulk}
+              storageBar={<StorageBar refreshTrigger={files.length} inline />}
             />
           )}
 
