@@ -1,0 +1,21 @@
+{
+  "title": "Dashboard",
+  "welcome": "Welcome back, {{name}}",
+  "recentPhotos": "Recent Photos",
+  "recentAlbums": "Recent Albums",
+  "quickActions": "Quick Actions",
+  "uploadPhotos": "Upload Photos",
+  "createAlbum": "Create Album",
+  "viewAll": "View All",
+  "empty": {
+    "photos": "No photos yet",
+    "albums": "No albums yet",
+    "photosDesc": "Upload your first photo to get started",
+    "albumsDesc": "Create your first album to organize your photos"
+  },
+  "stats": {
+    "totalPhotos": "Total Photos",
+    "totalAlbums": "Total Albums",
+    "storageUsed": "Storage Used"
+  }
+}

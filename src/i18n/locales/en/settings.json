@@ -1,0 +1,70 @@
+{
+  "title": "Settings",
+  "sections": {
+    "account": "Account Settings",
+    "security": "Security & Privacy",
+    "storage": "Storage Management",
+    "appearance": "Display & Appearance"
+  },
+  "profile": {
+    "title": "Profile Information",
+    "description": "Manage your personal information",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Enter your full name",
+    "email": "Email Address",
+    "emailDescription": "Your email cannot be changed",
+    "saveChanges": "Save Changes",
+    "updateSuccess": "Profile updated successfully",
+    "updateError": "Failed to update profile"
+  },
+  "password": {
+    "title": "Change Password",
+    "description": "Update your password to keep your account secure",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Enter new password",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Confirm new password",
+    "changePassword": "Change Password",
+    "changeSuccess": "Password changed successfully",
+    "changeError": "Failed to change password",
+    "incorrectCurrent": "Current password is incorrect",
+    "requirements": "Password must be at least 8 characters",
+    "mismatch": "Passwords do not match"
+  },
+  "deleteAccount": {
+    "title": "Delete Account",
+    "description": "Permanently delete your account and all associated data",
+    "warning": "This action cannot be undone. All your photos, albums, and encrypted data will be permanently deleted.",
+    "confirmTitle": "Are you sure you want to delete your account?",
+    "confirmDescription": "Please enter your password to confirm account deletion. All your data will be permanently removed.",
+    "passwordLabel": "Enter your password",
+    "deleteButton": "Delete My Account",
+    "deleteSuccess": "Account deleted successfully",
+    "deleteError": "Failed to delete account",
+    "incorrectPassword": "Incorrect password"
+  },
+  "theme": {
+    "title": "Theme",
+    "description": "Choose your preferred color theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "language": {
+    "title": "Language",
+    "description": "Select your preferred language",
+    "english": "English",
+    "arabic": "العربية"
+  },
+  "storage": {
+    "title": "Storage Usage",
+    "description": "Monitor your storage usage",
+    "used": "{{used}} of {{total}} used",
+    "percentage": "{{percentage}}% used",
+    "upgrade": "Upgrade Plan",
+    "photos": "{{count}} photos",
+    "albums": "{{count}} albums"
+  }
+}

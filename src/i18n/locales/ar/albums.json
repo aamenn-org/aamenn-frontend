@@ -1,0 +1,34 @@
+{
+  "title": "الألبومات",
+  "createAlbum": "إنشاء ألبوم",
+  "editAlbum": "تعديل الألبوم",
+  "deleteAlbum": "حذف الألبوم",
+  "albumName": "اسم الألبوم",
+  "albumNamePlaceholder": "أدخل اسم الألبوم",
+  "description": "الوصف",
+  "descriptionPlaceholder": "أدخل وصف الألبوم (اختياري)",
+  "coverPhoto": "صورة الغلاف",
+  "selectCover": "اختر الغلاف",
+  "photos": "{{count}} صورة",
+  "created": "تم الإنشاء {{date}}",
+  "empty": {
+    "title": "لا توجد ألبومات بعد",
+    "description": "أنشئ ألبومك الأول لتنظيم صورك"
+  },
+  "confirmDelete": {
+    "title": "حذف الألبوم",
+    "message": "هل أنت متأكد من حذف \"{{name}}\"؟ لن يتم حذف الصور.",
+    "confirm": "حذف الألبوم"
+  },
+  "success": {
+    "created": "تم إنشاء الألبوم بنجاح",
+    "updated": "تم تحديث الألبوم بنجاح",
+    "deleted": "تم حذف الألبوم بنجاح"
+  },
+  "errors": {
+    "createFailed": "فشل في إنشاء الألبوم",
+    "updateFailed": "فشل في تحديث الألبوم",
+    "deleteFailed": "فشل في حذف الألبوم",
+    "loadFailed": "فشل في تحميل الألبومات"
+  }
+}

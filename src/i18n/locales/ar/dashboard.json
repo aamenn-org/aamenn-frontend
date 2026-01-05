@@ -1,0 +1,21 @@
+{
+  "title": "لوحة التحكم",
+  "welcome": "مرحباً بعودتك، {{name}}",
+  "recentPhotos": "الصور الحديثة",
+  "recentAlbums": "الألبومات الحديثة",
+  "quickActions": "الإجراءات السريعة",
+  "uploadPhotos": "رفع الصور",
+  "createAlbum": "إنشاء ألبوم",
+  "viewAll": "عرض الكل",
+  "empty": {
+    "photos": "لا توجد صور بعد",
+    "albums": "لا توجد ألبومات بعد",
+    "photosDesc": "ارفع صورتك الأولى للبدء",
+    "albumsDesc": "أنشئ ألبومك الأول لتنظيم صورك"
+  },
+  "stats": {
+    "totalPhotos": "إجمالي الصور",
+    "totalAlbums": "إجمالي الألبومات",
+    "storageUsed": "التخزين المستخدم"
+  }
+}
