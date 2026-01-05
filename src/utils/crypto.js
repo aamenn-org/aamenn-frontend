@@ -423,6 +423,56 @@ export async function unlockMasterKey(password, encryptedMasterKey, kekSalt) {
   return masterKey;
 }
 
+/**
+ * Re-encrypt master key with a new password (for password change)
+ *
+ * This function is used when changing the user's password.
+ * The master key itself doesn't change - only its encryption wrapper.
+ *
+ * Flow:
+ * 1. Decrypt master key with old KEK (derived from current password)
+ * 2. Generate new salt for new KEK
+ * 3. Derive new KEK from new password
+ * 4. Re-encrypt master key with new KEK
+ *
+ * @param {string} currentPassword - Current password
+ * @param {string} newPassword - New password
+ * @param {string} encryptedMasterKeyBase64 - Current encrypted master key
+ * @param {string} currentSaltBase64 - Current KEK salt
+ * @returns {Promise<{newEncryptedMasterKey: string, newKekSalt: string}>}
+ */
+export async function reEncryptMasterKey(
+  currentPassword,
+  newPassword,
+  encryptedMasterKeyBase64,
+  currentSaltBase64
+) {
+  log('Re-encrypting master key for password change...');
+
+  // Step 1: Derive old KEK from current password
+  const oldKek = await deriveKEK(currentPassword, currentSaltBase64);
+
+  // Step 2: Decrypt master key with old KEK
+  const masterKey = await decryptMasterKey(encryptedMasterKeyBase64, oldKek);
+
+  // Step 3: Generate new salt for new KEK
+  const newSalt = generateRandomBytes(32);
+  const newKekSalt = arrayBufferToBase64(newSalt);
+
+  // Step 4: Derive new KEK from new password
+  const newKek = await deriveKEK(newPassword, newKekSalt);
+
+  // Step 5: Re-encrypt master key with new KEK
+  const newEncryptedMasterKey = await encryptMasterKey(masterKey, newKek);
+
+  log('Master key re-encrypted successfully');
+
+  return {
+    newEncryptedMasterKey,
+    newKekSalt,
+  };
+}
+
 export default {
   KDF_CONFIG,
   arrayBufferToBase64,
@@ -442,4 +492,5 @@ export default {
   decryptFilename,
   generateRegistrationKeys,
   unlockMasterKey,
+  reEncryptMasterKey,
 };
