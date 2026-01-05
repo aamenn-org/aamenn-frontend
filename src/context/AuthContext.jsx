@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { authService } from '../services';
+import { authService, userService } from '../services';
 import { generateRegistrationKeys, unlockMasterKey } from '../utils/crypto';
 
 const AuthContext = createContext(null);
@@ -7,6 +7,7 @@ const AuthContext = createContext(null);
 // Session storage keys
 const MASTER_KEY_STORAGE_KEY = 'aamenn_mk';
 const MASTER_KEY_TIMESTAMP_KEY = 'aamenn_mk_ts';
+const ENCRYPTION_PARAMS_KEY = 'aamenn_enc_params';
 const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
 /**
@@ -77,6 +78,28 @@ const clearStoredMasterKey = () => {
   sessionStorage.removeItem(MASTER_KEY_TIMESTAMP_KEY);
 };
 
+/**
+ * Store encryption params for password change flow
+ */
+const storeEncryptionParams = (params) => {
+  sessionStorage.setItem(ENCRYPTION_PARAMS_KEY, JSON.stringify(params));
+};
+
+/**
+ * Retrieve encryption params
+ */
+const retrieveEncryptionParams = () => {
+  const params = sessionStorage.getItem(ENCRYPTION_PARAMS_KEY);
+  return params ? JSON.parse(params) : null;
+};
+
+/**
+ * Clear encryption params
+ */
+const clearEncryptionParams = () => {
+  sessionStorage.removeItem(ENCRYPTION_PARAMS_KEY);
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -99,12 +122,21 @@ export const AuthProvider = ({ children }) => {
     // Check if user is already authenticated on mount
     const checkAuth = async () => {
       const token = authService.getAccessToken();
-      const storedEmail = localStorage.getItem('userEmail');
 
       if (token) {
         setIsAuthenticated(true);
-        if (storedEmail) {
-          setUser({ email: storedEmail });
+
+        // Fetch full user profile from backend
+        try {
+          const userData = await userService.getCurrentUser();
+          setUser(userData);
+        } catch (err) {
+          console.error('Failed to fetch user profile:', err);
+          // Fallback to stored email if API fails
+          const storedEmail = localStorage.getItem('userEmail');
+          if (storedEmail) {
+            setUser({ email: storedEmail });
+          }
         }
 
         // Try to restore master key from sessionStorage
@@ -145,6 +177,8 @@ export const AuthProvider = ({ children }) => {
         // Unlock master key with password (zero-knowledge)
         if (encryptedMasterKey && kekSalt) {
           console.log('AuthContext: Attempting to unlock master key');
+          // Store encryption params for password change flow
+          storeEncryptionParams({ encryptedMasterKey, kekSalt });
           try {
             const masterKey = await unlockMasterKey(
               password,
@@ -246,6 +280,7 @@ export const AuthProvider = ({ children }) => {
     masterKeyRef.current = null;
     setMasterKeyAvailable(false);
     clearStoredMasterKey(); // Clear from sessionStorage
+    clearEncryptionParams(); // Clear encryption params
 
     // Clear thumbnail cache on logout
     try {
@@ -259,6 +294,20 @@ export const AuthProvider = ({ children }) => {
 
     setUser(null);
     setIsAuthenticated(false);
+  };
+
+  /**
+   * Get encryption params for password change
+   */
+  const getEncryptionParams = () => {
+    return retrieveEncryptionParams();
+  };
+
+  /**
+   * Update encryption params after password change
+   */
+  const updateEncryptionParams = (newParams) => {
+    storeEncryptionParams(newParams);
   };
 
   /**
@@ -287,6 +336,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser,
     loading,
     isAuthenticated,
     login,
@@ -296,6 +346,8 @@ export const AuthProvider = ({ children }) => {
     hasMasterKey,
     setMasterKey,
     masterKeyAvailable, // Boolean state for React effects
+    getEncryptionParams,
+    updateEncryptionParams,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
