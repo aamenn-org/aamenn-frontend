@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aamenn-frontend
+    ports:
+      - '80:80'
+    networks:
+      - aamenn-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  backend:
+    image: aamenn-backend:latest
+    container_name: aamenn-backend
+    external_links:
+      - aamenn-backend
+    networks:
+      - aamenn-network
+
+networks:
+  aamenn-network:
+    external: true
+    name: aamenn-backend_default
