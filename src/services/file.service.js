@@ -287,6 +287,15 @@ export const fileService = {
     const response = await fetch(downloadUrl);
     return response.arrayBuffer();
   },
+
+  /**
+   * Get storage usage for the current user
+   * @returns {Promise<{usedBytes: number, usedGb: number, limitBytes: number, limitGb: number, exceeded: boolean, percentUsed: number}>}
+   */
+  async getStorageUsage() {
+    const response = await api.get('/files/storage-usage');
+    return response.data;
+  },
 };
 
 export default fileService;
