@@ -5,7 +5,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { AuthProvider, useAuth, ThemeProvider } from './context';
-import { AuthPage, Dashboard, Albums, Shared } from './pages';
+import { AuthPage, Dashboard, Albums, Shared, Settings } from './pages';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -88,6 +88,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Shared />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         }
       />
