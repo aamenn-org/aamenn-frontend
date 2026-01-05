@@ -3,6 +3,7 @@ const GalleryHeader = ({
   onUpload,
   onDelete,
   onAddToAlbum,
+  storageBar,
 }) => {
   return (
     <div className="flex items-center justify-between gap-4 mb-6">
@@ -12,6 +13,8 @@ const GalleryHeader = ({
             {selectedCount} selected
           </span>
         )}
+        {/* Storage Bar - inline */}
+        {storageBar}
       </div>
 
       <div className="flex items-center space-x-3">
