@@ -10,6 +10,35 @@ export const userService = {
   },
 
   /**
+   * Update current user profile
+   * @param {Object} data - Profile data
+   * @param {string} [data.displayName] - User's display name
+   */
+  async updateProfile(data) {
+    const response = await api.patch('/users/me', data);
+    return response.data;
+  },
+
+  /**
+   * Delete current user account
+   * @param {string} password - User's password for confirmation
+   */
+  async deleteAccount(password) {
+    const response = await api.delete('/users/me', {
+      data: { password },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get storage usage for current user
+   */
+  async getStorageUsage() {
+    const response = await api.get('/files/storage-usage');
+    return response.data;
+  },
+
+  /**
    * Get user security parameters
    */
   async getUserSecurity() {
