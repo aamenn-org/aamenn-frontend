@@ -9,6 +9,10 @@
  * - Chunked encryption for large files
  * - Thumbnail encryption
  * - Key generation and encryption
+ *
+ * Browser Compatibility:
+ * - Safari 11+ (SubtleCrypto in workers)
+ * - Chrome 37+, Firefox 48+, Edge 79+
  */
 
 // ==================== CRYPTO UTILITIES ====================
@@ -17,13 +21,20 @@ const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for streaming encryption
 
 /**
  * Convert ArrayBuffer to Base64 string
+ * Safari-compatible implementation using chunked processing
  */
 function arrayBufferToBase64(buffer) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
+  // Process in chunks to avoid "Maximum call stack size exceeded" in Safari
+  const CHUNK_SIZE = 8192;
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+
+  for (let i = 0; i < bytes.byteLength; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.byteLength));
+    binary += String.fromCharCode.apply(null, chunk);
   }
+
   return btoa(binary);
 }
 
@@ -36,9 +47,24 @@ function generateRandomBytes(length) {
 
 /**
  * Compute SHA-1 hash of data
+ * Includes Safari-compatible buffer handling
  */
 async function computeSHA1(data) {
-  const buffer = data instanceof ArrayBuffer ? data : data.buffer || data;
+  // Ensure we have an ArrayBuffer (Safari may need explicit conversion)
+  let buffer;
+  if (data instanceof ArrayBuffer) {
+    buffer = data;
+  } else if (data instanceof Uint8Array) {
+    buffer = data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength
+    );
+  } else if (data.buffer) {
+    buffer = data.buffer;
+  } else {
+    throw new Error('Unsupported data type for SHA-1');
+  }
+
   const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
   const hashArray = new Uint8Array(hashBuffer);
   return Array.from(hashArray)
@@ -48,9 +74,24 @@ async function computeSHA1(data) {
 
 /**
  * Compute SHA-256 hash of data (for duplicate detection)
+ * Includes Safari-compatible buffer handling
  */
 async function computeSHA256(data) {
-  const buffer = data instanceof ArrayBuffer ? data : data.buffer || data;
+  // Ensure we have an ArrayBuffer (Safari may need explicit conversion)
+  let buffer;
+  if (data instanceof ArrayBuffer) {
+    buffer = data;
+  } else if (data instanceof Uint8Array) {
+    buffer = data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength
+    );
+  } else if (data.buffer) {
+    buffer = data.buffer;
+  } else {
+    throw new Error('Unsupported data type for SHA-256');
+  }
+
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   const hashArray = new Uint8Array(hashBuffer);
   return Array.from(hashArray)

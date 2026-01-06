@@ -9,11 +9,30 @@ export const THUMBNAIL_SIZES = {
 };
 
 /**
- * Check if OffscreenCanvas is supported (for worker-based generation)
+ * Detect Safari browser (has quirks with OffscreenCanvas and createImageBitmap)
  */
-export const OFFSCREEN_CANVAS_SUPPORTED =
-  typeof OffscreenCanvas !== 'undefined' &&
-  typeof createImageBitmap !== 'undefined';
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+/**
+ * Check if OffscreenCanvas is supported (for worker-based generation)
+ * Safari < 16.4 doesn't support OffscreenCanvas properly
+ * Even Safari 16.4+ can have issues with createImageBitmap on Blobs
+ */
+export const OFFSCREEN_CANVAS_SUPPORTED = (() => {
+  if (typeof OffscreenCanvas === 'undefined') return false;
+  if (typeof createImageBitmap === 'undefined') return false;
+
+  // Safari has known issues with OffscreenCanvas + createImageBitmap from Blob
+  // Disable worker-based generation on Safari to avoid failures
+  if (isSafari) {
+    console.log(
+      '[Thumbnail] Safari detected - using main thread for compatibility'
+    );
+    return false;
+  }
+
+  return true;
+})();
 
 /**
  * Thumbnail worker singleton
@@ -328,9 +347,13 @@ async function loadImageFromBlob(blob) {
       URL.revokeObjectURL(url);
       resolve(img);
     };
-    img.onerror = () => {
+    img.onerror = (error) => {
       URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image from blob'));
+      reject(
+        new Error(
+          `Failed to load image from blob: ${error?.message || 'Unknown error'}`
+        )
+      );
     };
     img.src = url;
   });
@@ -338,13 +361,27 @@ async function loadImageFromBlob(blob) {
 
 /**
  * Load an image from a file
+ * Safari-compatible with proper URL cleanup
  */
 async function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
+
+    // Safari requires crossOrigin to be set for some operations
+    // even on blob URLs in certain contexts
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      // Revoke URL after image loads to prevent memory leak
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (error) => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Failed to load image: ${error?.message || file.name}`));
+    };
+    img.src = url;
   });
 }
 

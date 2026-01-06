@@ -27,6 +27,8 @@ import {
   encryptFileKey,
   encryptFilename,
   arrayBufferToBase64,
+  computeSHA256 as computeSHA256MainThread,
+  computeSHA1 as computeSHA1MainThread,
 } from '../utils/crypto';
 import { getCryptoWorkerPool } from '../workers';
 
@@ -41,6 +43,9 @@ const MAX_CONCURRENT_UPLOAD = Math.min(CPU_CORES, 4);
 // to start upload immediately (thumbnails can be generated later)
 const PROGRESSIVE_UPLOAD_THRESHOLD = 50 * 1024 * 1024; // 50MB
 
+// Detect Safari for workarounds (Safari has issues with some worker operations)
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 // Retry configuration (inspired by ente.io)
 const RETRY_CONFIG = {
   maxRetries: 4, // 1 original + 3 retries
@@ -51,7 +56,9 @@ const RETRY_CONFIG = {
 };
 
 console.log(
-  `[useUpload] Detected ${CPU_CORES} CPU cores. Using ${MAX_CONCURRENT_ENCRYPT} encryption threads, ${MAX_CONCURRENT_UPLOAD} upload threads.`
+  `[useUpload] Detected ${CPU_CORES} CPU cores. Using ${MAX_CONCURRENT_ENCRYPT} encryption threads, ${MAX_CONCURRENT_UPLOAD} upload threads.${
+    isSafari ? ' (Safari mode)' : ''
+  }`
 );
 
 // SessionStorage key for persisting upload state across page refreshes
@@ -284,12 +291,41 @@ export function useUpload({ onFileUploaded } = {}) {
       try {
         // Phase 1a: Compute content hash for duplicate detection (in worker - non-blocking)
         updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
-        const fileData = await file.arrayBuffer();
+
+        // Read file data - use arrayBuffer() with FileReader fallback for Safari
+        let fileData;
+        try {
+          fileData = await file.arrayBuffer();
+        } catch (readError) {
+          // Fallback to FileReader for older Safari versions
+          console.warn(
+            '[useUpload] arrayBuffer() failed, using FileReader fallback:',
+            readError.message
+          );
+          fileData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('FileReader failed'));
+            reader.readAsArrayBuffer(file);
+          });
+        }
 
         // Clone the ArrayBuffer for hashing since transfer is destructive
         const hashData = fileData.slice(0);
-        const workerPool = getCryptoWorkerPool();
-        const contentHash = await workerPool.computeSHA256(hashData);
+
+        // Compute SHA-256 hash - use worker with fallback to main thread for Safari compatibility
+        let contentHash;
+        try {
+          const workerPool = getCryptoWorkerPool();
+          contentHash = await workerPool.computeSHA256(hashData);
+        } catch (workerError) {
+          console.warn(
+            '[useUpload] Worker hash failed, using main thread:',
+            workerError.message
+          );
+          // Fallback to main thread computation (Safari compatibility)
+          contentHash = await computeSHA256MainThread(hashData);
+        }
         updateUpload(id, { progress: 5 });
 
         // Phase 1b: Check for duplicates
@@ -398,7 +434,20 @@ export function useUpload({ onFileUploaded } = {}) {
         // Compute SHA1 hash for B2 verification (in worker - non-blocking)
         // Clone the buffer since transfer is destructive
         const sha1Data = combined.buffer.slice(0);
-        const sha1Hash = await workerPool.computeSHA1(sha1Data);
+
+        // Compute SHA-1 hash - use worker with fallback to main thread for Safari compatibility
+        let sha1Hash;
+        try {
+          const workerPool = getCryptoWorkerPool();
+          sha1Hash = await workerPool.computeSHA1(sha1Data);
+        } catch (workerError) {
+          console.warn(
+            '[useUpload] Worker SHA1 failed, using main thread:',
+            workerError.message
+          );
+          // Fallback to main thread computation (Safari compatibility)
+          sha1Hash = await computeSHA1MainThread(sha1Data);
+        }
 
         // Create encrypted blob
         const encryptedBlob = new Blob([combined], {
