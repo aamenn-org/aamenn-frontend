@@ -682,7 +682,7 @@ class ThumbnailCacheService {
   /**
    * Batch preload with metadata from API response.
    * Designed for predictive loading of 10+ images.
-   * Only loads MEDIUM thumbnails - full images load on demand.
+   * Preloads FULL images for instant viewing.
    */
   async batchPreload(
     filesMetadata: Array<{
@@ -696,32 +696,33 @@ class ThumbnailCacheService {
     masterKey: CryptoKey,
     _options: { prioritizeMedium?: boolean } = {}
   ): Promise<void> {
-    // Filter out files that already have medium thumbnail cached
+    // Filter out files that already have full image cached
     const toPreload = filesMetadata.filter(
-      (f) => !this.getMediumFromMemory(f.fileId)
+      (f) => !this.getFullImageFromMemory(f.fileId)
     );
 
     if (toPreload.length === 0) {
-      log('All medium thumbnails already in cache');
+      log('All full images already in cache');
       return;
     }
 
-    log(`Batch preloading ${toPreload.length} medium thumbnails`);
+    log(`Batch preloading ${toPreload.length} full images`);
 
-    // Only preload medium thumbnails (not full images)
-    const mediumPromises = toPreload
-      .filter((f) => f.thumbMediumUrl && f.cipherThumbMediumKey)
+    // Preload full images for instant viewing
+    const fullPromises = toPreload
+      .filter((f) => f.downloadUrl && f.cipherFileKey)
       .map((f) =>
-        this.getMediumThumbnail(
+        this.getFullImage(
           f.fileId,
-          f.thumbMediumUrl!,
-          f.cipherThumbMediumKey!,
-          masterKey
+          f.downloadUrl,
+          f.cipherFileKey,
+          masterKey,
+          f.mimeType || 'image/jpeg'
         ).catch(() => null)
       );
 
-    await Promise.all(mediumPromises);
-    log('Medium thumbnails preloaded');
+    await Promise.all(fullPromises);
+    log('Full images preloaded');
   }
 
   /**
