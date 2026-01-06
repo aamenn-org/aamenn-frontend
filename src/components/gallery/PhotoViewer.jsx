@@ -162,19 +162,83 @@ const PhotoViewer = ({
   // Only trigger new preload when user reaches near the boundary
   const preloadZoneRef = useRef({ left: -1, right: -1 });
 
+  // Full image preload zone (smaller, ±2 images)
+  const fullPreloadZoneRef = useRef({ left: -1, right: -1 });
+
   // Configuration for zone-based preloading
-  const PRELOAD_ZONE_SIZE = 10; // How many images to preload in each direction
+  const PRELOAD_ZONE_SIZE = 10; // How many MEDIUM images to preload in each direction
   const PRELOAD_THRESHOLD = 3; // Trigger new preload when this close to boundary
+  const FULL_PRELOAD_SIZE = 2; // How many FULL images to preload in each direction
 
   // Reset zone when viewer closes (so next open starts fresh)
   useEffect(() => {
     if (!isOpen) {
       preloadZoneRef.current = { left: -1, right: -1 };
+      fullPreloadZoneRef.current = { left: -1, right: -1 };
     }
   }, [isOpen]);
 
-  // Preload adjacent images - ZONE-BASED: Only preload when reaching boundary
-  const preloadAdjacent = useCallback(async () => {
+  // Preload FULL images for ±2 adjacent (likely next clicks)
+  const preloadFullAdjacent = useCallback(async () => {
+    const masterKey = getMasterKey();
+    if (!masterKey || !files.length || currentIndex === undefined) return;
+
+    const zone = fullPreloadZoneRef.current;
+
+    // Check if current index is outside the full preload zone
+    const needsPreload =
+      zone.left === -1 || currentIndex < zone.left || currentIndex > zone.right;
+
+    if (!needsPreload) return;
+
+    // Calculate new zone centered on current
+    const newLeft = Math.max(0, currentIndex - FULL_PRELOAD_SIZE);
+    const newRight = Math.min(
+      files.length - 1,
+      currentIndex + FULL_PRELOAD_SIZE
+    );
+
+    // Collect file IDs that need full preload
+    const adjacentFileIds = [];
+    for (let i = newLeft; i <= newRight; i++) {
+      const file = files[i];
+      const fileId = file?.fileId || file?.id;
+      if (fileId && !thumbnailCache.getFullImageFromMemory(fileId)) {
+        adjacentFileIds.push(fileId);
+      }
+    }
+
+    // Update zone
+    fullPreloadZoneRef.current = { left: newLeft, right: newRight };
+
+    if (adjacentFileIds.length === 0) return;
+
+    console.log(
+      `[PhotoViewer] Preloading ${adjacentFileIds.length} FULL images around index ${currentIndex}`
+    );
+
+    try {
+      const { files: filesMetadata } = await fileService.getFilesBatch(
+        adjacentFileIds
+      );
+      if (filesMetadata?.length > 0) {
+        await thumbnailCache.batchPreloadFull(
+          filesMetadata.map((f) => ({
+            fileId: f.fileId,
+            downloadUrl: f.downloadUrl,
+            cipherFileKey: f.cipherFileKey,
+            mimeType: f.mimeType,
+          })),
+          masterKey
+        );
+      }
+    } catch (error) {
+      console.warn('[PhotoViewer] Full preload failed:', error);
+    }
+  }, [getMasterKey, files, currentIndex]);
+
+  // Preload MEDIUM images for ±10 zone (instant display when navigating)
+  const preloadMediumAdjacent = useCallback(async () => {
     const masterKey = getMasterKey();
     if (!masterKey || !files.length || currentIndex === undefined) return;
 
@@ -377,10 +441,13 @@ const PhotoViewer = ({
     }
 
     // Preload adjacent images after a short delay (skip videos for now)
-    const preloadTimer = setTimeout(preloadAdjacent, 500);
+    // Full images first (immediate ±2), then medium (±10 zone)
+    const fullPreloadTimer = setTimeout(preloadFullAdjacent, 100);
+    const mediumPreloadTimer = setTimeout(preloadMediumAdjacent, 500);
 
     return () => {
-      clearTimeout(preloadTimer);
+      clearTimeout(fullPreloadTimer);
+      clearTimeout(mediumPreloadTimer);
     };
   }, [
     file?.fileId,
@@ -390,7 +457,8 @@ const PhotoViewer = ({
     getBestCachedUrl,
     loadImage,
     loadVideo,
-    preloadAdjacent,
+    preloadFullAdjacent,
+    preloadMediumAdjacent,
   ]);
 
   const handleDownload = async () => {

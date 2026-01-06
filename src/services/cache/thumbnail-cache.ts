@@ -680,9 +680,8 @@ class ThumbnailCacheService {
   }
 
   /**
-   * Batch preload with metadata from API response.
+   * Batch preload MEDIUM thumbnails for zone-based preloading.
    * Designed for predictive loading of 10+ images.
-   * Preloads FULL images for instant viewing.
    */
   async batchPreload(
     filesMetadata: Array<{
@@ -696,6 +695,46 @@ class ThumbnailCacheService {
     masterKey: CryptoKey,
     _options: { prioritizeMedium?: boolean } = {}
   ): Promise<void> {
+    // Filter out files that already have medium thumbnail cached
+    const toPreload = filesMetadata.filter(
+      (f) => !this.getMediumFromMemory(f.fileId)
+    );
+
+    if (toPreload.length === 0) {
+      log('All medium thumbnails already in cache');
+      return;
+    }
+
+    log(`Batch preloading ${toPreload.length} medium thumbnails`);
+
+    // Preload medium thumbnails
+    const mediumPromises = toPreload
+      .filter((f) => f.thumbMediumUrl && f.cipherThumbMediumKey)
+      .map((f) =>
+        this.getMediumThumbnail(
+          f.fileId,
+          f.thumbMediumUrl!,
+          f.cipherThumbMediumKey!,
+          masterKey
+        ).catch(() => null)
+      );
+
+    await Promise.all(mediumPromises);
+    log('Medium thumbnails preloaded');
+  }
+
+  /**
+   * Batch preload FULL images for immediate adjacent images.
+   */
+  async batchPreloadFull(
+    filesMetadata: Array<{
+      fileId: string;
+      downloadUrl: string;
+      cipherFileKey: string;
+      mimeType?: string;
+    }>,
+    masterKey: CryptoKey
+  ): Promise<void> {
     // Filter out files that already have full image cached
     const toPreload = filesMetadata.filter(
       (f) => !this.getFullImageFromMemory(f.fileId)
@@ -708,7 +747,6 @@ class ThumbnailCacheService {
 
     log(`Batch preloading ${toPreload.length} full images`);
 
-    // Preload full images for instant viewing
     const fullPromises = toPreload
       .filter((f) => f.downloadUrl && f.cipherFileKey)
       .map((f) =>
