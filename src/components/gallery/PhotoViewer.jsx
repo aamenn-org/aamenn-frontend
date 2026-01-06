@@ -158,50 +158,98 @@ const PhotoViewer = ({
   // Track preloaded file IDs to avoid re-requesting (persists across renders)
   const preloadedFileIdsRef = useRef(new Set());
 
-  // Preload adjacent images - ENHANCED: batch preload 10 next + 10 prev
+  // Zone-based preloading: Track the boundaries of already-preloaded zones
+  // Only trigger new preload when user reaches near the boundary
+  const preloadZoneRef = useRef({ left: -1, right: -1 });
+
+  // Configuration for zone-based preloading
+  const PRELOAD_ZONE_SIZE = 10; // How many images to preload in each direction
+  const PRELOAD_THRESHOLD = 3; // Trigger new preload when this close to boundary
+
+  // Reset zone when viewer closes (so next open starts fresh)
+  useEffect(() => {
+    if (!isOpen) {
+      preloadZoneRef.current = { left: -1, right: -1 };
+    }
+  }, [isOpen]);
+
+  // Preload adjacent images - ZONE-BASED: Only preload when reaching boundary
   const preloadAdjacent = useCallback(async () => {
     const masterKey = getMasterKey();
     if (!masterKey || !files.length || currentIndex === undefined) return;
 
-    // Collect file IDs for batch loading: 10 previous + 10 next
+    const zone = preloadZoneRef.current;
+
+    // Check if we need to preload (first time or approaching boundary)
+    const isFirstLoad = zone.left === -1 && zone.right === -1;
+    const approachingLeftBoundary =
+      currentIndex <= zone.left + PRELOAD_THRESHOLD;
+    const approachingRightBoundary =
+      currentIndex >= zone.right - PRELOAD_THRESHOLD;
+
+    // If we're comfortably within the preloaded zone, skip
+    if (!isFirstLoad && !approachingLeftBoundary && !approachingRightBoundary) {
+      console.log(
+        `[PhotoViewer] Within zone [${zone.left}-${zone.right}], index=${currentIndex}, skipping preload`
+      );
+      return;
+    }
+
+    // Determine which direction to extend the zone
+    let newLeft = zone.left;
+    let newRight = zone.right;
     const adjacentFileIds = [];
 
-    // Previous 10 images
-    for (let i = 1; i <= 10; i++) {
-      const prevIndex = currentIndex - i;
-      if (prevIndex >= 0) {
-        const file = files[prevIndex];
-        const fileId = file?.fileId || file?.id;
-        // Skip if already preloaded OR has medium thumbnail in memory
-        if (
-          fileId &&
-          !preloadedFileIdsRef.current.has(fileId) &&
-          !thumbnailCache.getMediumFromMemory(fileId)
-        ) {
-          adjacentFileIds.push(fileId);
-        }
+    if (isFirstLoad) {
+      // First load: preload ±PRELOAD_ZONE_SIZE around current position
+      newLeft = Math.max(0, currentIndex - PRELOAD_ZONE_SIZE);
+      newRight = Math.min(files.length - 1, currentIndex + PRELOAD_ZONE_SIZE);
+      console.log(`[PhotoViewer] Initial zone load: [${newLeft}-${newRight}]`);
+    } else if (approachingLeftBoundary && zone.left > 0) {
+      // Extend zone to the left
+      newLeft = Math.max(0, zone.left - PRELOAD_ZONE_SIZE);
+      console.log(
+        `[PhotoViewer] Extending zone LEFT: [${newLeft}-${zone.right}]`
+      );
+    } else if (approachingRightBoundary && zone.right < files.length - 1) {
+      // Extend zone to the right
+      newRight = Math.min(files.length - 1, zone.right + PRELOAD_ZONE_SIZE);
+      console.log(
+        `[PhotoViewer] Extending zone RIGHT: [${zone.left}-${newRight}]`
+      );
+    } else {
+      // Already at edge of gallery, nothing to preload
+      console.log(`[PhotoViewer] At gallery edge, no extension needed`);
+      return;
+    }
+
+    // Collect file IDs for the NEW portion of the zone (not already preloaded)
+    for (let i = newLeft; i <= newRight; i++) {
+      // Skip indices that were already in the previous zone
+      if (!isFirstLoad && i >= zone.left && i <= zone.right) continue;
+
+      const file = files[i];
+      const fileId = file?.fileId || file?.id;
+      // Skip if already preloaded OR has medium thumbnail in memory
+      if (
+        fileId &&
+        !preloadedFileIdsRef.current.has(fileId) &&
+        !thumbnailCache.getMediumFromMemory(fileId)
+      ) {
+        adjacentFileIds.push(fileId);
       }
     }
 
-    // Next 10 images
-    for (let i = 1; i <= 10; i++) {
-      const nextIndex = currentIndex + i;
-      if (nextIndex < files.length) {
-        const file = files[nextIndex];
-        const fileId = file?.fileId || file?.id;
-        // Skip if already preloaded OR has medium thumbnail in memory
-        if (
-          fileId &&
-          !preloadedFileIdsRef.current.has(fileId) &&
-          !thumbnailCache.getMediumFromMemory(fileId)
-        ) {
-          adjacentFileIds.push(fileId);
-        }
-      }
-    }
+    // Update zone boundaries
+    preloadZoneRef.current = {
+      left: isFirstLoad ? newLeft : Math.min(zone.left, newLeft),
+      right: isFirstLoad ? newRight : Math.max(zone.right, newRight),
+    };
 
     if (adjacentFileIds.length === 0) {
-      console.log('[PhotoViewer] All adjacent files already preloaded/cached');
+      console.log(
+        '[PhotoViewer] All files in new zone already preloaded/cached'
+      );
       return;
     }
 

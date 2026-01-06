@@ -47,6 +47,18 @@ async function computeSHA1(data) {
 }
 
 /**
+ * Compute SHA-256 hash of data (for duplicate detection)
+ */
+async function computeSHA256(data) {
+  const buffer = data instanceof ArrayBuffer ? data : data.buffer || data;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
  * Generate a random AES-256-GCM key
  */
 async function generateFileKey() {
@@ -321,6 +333,71 @@ self.onmessage = async function (e) {
           id,
           result: { hash },
         });
+        break;
+      }
+
+      case 'COMPUTE_SHA256': {
+        const { data } = payload;
+        const hash = await computeSHA256(data);
+
+        self.postMessage({
+          type: 'COMPUTE_SHA256_RESULT',
+          id,
+          result: { hash },
+        });
+        break;
+      }
+
+      case 'DECRYPT_FILE': {
+        // Decrypt file content (for viewing)
+        // Payload: { encryptedData, cipherFileKeyBase64, masterKeyBytes }
+        const { encryptedData, cipherFileKeyBase64, masterKeyBytes } = payload;
+
+        // Import master key
+        const masterKey = await importMasterKey(masterKeyBytes);
+
+        // Decrypt file key
+        const combined = Uint8Array.from(atob(cipherFileKeyBase64), (c) =>
+          c.charCodeAt(0)
+        );
+        const keyIv = combined.slice(0, 12);
+        const keyCiphertext = combined.slice(12);
+
+        const fileKeyBytes = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: keyIv },
+          masterKey,
+          keyCiphertext
+        );
+
+        const fileKey = await crypto.subtle.importKey(
+          'raw',
+          fileKeyBytes,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['decrypt']
+        );
+
+        // Extract IV and ciphertext from encrypted data
+        const encArray = new Uint8Array(encryptedData);
+        const iv = encArray.slice(0, 12);
+        const ciphertext = encArray.slice(12);
+
+        // Decrypt file
+        const decryptedData = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv },
+          fileKey,
+          ciphertext
+        );
+
+        // Transfer ownership for performance
+        self.postMessage(
+          {
+            type: 'DECRYPT_FILE_RESULT',
+            id,
+            result: { decryptedData },
+          },
+          [decryptedData]
+        );
         break;
       }
 

@@ -10,7 +10,7 @@
  * - fileService: File CRUD, favorites, batch operations
  * - albumService: Album management
  * - cache: Multi-layer caching (memory + IndexedDB)
- * - parallel-upload: Web Worker-based upload system
+ * - uploadPrewarmer: Worker pre-warming for fast uploads
  */
 
 // Core API client
@@ -25,9 +25,9 @@ export { default as albumService } from './album.service';
 // Cache system (L1: memory, L2: IndexedDB)
 export { thumbnailCache } from './cache';
 
-// Parallel upload system (Web Workers)
+// Upload optimization
 export {
-  getUploadManager,
-  destroyUploadManager,
-  UploadState,
-} from './parallel-upload';
+  getUploadPrewarmer,
+  triggerWarmup,
+  resetPrewarmer,
+} from './upload-prewarmer';

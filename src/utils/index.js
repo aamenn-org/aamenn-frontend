@@ -9,6 +9,7 @@ export { default as crypto } from './crypto';
 // Thumbnail/media utilities
 export {
   THUMBNAIL_SIZES,
+  OFFSCREEN_CANVAS_SUPPORTED,
   generateThumbnails,
   generateVideoThumbnails,
   isImageSupported,

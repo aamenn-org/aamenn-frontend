@@ -9,6 +9,96 @@ export const THUMBNAIL_SIZES = {
 };
 
 /**
+ * Check if OffscreenCanvas is supported (for worker-based generation)
+ */
+export const OFFSCREEN_CANVAS_SUPPORTED =
+  typeof OffscreenCanvas !== 'undefined' &&
+  typeof createImageBitmap !== 'undefined';
+
+/**
+ * Thumbnail worker singleton
+ */
+let thumbnailWorker = null;
+let thumbnailWorkerReady = false;
+let pendingTasks = new Map();
+let nextTaskId = 0;
+
+/**
+ * Initialize the thumbnail worker (lazy)
+ */
+function initThumbnailWorker() {
+  if (thumbnailWorker) return;
+  if (!OFFSCREEN_CANVAS_SUPPORTED) return;
+
+  try {
+    thumbnailWorker = new Worker(
+      new URL('../workers/thumbnail.worker.js', import.meta.url),
+      { type: 'module' }
+    );
+
+    thumbnailWorker.onmessage = (e) => {
+      const { type, id, result, error, progress, stage } = e.data;
+
+      if (type === 'READY' || type === 'PONG') {
+        thumbnailWorkerReady = true;
+        return;
+      }
+
+      const task = pendingTasks.get(id);
+      if (!task) return;
+
+      if (type === 'PROGRESS') {
+        if (task.onProgress) task.onProgress(progress, stage);
+        return;
+      }
+
+      if (type === 'ERROR') {
+        task.reject(new Error(error.message));
+        pendingTasks.delete(id);
+        return;
+      }
+
+      if (type.endsWith('_RESULT')) {
+        task.resolve(result);
+        pendingTasks.delete(id);
+      }
+    };
+
+    thumbnailWorker.onerror = (err) => {
+      console.error('[ThumbnailWorker] Worker error:', err);
+    };
+  } catch (err) {
+    console.warn('[ThumbnailWorker] Failed to create worker:', err);
+    thumbnailWorker = null;
+  }
+}
+
+/**
+ * Generate thumbnails using the worker (if available)
+ * @param {File|Blob} file - The image file
+ * @returns {Promise<Object>} Thumbnail result with base64 data
+ */
+async function generateThumbnailsInWorker(file) {
+  initThumbnailWorker();
+
+  if (!thumbnailWorker) {
+    throw new Error('Thumbnail worker not available');
+  }
+
+  return new Promise((resolve, reject) => {
+    const id = nextTaskId++;
+    pendingTasks.set(id, { resolve, reject });
+
+    // Send the file blob directly - createImageBitmap can handle it
+    thumbnailWorker.postMessage({
+      type: 'GENERATE_THUMBNAILS',
+      id,
+      payload: { imageData: file },
+    });
+  });
+}
+
+/**
  * Supported video MIME types
  */
 const SUPPORTED_VIDEO_TYPES = [
@@ -40,10 +130,49 @@ export function isVideo(mimeType) {
 
 /**
  * Generate thumbnails and blurhash from an image file
+ * Uses Web Worker with OffscreenCanvas when available, falls back to main thread
+ * @param file - The original image file
+ * @param options - Options: { useWorker: boolean }
+ * @returns Object with small/medium thumbnail blobs, blurhash string, and dimensions
+ */
+export async function generateThumbnails(file, options = {}) {
+  const { useWorker = true } = options;
+
+  // Try worker-based generation first (non-blocking)
+  if (useWorker && OFFSCREEN_CANVAS_SUPPORTED) {
+    try {
+      const result = await generateThumbnailsInWorker(file);
+
+      // Convert base64 back to blobs for consistency with main thread API
+      const smallBlob = base64ToBlob(result.smallBase64, 'image/jpeg');
+      const mediumBlob = base64ToBlob(result.mediumBase64, 'image/jpeg');
+
+      return {
+        small: smallBlob,
+        medium: mediumBlob,
+        blurhash: result.blurhash,
+        width: result.width,
+        height: result.height,
+      };
+    } catch (err) {
+      console.warn(
+        '[Thumbnail] Worker failed, falling back to main thread:',
+        err.message
+      );
+      // Fall through to main thread generation
+    }
+  }
+
+  // Fallback: Main thread generation
+  return generateThumbnailsMainThread(file);
+}
+
+/**
+ * Generate thumbnails on the main thread (fallback)
  * @param file - The original image file
  * @returns Object with small/medium thumbnail blobs, blurhash string, and dimensions
  */
-export async function generateThumbnails(file) {
+async function generateThumbnailsMainThread(file) {
   // Load image
   const image = await loadImage(file);
   const { naturalWidth: width, naturalHeight: height } = image;
@@ -72,6 +201,21 @@ export async function generateThumbnails(file) {
     width,
     height,
   };
+}
+
+/**
+ * Convert base64 string to Blob
+ * @param base64 - base64 string (without data URL prefix)
+ * @param mimeType - MIME type of the blob
+ * @returns Blob
+ */
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
 }
 
 /**

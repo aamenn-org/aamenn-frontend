@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authService, userService } from '../services';
 import { generateRegistrationKeys, unlockMasterKey } from '../utils/crypto';
+import { triggerWarmup, resetPrewarmer } from '../services/upload-prewarmer';
 
 const AuthContext = createContext(null);
 
@@ -145,6 +146,9 @@ export const AuthProvider = ({ children }) => {
           masterKeyRef.current = storedKey;
           setMasterKeyAvailable(true);
           console.log('Master key restored from session');
+
+          // Pre-warm workers for fast uploads (non-blocking)
+          triggerWarmup();
         }
       }
       setLoading(false);
@@ -189,6 +193,9 @@ export const AuthProvider = ({ children }) => {
             setMasterKeyAvailable(true);
             storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
             console.log('AuthContext: Master key unlocked and stored');
+
+            // Pre-warm workers for fast uploads (non-blocking)
+            triggerWarmup();
           } catch (cryptoError) {
             console.error(
               'AuthContext: Failed to unlock master key:',
@@ -252,7 +259,11 @@ export const AuthProvider = ({ children }) => {
 
         // Store master key in memory and sessionStorage
         masterKeyRef.current = masterKey;
+        setMasterKeyAvailable(true);
         storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
+
+        // Pre-warm workers for fast uploads (non-blocking)
+        triggerWarmup();
 
         setUser({ email });
         setIsAuthenticated(true);
@@ -281,6 +292,9 @@ export const AuthProvider = ({ children }) => {
     setMasterKeyAvailable(false);
     clearStoredMasterKey(); // Clear from sessionStorage
     clearEncryptionParams(); // Clear encryption params
+
+    // Reset prewarmer state
+    resetPrewarmer();
 
     // Clear thumbnail cache on logout
     try {

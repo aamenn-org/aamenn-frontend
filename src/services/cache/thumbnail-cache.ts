@@ -7,12 +7,12 @@
  * Flow:
  * 1. Check L1 (memory) → instant return
  * 2. Check L2 (IndexedDB) → fast return
- * 3. Download + decrypt + cache → slower but persists
+ * 3. Download + decrypt in WORKER + cache → non-blocking
  */
 
 import Dexie from 'dexie';
 import { fileService } from '../index';
-import { decryptFileKey, decryptFile } from '../../utils/crypto';
+import { getCryptoWorkerPool } from '../../workers';
 
 // Debug logging - disabled in production
 const DEBUG = false; // Set to true to enable cache debug logs
@@ -241,17 +241,14 @@ class ThumbnailCacheService {
       const encryptedData = await fileService.downloadFileContent(thumbnailUrl);
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
-      // Decrypt thumbnail key
-      const thumbKey = await decryptFileKey(cipherThumbKey, masterKey);
-
-      // Extract IV and decrypt
-      const encryptedArray = new Uint8Array(encryptedData);
-      const iv = encryptedArray.slice(0, 12);
-      const ciphertext = encryptedArray.slice(12);
-
-      log(`IV: ${iv.length} bytes, Ciphertext: ${ciphertext.length} bytes`);
-
-      const decryptedData = await decryptFile(ciphertext.buffer, thumbKey, iv);
+      // Decrypt in Web Worker (non-blocking!)
+      const workerPool = getCryptoWorkerPool();
+      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
+      const decryptedData = await workerPool.decryptFile(
+        encryptedData,
+        cipherThumbKey,
+        masterKeyBytes
+      );
 
       // Debug: Check the first bytes of decrypted data (JPEG should start with FF D8 FF)
       const decryptedArray = new Uint8Array(decryptedData);
@@ -469,13 +466,16 @@ class ThumbnailCacheService {
       log(`Full image L3 FETCH: ${fileId}`);
 
       const encryptedData = await fileService.downloadFileContent(downloadUrl);
-      const fileKey = await decryptFileKey(cipherFileKey, masterKey);
 
-      const encryptedArray = new Uint8Array(encryptedData);
-      const iv = encryptedArray.slice(0, 12);
-      const ciphertext = encryptedArray.slice(12);
+      // Decrypt in Web Worker (non-blocking!)
+      const workerPool = getCryptoWorkerPool();
+      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
+      const decryptedData = await workerPool.decryptFile(
+        encryptedData,
+        cipherFileKey,
+        masterKeyBytes
+      );
 
-      const decryptedData = await decryptFile(ciphertext.buffer, fileKey, iv);
       const blob = new Blob([decryptedData], { type: mimeType });
       const url = URL.createObjectURL(blob);
 
@@ -548,13 +548,16 @@ class ThumbnailCacheService {
       const encryptedData = await fileService.downloadFileContent(
         thumbMediumUrl
       );
-      const thumbKey = await decryptFileKey(cipherThumbMediumKey, masterKey);
 
-      const encryptedArray = new Uint8Array(encryptedData);
-      const iv = encryptedArray.slice(0, 12);
-      const ciphertext = encryptedArray.slice(12);
+      // Decrypt in Web Worker (non-blocking!)
+      const workerPool = getCryptoWorkerPool();
+      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
+      const decryptedData = await workerPool.decryptFile(
+        encryptedData,
+        cipherThumbMediumKey,
+        masterKeyBytes
+      );
 
-      const decryptedData = await decryptFile(ciphertext.buffer, thumbKey, iv);
       const blob = new Blob([decryptedData], { type: 'image/jpeg' });
       const url = URL.createObjectURL(blob);
 

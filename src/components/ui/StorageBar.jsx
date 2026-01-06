@@ -1,15 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fileService } from '../../services';
+
+// Debounce delay to prevent excessive API calls during bulk uploads
+const STORAGE_REFRESH_DEBOUNCE_MS = 2000;
 
 const StorageBar = ({ refreshTrigger, inline = false }) => {
   const [storageData, setStorageData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const debounceTimerRef = useRef(null);
+  const lastFetchRef = useRef(0);
 
   useEffect(() => {
     const fetchStorageUsage = async () => {
       try {
         const data = await fileService.getStorageUsage();
         setStorageData(data);
+        lastFetchRef.current = Date.now();
       } catch (error) {
         console.error('Failed to fetch storage usage:', error);
       } finally {
@@ -17,7 +23,26 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
       }
     };
 
-    fetchStorageUsage();
+    // Initial load - fetch immediately
+    if (lastFetchRef.current === 0) {
+      fetchStorageUsage();
+      return;
+    }
+
+    // Debounce subsequent refreshes during bulk uploads
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      fetchStorageUsage();
+    }, STORAGE_REFRESH_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [refreshTrigger]);
 
   if (loading || !storageData) {

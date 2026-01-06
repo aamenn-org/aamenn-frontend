@@ -27,15 +27,19 @@ import {
   encryptFileKey,
   encryptFilename,
   arrayBufferToBase64,
-  computeSHA1,
-  computeSHA256,
 } from '../utils/crypto';
+import { getCryptoWorkerPool } from '../workers';
 
 // Detect available CPU cores and use them all for maximum performance
 // navigator.hardwareConcurrency returns the number of logical processors
 const CPU_CORES = navigator.hardwareConcurrency || 4;
 const MAX_CONCURRENT_ENCRYPT = CPU_CORES; // Use all cores for CPU-bound encryption
-const MAX_CONCURRENT_UPLOAD = Math.min(CPU_CORES, 6); // Cap uploads to avoid rate limits
+// Cap concurrent uploads to 4 to prevent network failures (each upload = 3 B2 requests)
+const MAX_CONCURRENT_UPLOAD = Math.min(CPU_CORES, 4);
+
+// Progressive upload threshold - files larger than this skip thumbnail generation
+// to start upload immediately (thumbnails can be generated later)
+const PROGRESSIVE_UPLOAD_THRESHOLD = 50 * 1024 * 1024; // 50MB
 
 // Retry configuration (inspired by ente.io)
 const RETRY_CONFIG = {
@@ -278,10 +282,14 @@ export function useUpload({ onFileUploaded } = {}) {
       encryptingCountRef.current++;
 
       try {
-        // Phase 1a: Compute content hash for duplicate detection
+        // Phase 1a: Compute content hash for duplicate detection (in worker - non-blocking)
         updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
         const fileData = await file.arrayBuffer();
-        const contentHash = await computeSHA256(fileData);
+
+        // Clone the ArrayBuffer for hashing since transfer is destructive
+        const hashData = fileData.slice(0);
+        const workerPool = getCryptoWorkerPool();
+        const contentHash = await workerPool.computeSHA256(hashData);
         updateUpload(id, { progress: 5 });
 
         // Phase 1b: Check for duplicates
@@ -349,22 +357,34 @@ export function useUpload({ onFileUploaded } = {}) {
         const fileNameEncrypted = await encryptFilename(file.name, masterKey);
         updateUpload(id, { progress: 35 });
 
-        // Generate and encrypt thumbnails if applicable
+        // Progressive upload: For large files, skip thumbnails to start upload faster
+        // Thumbnails can be generated asynchronously and attached later
+        const isLargeFile = file.size > PROGRESSIVE_UPLOAD_THRESHOLD;
         let thumbnailData = null;
-        if (isImageSupported(file.type)) {
-          try {
-            const thumbs = await generateThumbnails(file);
-            thumbnailData = await encryptThumbnails(thumbs, masterKey);
-          } catch (e) {
-            console.warn('Thumbnail generation failed:', e);
+
+        if (!isLargeFile) {
+          // Small files: Generate thumbnails before upload (current behavior)
+          if (isImageSupported(file.type)) {
+            try {
+              const thumbs = await generateThumbnails(file);
+              thumbnailData = await encryptThumbnails(thumbs, masterKey);
+            } catch (e) {
+              console.warn('Thumbnail generation failed:', e);
+            }
+          } else if (isVideoSupported(file.type)) {
+            try {
+              const thumbs = await generateVideoThumbnails(file);
+              thumbnailData = await encryptThumbnails(thumbs, masterKey);
+            } catch (e) {
+              console.warn('Video thumbnail generation failed:', e);
+            }
           }
-        } else if (isVideoSupported(file.type)) {
-          try {
-            const thumbs = await generateVideoThumbnails(file);
-            thumbnailData = await encryptThumbnails(thumbs, masterKey);
-          } catch (e) {
-            console.warn('Video thumbnail generation failed:', e);
-          }
+        } else {
+          console.log(
+            `[useUpload] Progressive upload: Skipping thumbnails for large file ${
+              file.name
+            } (${(file.size / 1024 / 1024).toFixed(1)}MB)`
+          );
         }
         updateUpload(id, { progress: 45 });
 
@@ -375,8 +395,10 @@ export function useUpload({ onFileUploaded } = {}) {
         combined.set(fileIv, 0);
         combined.set(new Uint8Array(encryptedData), fileIv.length);
 
-        // Compute SHA1 hash for B2 verification
-        const sha1Hash = await computeSHA1(combined.buffer);
+        // Compute SHA1 hash for B2 verification (in worker - non-blocking)
+        // Clone the buffer since transfer is destructive
+        const sha1Data = combined.buffer.slice(0);
+        const sha1Hash = await workerPool.computeSHA1(sha1Data);
 
         // Create encrypted blob
         const encryptedBlob = new Blob([combined], {

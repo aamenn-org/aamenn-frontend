@@ -264,10 +264,69 @@ class CryptoWorkerPool {
   }
 
   /**
-   * Compute SHA1 hash
+   * Compute SHA1 hash (for B2 upload verification)
+   * @param {ArrayBuffer} data - Data to hash
+   * @returns {Promise<string>} Hex-encoded SHA1 hash
    */
   async computeSHA1(data) {
-    return this.submitTask('COMPUTE_SHA1', { data }, [data]);
+    const result = await this.submitTask('COMPUTE_SHA1', { data }, [data]);
+    return result.hash;
+  }
+
+  /**
+   * Compute SHA256 hash (for duplicate detection)
+   * @param {ArrayBuffer} data - Data to hash
+   * @returns {Promise<string>} Hex-encoded SHA256 hash
+   */
+  async computeSHA256(data) {
+    const result = await this.submitTask('COMPUTE_SHA256', { data }, [data]);
+    return result.hash;
+  }
+
+  /**
+   * Decrypt file content in worker (for viewing images/videos)
+   * This offloads CPU-intensive decryption from the main thread
+   * @param {ArrayBuffer} encryptedData - Encrypted file data (IV + ciphertext)
+   * @param {string} cipherFileKeyBase64 - Encrypted file key (base64)
+   * @param {ArrayBuffer} masterKeyBytes - Master key raw bytes
+   * @returns {Promise<ArrayBuffer>} Decrypted file data
+   */
+  async decryptFile(encryptedData, cipherFileKeyBase64, masterKeyBytes) {
+    const result = await this.submitTask(
+      'DECRYPT_FILE',
+      { encryptedData, cipherFileKeyBase64, masterKeyBytes },
+      [encryptedData, masterKeyBytes]
+    );
+    return result.decryptedData;
+  }
+
+  /**
+   * Warm up the worker pool by initializing workers and running a test task
+   * This ensures workers are fully ready before the first real upload
+   * @returns {Promise<void>}
+   */
+  async warmup() {
+    // Initialize workers if not already done
+    await this.init();
+
+    // Run a small test task to ensure workers are responsive
+    // This also triggers JIT compilation of crypto code paths
+    const testData = new Uint8Array(64).buffer; // Small 64-byte test
+    try {
+      await this.computeSHA256(testData);
+      log('Warmup complete - workers ready');
+    } catch (error) {
+      console.warn('[CryptoWorkerPool] Warmup test task failed:', error);
+      // Don't throw - workers are still initialized
+    }
+  }
+
+  /**
+   * Check if the pool is initialized and ready
+   * @returns {boolean}
+   */
+  isReady() {
+    return this.initialized && this.workers.length > 0;
   }
 
   /**
@@ -294,6 +353,7 @@ class CryptoWorkerPool {
       busyWorkers: this.workers.filter((w) => w.busy).length,
       queuedTasks: this.taskQueue.length,
       pendingTasks: this.pendingTasks.size,
+      isReady: this.isReady(),
     };
   }
 }
