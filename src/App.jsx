@@ -5,7 +5,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { AuthProvider, useAuth, ThemeProvider } from './context';
-import { AuthPage, Dashboard, Albums, Shared, Settings } from './pages';
+import { LoginPage, SignUpPage, ForgotPasswordPage, Dashboard, Albums, Shared, Settings } from './pages';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -53,7 +53,7 @@ function AppRoutes() {
         path="/login"
         element={
           <PublicRoute>
-            <AuthPage />
+            <LoginPage />
           </PublicRoute>
         }
       />
@@ -61,7 +61,15 @@ function AppRoutes() {
         path="/register"
         element={
           <PublicRoute>
-            <AuthPage />
+            <SignUpPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage />
           </PublicRoute>
         }
       />
