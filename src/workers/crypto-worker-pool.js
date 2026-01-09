@@ -5,10 +5,19 @@
  * - Pool of workers for parallel encryption
  * - Round-robin task distribution
  * - Automatic worker lifecycle management
+ * - Priority queue (high priority tasks execute first)
+ * - Cancellation support (cancel pending tasks)
  */
 
 // Use fewer workers to avoid overwhelming the system
 const DEFAULT_WORKER_COUNT = Math.min(navigator.hardwareConcurrency || 2, 4);
+
+// Priority levels - higher number = higher priority
+const PRIORITY = {
+  LOW: 0, // Background preloading
+  NORMAL: 1, // Default
+  HIGH: 2, // Visible on screen
+};
 
 // Debug logging - disabled in production
 const DEBUG = false;
@@ -18,7 +27,7 @@ class CryptoWorkerPool {
   constructor(workerCount = DEFAULT_WORKER_COUNT) {
     this.workers = [];
     this.workerCount = workerCount;
-    this.taskQueue = [];
+    this.taskQueue = []; // Now sorted by priority
     this.pendingTasks = new Map();
     this.nextTaskId = 0;
     this.nextWorkerIndex = 0;
@@ -184,16 +193,52 @@ class CryptoWorkerPool {
   }
 
   /**
-   * Process the task queue
+   * Process the task queue (priority-aware)
+   * Higher priority tasks are processed first
    */
   _processQueue() {
     while (this.taskQueue.length > 0) {
       const freeWorkerIndex = this.workers.findIndex((w) => !w.busy);
       if (freeWorkerIndex === -1) break;
 
-      const task = this.taskQueue.shift();
+      // Find highest priority task (already sorted, but check for cancelled)
+      let taskIndex = -1;
+      for (let i = 0; i < this.taskQueue.length; i++) {
+        const task = this.taskQueue[i];
+        // Skip cancelled tasks
+        if (task.cancelled) {
+          this.taskQueue.splice(i, 1);
+          this.pendingTasks.delete(task.id);
+          i--;
+          continue;
+        }
+        taskIndex = i;
+        break;
+      }
+
+      if (taskIndex === -1) break;
+
+      const task = this.taskQueue.splice(taskIndex, 1)[0];
       this._assignTask(task, freeWorkerIndex);
     }
+  }
+
+  /**
+   * Insert task into queue maintaining priority order (highest first)
+   */
+  _insertByPriority(task) {
+    const priority = task.priority ?? PRIORITY.NORMAL;
+
+    // Find insertion point (insert before first lower priority task)
+    let insertIndex = this.taskQueue.length;
+    for (let i = 0; i < this.taskQueue.length; i++) {
+      if ((this.taskQueue[i].priority ?? PRIORITY.NORMAL) < priority) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    this.taskQueue.splice(insertIndex, 0, task);
   }
 
   /**
@@ -212,11 +257,33 @@ class CryptoWorkerPool {
 
   /**
    * Submit a task to the pool
+   * @param {string} type - Task type
+   * @param {object} payload - Task payload
+   * @param {Array} transferables - Transferable objects
+   * @param {function} onProgress - Progress callback
+   * @param {object} options - Additional options
+   * @param {number} options.priority - Task priority (PRIORITY.LOW/NORMAL/HIGH)
+   * @param {AbortSignal} options.signal - AbortSignal for cancellation
+   * @returns {Promise} Resolves with task result
    */
-  async submitTask(type, payload, transferables = [], onProgress = null) {
+  async submitTask(
+    type,
+    payload,
+    transferables = [],
+    onProgress = null,
+    options = {}
+  ) {
     await this.init();
 
+    const { priority = PRIORITY.NORMAL, signal } = options;
+
     return new Promise((resolve, reject) => {
+      // Check if already aborted
+      if (signal?.aborted) {
+        reject(new DOMException('Task cancelled', 'AbortError'));
+        return;
+      }
+
       const id = this.nextTaskId++;
       const task = {
         id,
@@ -226,16 +293,35 @@ class CryptoWorkerPool {
         resolve,
         reject,
         onProgress,
+        priority,
+        cancelled: false,
       };
 
       this.pendingTasks.set(id, task);
 
-      // Find a free worker or queue the task
+      // Handle abort signal
+      if (signal) {
+        signal.addEventListener(
+          'abort',
+          () => {
+            task.cancelled = true;
+            // If task is still in queue, it will be skipped
+            // If task is already running, we can't stop the worker, but we reject the promise
+            if (this.pendingTasks.has(id)) {
+              this.pendingTasks.delete(id);
+              reject(new DOMException('Task cancelled', 'AbortError'));
+            }
+          },
+          { once: true }
+        );
+      }
+
+      // Find a free worker or queue the task by priority
       const freeWorkerIndex = this.workers.findIndex((w) => !w.busy);
       if (freeWorkerIndex !== -1) {
         this._assignTask(task, freeWorkerIndex);
       } else {
-        this.taskQueue.push(task);
+        this._insertByPriority(task);
       }
     });
   }
@@ -289,13 +375,23 @@ class CryptoWorkerPool {
    * @param {ArrayBuffer} encryptedData - Encrypted file data (IV + ciphertext)
    * @param {string} cipherFileKeyBase64 - Encrypted file key (base64)
    * @param {ArrayBuffer} masterKeyBytes - Master key raw bytes
+   * @param {object} options - Optional settings
+   * @param {number} options.priority - Task priority (PRIORITY.LOW/NORMAL/HIGH)
+   * @param {AbortSignal} options.signal - AbortSignal for cancellation
    * @returns {Promise<ArrayBuffer>} Decrypted file data
    */
-  async decryptFile(encryptedData, cipherFileKeyBase64, masterKeyBytes) {
+  async decryptFile(
+    encryptedData,
+    cipherFileKeyBase64,
+    masterKeyBytes,
+    options = {}
+  ) {
     const result = await this.submitTask(
       'DECRYPT_FILE',
       { encryptedData, cipherFileKeyBase64, masterKeyBytes },
-      [encryptedData, masterKeyBytes]
+      [encryptedData, masterKeyBytes],
+      null, // onProgress
+      options
     );
     return result.decryptedData;
   }
@@ -374,5 +470,8 @@ export function terminateCryptoWorkerPool() {
     instance = null;
   }
 }
+
+// Export priority constants for external use
+export { PRIORITY };
 
 export default CryptoWorkerPool;

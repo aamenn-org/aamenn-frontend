@@ -85,7 +85,7 @@ export interface CacheConfig {
 }
 
 export const DEFAULT_CACHE_CONFIG: CacheConfig = {
-  thumbnailMemoryCapacity: 1000,
+  thumbnailMemoryCapacity: 2000, // Increased from 1000 for 10K scale
   imageMemoryCapacity: 100,
   thumbnailDiskMaxSize: 500 * 1024 * 1024, // 500MB
   imageDiskMaxSize: 2 * 1024 * 1024 * 1024, // 2GB

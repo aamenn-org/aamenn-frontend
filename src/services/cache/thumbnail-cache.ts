@@ -12,7 +12,7 @@
 
 import Dexie from 'dexie';
 import { fileService } from '../index';
-import { getCryptoWorkerPool } from '../../workers';
+import { getCryptoWorkerPool, PRIORITY } from '../../workers';
 
 // Debug logging - disabled in production
 const DEBUG = false; // Set to true to enable cache debug logs
@@ -109,6 +109,108 @@ class SimpleLRUCache<T> {
 }
 
 // ============================================================================
+// Bloom Filter for Fast Cache Existence Checks
+// ============================================================================
+
+/**
+ * Simple Bloom Filter implementation.
+ * Used to quickly answer "definitely NOT cached" without hitting IndexedDB.
+ * False positives are okay (we'll check IDB), false negatives are not.
+ *
+ * ~10KB memory for 100K entries at 1% false positive rate.
+ */
+class BloomFilter {
+  private bits: Uint8Array;
+  private numHashes: number;
+  private size: number;
+
+  /**
+   * @param expectedItems - Expected number of items (e.g., 100000 for 100K thumbnails)
+   * @param falsePositiveRate - Acceptable false positive rate (e.g., 0.01 for 1%)
+   */
+  constructor(
+    expectedItems: number = 100000,
+    falsePositiveRate: number = 0.01
+  ) {
+    // Calculate optimal size: m = -n * ln(p) / (ln(2)^2)
+    this.size = Math.ceil(
+      (-expectedItems * Math.log(falsePositiveRate)) / (Math.LN2 * Math.LN2)
+    );
+    // Calculate optimal number of hash functions: k = (m/n) * ln(2)
+    this.numHashes = Math.ceil((this.size / expectedItems) * Math.LN2);
+    // Allocate bit array (using Uint8Array, so divide by 8)
+    this.bits = new Uint8Array(Math.ceil(this.size / 8));
+  }
+
+  /**
+   * Generate hash positions for a key using double hashing technique.
+   * Uses FNV-1a as base hash (fast and good distribution).
+   */
+  private getHashPositions(key: string): number[] {
+    // FNV-1a hash
+    let h1 = 2166136261;
+    let h2 = 2166136261;
+    for (let i = 0; i < key.length; i++) {
+      const c = key.charCodeAt(i);
+      h1 ^= c;
+      h1 = Math.imul(h1, 16777619);
+      h2 ^= c;
+      h2 = Math.imul(h2, 2654435761);
+    }
+    h1 = h1 >>> 0;
+    h2 = h2 >>> 0;
+
+    // Double hashing: position[i] = (h1 + i * h2) % size
+    const positions: number[] = [];
+    for (let i = 0; i < this.numHashes; i++) {
+      positions.push(((h1 + i * h2) >>> 0) % this.size);
+    }
+    return positions;
+  }
+
+  /**
+   * Add a key to the bloom filter.
+   */
+  add(key: string): void {
+    for (const pos of this.getHashPositions(key)) {
+      const byteIndex = Math.floor(pos / 8);
+      const bitIndex = pos % 8;
+      this.bits[byteIndex] |= 1 << bitIndex;
+    }
+  }
+
+  /**
+   * Check if a key MIGHT be in the set.
+   * Returns false = definitely NOT in set (100% certain)
+   * Returns true = MAYBE in set (need to verify with actual lookup)
+   */
+  mightContain(key: string): boolean {
+    for (const pos of this.getHashPositions(key)) {
+      const byteIndex = Math.floor(pos / 8);
+      const bitIndex = pos % 8;
+      if ((this.bits[byteIndex] & (1 << bitIndex)) === 0) {
+        return false; // Definitely not in set
+      }
+    }
+    return true; // Maybe in set
+  }
+
+  /**
+   * Clear all entries.
+   */
+  clear(): void {
+    this.bits.fill(0);
+  }
+
+  /**
+   * Get memory usage in bytes.
+   */
+  get memoryUsage(): number {
+    return this.bits.byteLength;
+  }
+}
+
+// ============================================================================
 // Thumbnail Cache Service
 // ============================================================================
 
@@ -120,22 +222,64 @@ class ThumbnailCacheService {
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
 
+  // Bloom filters for fast "definitely not cached" checks
+  private thumbnailBloomFilter: BloomFilter;
+  private imageBloomFilter: BloomFilter;
+
   constructor() {
     this.db = new DecryptedCacheDB();
-    this.memoryCache = new SimpleLRUCache<string>(500); // 500 thumbnails in memory
-    this.imageMemoryCache = new SimpleLRUCache<string>(50); // 50 full images in memory
+    this.memoryCache = new SimpleLRUCache<string>(2000); // Increased to 2000 for 10K scale
+    this.imageMemoryCache = new SimpleLRUCache<string>(100); // 100 full images in memory
+    // Bloom filters: 100K capacity, 1% false positive rate (~10KB each)
+    this.thumbnailBloomFilter = new BloomFilter(100000, 0.01);
+    this.imageBloomFilter = new BloomFilter(10000, 0.01); // Fewer full images
   }
 
   async init(): Promise<void> {
     if (this.isInitialized) return;
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = this.db.open().then(() => {
+    this.initPromise = this.db.open().then(async () => {
+      // Populate bloom filters from existing IDB cache (one-time scan)
+      await this.populateBloomFilters();
       this.isInitialized = true;
       log('Initialized');
     });
 
     return this.initPromise;
+  }
+
+  /**
+   * Populate bloom filters from existing IndexedDB cache.
+   * Called once on init - scans all keys and adds them to bloom filter.
+   */
+  private async populateBloomFilters(): Promise<void> {
+    try {
+      // Scan thumbnail keys
+      const thumbnailKeys = await this.db.thumbnails
+        .toCollection()
+        .primaryKeys();
+      for (const key of thumbnailKeys) {
+        this.thumbnailBloomFilter.add(key as string);
+      }
+      log(
+        `Bloom filter populated with ${
+          thumbnailKeys.length
+        } thumbnail keys (~${Math.round(
+          this.thumbnailBloomFilter.memoryUsage / 1024
+        )}KB)`
+      );
+
+      // Scan image keys
+      const imageKeys = await this.db.images.toCollection().primaryKeys();
+      for (const key of imageKeys) {
+        this.imageBloomFilter.add(key as string);
+      }
+      log(`Bloom filter populated with ${imageKeys.length} image keys`);
+    } catch (error) {
+      // Non-fatal: bloom filters just won't be pre-populated
+      console.warn('[ThumbnailCache] Failed to populate bloom filters:', error);
+    }
   }
 
   /**
@@ -164,13 +308,19 @@ class ThumbnailCacheService {
       return pending;
     }
 
-    // L2: Check IndexedDB
-    const dbCached = await this.db.thumbnails.get(fileId);
-    if (dbCached) {
-      const url = URL.createObjectURL(dbCached.blob);
-      this.memoryCache.set(fileId, url);
-      log(`L2 HIT: ${fileId}`);
-      return url;
+    // L2: Check IndexedDB (bloom filter first to avoid unnecessary IDB reads)
+    if (this.thumbnailBloomFilter.mightContain(fileId)) {
+      const dbCached = await this.db.thumbnails.get(fileId);
+      if (dbCached) {
+        const url = URL.createObjectURL(dbCached.blob);
+        this.memoryCache.set(fileId, url);
+        log(`L2 HIT: ${fileId}`);
+        return url;
+      }
+      // False positive from bloom filter - continue to L3
+      log(`L2 BLOOM FALSE POSITIVE: ${fileId}`);
+    } else {
+      log(`L2 BLOOM SKIP: ${fileId} (definitely not cached)`);
     }
 
     // L3: Download, decrypt, and cache
@@ -192,13 +342,113 @@ class ThumbnailCacheService {
   }
 
   /**
+   * Get a thumbnail with priority and cancellation support.
+   * Use this for visible thumbnails that need to load first.
+   *
+   * @param fileId - Unique file identifier
+   * @param thumbnailUrl - URL to encrypted thumbnail
+   * @param cipherThumbKey - Encrypted key for thumbnail
+   * @param masterKey - User's master key (CryptoKey)
+   * @param options - Options for priority, cancellation, and pre-exported key bytes
+   * @returns Promise resolving to blob URL
+   */
+  async getThumbnailWithPriority(
+    fileId: string,
+    thumbnailUrl: string,
+    cipherThumbKey: string,
+    masterKey: CryptoKey,
+    options: {
+      priority?: 'high' | 'normal' | 'low';
+      signal?: AbortSignal;
+      blurhash?: string;
+      masterKeyBytes?: ArrayBuffer; // Pre-exported key bytes to avoid repeated exportKey
+    } = {}
+  ): Promise<string> {
+    await this.init();
+
+    const { priority = 'normal', signal, blurhash, masterKeyBytes } = options;
+
+    // Check if already aborted
+    if (signal?.aborted) {
+      throw new DOMException('Thumbnail load cancelled', 'AbortError');
+    }
+
+    // L1: Check memory cache (instant)
+    const memCached = this.memoryCache.get(fileId);
+    if (memCached) {
+      log(`L1 HIT: ${fileId}`);
+      return memCached;
+    }
+
+    // Check if already fetching - share the promise but respect new abort signal
+    const pending = this.pendingRequests.get(fileId);
+    if (pending) {
+      // If caller has abort signal, race with the pending request
+      if (signal) {
+        return Promise.race([
+          pending,
+          new Promise<string>((_, reject) => {
+            signal.addEventListener(
+              'abort',
+              () => {
+                reject(
+                  new DOMException('Thumbnail load cancelled', 'AbortError')
+                );
+              },
+              { once: true }
+            );
+          }),
+        ]);
+      }
+      return pending;
+    }
+
+    // L2: Check IndexedDB (bloom filter first to avoid unnecessary IDB reads)
+    if (this.thumbnailBloomFilter.mightContain(fileId)) {
+      const dbCached = await this.db.thumbnails.get(fileId);
+      if (dbCached) {
+        const url = URL.createObjectURL(dbCached.blob);
+        this.memoryCache.set(fileId, url);
+        log(`L2 HIT: ${fileId}`);
+        return url;
+      }
+      // False positive from bloom filter - continue to L3
+    }
+
+    // L3: Download, decrypt, and cache with priority
+    const fetchPromise = this.fetchAndCacheWithPriority(
+      fileId,
+      thumbnailUrl,
+      cipherThumbKey,
+      masterKey,
+      { priority, signal, blurhash, masterKeyBytes }
+    );
+
+    this.pendingRequests.set(fileId, fetchPromise);
+
+    try {
+      return await fetchPromise;
+    } finally {
+      this.pendingRequests.delete(fileId);
+    }
+  }
+
+  /**
    * Check if thumbnail is cached (without fetching).
+   * Uses bloom filter for fast "definitely not cached" response.
    */
   async hasCachedThumbnail(fileId: string): Promise<boolean> {
     await this.init();
 
+    // L1: Memory cache
     if (this.memoryCache.has(fileId)) return true;
 
+    // Bloom filter: fast "definitely not cached" check
+    if (!this.thumbnailBloomFilter.mightContain(fileId)) {
+      return false; // Definitely not cached
+    }
+
+    // Bloom filter said "maybe" - verify with IDB
     const count = await this.db.thumbnails
       .where('fileId')
       .equals(fileId)
@@ -215,6 +465,11 @@ class ThumbnailCacheService {
     // L1: Check memory
     const memCached = this.memoryCache.get(fileId);
     if (memCached) return memCached;
+
+    // Bloom filter check first
+    if (!this.thumbnailBloomFilter.mightContain(fileId)) {
+      return null; // Definitely not cached
+    }
 
     // L2: Check IndexedDB
     const dbCached = await this.db.thumbnails.get(fileId);
@@ -273,6 +528,9 @@ class ThumbnailCacheService {
       // Store in L1 (memory)
       this.memoryCache.set(fileId, url);
 
+      // Add to bloom filter (for fast future lookups)
+      this.thumbnailBloomFilter.add(fileId);
+
       // Store in L2 (IndexedDB) - fire and forget
       this.db.thumbnails
         .put({
@@ -287,6 +545,98 @@ class ThumbnailCacheService {
 
       return url;
     } catch (error) {
+      console.error(`[ThumbnailCache] Failed to fetch ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch and cache thumbnail with priority and cancellation support.
+   */
+  private async fetchAndCacheWithPriority(
+    fileId: string,
+    thumbnailUrl: string,
+    cipherThumbKey: string,
+    masterKey: CryptoKey,
+    options: {
+      priority?: 'high' | 'normal' | 'low';
+      signal?: AbortSignal;
+      blurhash?: string;
+      masterKeyBytes?: ArrayBuffer; // Pre-exported to avoid repeated exportKey calls
+    } = {}
+  ): Promise<string> {
+    const { priority = 'normal', signal, blurhash, masterKeyBytes } = options;
+
+    // Map string priority to worker pool priority
+    const priorityMap = {
+      high: PRIORITY.HIGH,
+      normal: PRIORITY.NORMAL,
+      low: PRIORITY.LOW,
+    };
+
+    try {
+      log(`L3 FETCH (${priority}): ${fileId}`);
+
+      // Check abort before download
+      if (signal?.aborted) {
+        throw new DOMException('Thumbnail load cancelled', 'AbortError');
+      }
+
+      // Download encrypted thumbnail
+      const encryptedData = await fileService.downloadFileContent(thumbnailUrl);
+
+      // Check abort after download
+      if (signal?.aborted) {
+        throw new DOMException('Thumbnail load cancelled', 'AbortError');
+      }
+
+      log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
+
+      // Decrypt in Web Worker with priority and abort signal
+      const workerPool = getCryptoWorkerPool();
+      // Use pre-exported bytes if available, otherwise export (fallback)
+      const keyBytes =
+        masterKeyBytes ?? (await crypto.subtle.exportKey('raw', masterKey));
+      const decryptedData = await workerPool.decryptFile(
+        encryptedData,
+        cipherThumbKey,
+        keyBytes,
+        {
+          priority: priorityMap[priority],
+          signal,
+        }
+      );
+
+      // Create blob
+      const blob = new Blob([decryptedData], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+
+      log(`Created blob URL, size: ${blob.size}`);
+
+      // Store in L1 (memory)
+      this.memoryCache.set(fileId, url);
+
+      // Add to bloom filter (for fast future lookups)
+      this.thumbnailBloomFilter.add(fileId);
+
+      // Store in L2 (IndexedDB) - fire and forget
+      this.db.thumbnails
+        .put({
+          fileId,
+          blob,
+          timestamp: Date.now(),
+          blurhash,
+        })
+        .catch(() => {
+          // Silent fail for persistence
+        });
+
+      return url;
+    } catch (error) {
+      // Don't log abort errors as they're expected
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
       console.error(`[ThumbnailCache] Failed to fetch ${fileId}:`, error);
       throw error;
     }
@@ -336,6 +686,8 @@ class ThumbnailCacheService {
 
     this.memoryCache.clear();
     this.imageMemoryCache.clear();
+    this.thumbnailBloomFilter.clear();
+    this.imageBloomFilter.clear();
     await this.db.thumbnails.clear();
     await this.db.images.clear();
     await this.db.metadata.clear();
@@ -452,13 +804,16 @@ class ThumbnailCacheService {
       return pending;
     }
 
-    // L2: Check IndexedDB for cached full image
-    const dbCached = await this.db.images.get(cacheKey);
-    if (dbCached) {
-      const url = URL.createObjectURL(dbCached.blob);
-      this.imageMemoryCache.set(cacheKey, url); // Promote to L1
-      log(`Full image L2 HIT: ${fileId}`);
-      return url;
+    // L2: Check IndexedDB for cached full image (bloom filter first)
+    if (this.imageBloomFilter.mightContain(cacheKey)) {
+      const dbCached = await this.db.images.get(cacheKey);
+      if (dbCached) {
+        const url = URL.createObjectURL(dbCached.blob);
+        this.imageMemoryCache.set(cacheKey, url); // Promote to L1
+        log(`Full image L2 HIT: ${fileId}`);
+        return url;
+      }
+      // False positive from bloom filter - continue to L3
     }
 
     // L3: Download, decrypt, and cache
@@ -481,6 +836,9 @@ class ThumbnailCacheService {
 
       // Store in L1 memory
       this.imageMemoryCache.set(cacheKey, url);
+
+      // Add to bloom filter (for fast future lookups)
+      this.imageBloomFilter.add(cacheKey);
 
       // Store in L2 IndexedDB (fire and forget)
       this.db.images
@@ -532,13 +890,16 @@ class ThumbnailCacheService {
       return pending;
     }
 
-    // L2: Check IndexedDB
-    const dbCached = await this.db.images.get(cacheKey);
-    if (dbCached) {
-      const url = URL.createObjectURL(dbCached.blob);
-      this.imageMemoryCache.set(cacheKey, url); // Promote to L1
-      log(`Medium thumb L2 HIT: ${fileId}`);
-      return url;
+    // L2: Check IndexedDB (bloom filter first)
+    if (this.imageBloomFilter.mightContain(cacheKey)) {
+      const dbCached = await this.db.images.get(cacheKey);
+      if (dbCached) {
+        const url = URL.createObjectURL(dbCached.blob);
+        this.imageMemoryCache.set(cacheKey, url); // Promote to L1
+        log(`Medium thumb L2 HIT: ${fileId}`);
+        return url;
+      }
+      // False positive - continue to L3
     }
 
     // L3: Download, decrypt, cache
@@ -563,6 +924,9 @@ class ThumbnailCacheService {
 
       // Store in L1
       this.imageMemoryCache.set(cacheKey, url);
+
+      // Add to bloom filter
+      this.imageBloomFilter.add(cacheKey);
 
       // Store in L2 (fire and forget)
       this.db.images

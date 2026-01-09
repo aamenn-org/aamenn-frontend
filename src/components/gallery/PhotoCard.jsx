@@ -12,8 +12,9 @@ const PhotoCard = ({
   onView,
   onFavoriteToggle,
   mimeType,
+  isVisible = true, // New prop: whether this card is currently visible
 }) => {
-  const { getMasterKey, hasMasterKey } = useAuth();
+  const { getMasterKey, getMasterKeyBytes, hasMasterKey } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -22,8 +23,8 @@ const PhotoCard = ({
   const [isFavorite, setIsFavorite] = useState(file.isFavorite || false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
 
-  // Track if URL was created by us (vs from cache)
-  const urlFromCacheRef = useRef(false);
+  // AbortController for cancelling thumbnail load
+  const abortControllerRef = useRef(null);
 
   // Check if this is a video file
   const isVideoFile = isVideo(file.mimeType || mimeType);
@@ -33,7 +34,7 @@ const PhotoCard = ({
     setIsFavorite(file.isFavorite || false);
   }, [file.isFavorite]);
 
-  // Load thumbnail using cache system
+  // Load thumbnail using cache system with priority and cancellation
   useEffect(() => {
     const fileId = file.fileId || file.id;
 
@@ -46,8 +47,14 @@ const PhotoCard = ({
       return;
     }
 
-    let isMounted = true;
-    urlFromCacheRef.current = false;
+    // Cancel any previous load operation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this load
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     const loadThumbnail = async () => {
       try {
@@ -56,26 +63,40 @@ const PhotoCard = ({
 
         if (!masterKey) return;
 
-        // Use cache system - will check L1 (memory) → L2 (IndexedDB) → L3 (network)
-        const url = await thumbnailCache.getThumbnail(
+        // Get pre-exported key bytes to avoid repeated exportKey calls
+        const masterKeyBytes = getMasterKeyBytes();
+
+        // Use priority-based loading:
+        // - HIGH priority for visible thumbnails (load first)
+        // - Cancellable when scrolled away
+        const url = await thumbnailCache.getThumbnailWithPriority(
           fileId,
           file.thumbSmallUrl,
           file.cipherThumbSmallKey,
           masterKey,
-          file.blurhash
+          {
+            priority: isVisible ? 'high' : 'normal',
+            signal: abortController.signal,
+            blurhash: file.blurhash,
+            masterKeyBytes, // Pass pre-exported bytes to avoid exportKey per thumbnail
+          }
         );
 
-        if (isMounted) {
-          urlFromCacheRef.current = true; // URL is managed by cache
+        // Only update state if not aborted
+        if (!abortController.signal.aborted) {
           setThumbnailUrl(url);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected when scrolling
+        if (error.name === 'AbortError') {
+          return;
+        }
         console.error('Failed to load thumbnail:', error);
-        if (isMounted) {
+        if (!abortController.signal.aborted) {
           setImageError(true);
         }
       } finally {
-        if (isMounted) {
+        if (!abortController.signal.aborted) {
           setDecrypting(false);
         }
       }
@@ -84,16 +105,18 @@ const PhotoCard = ({
     loadThumbnail();
 
     return () => {
-      isMounted = false;
-      // Don't revoke URL - it's managed by the cache
+      // Cancel load when unmounting or when visibility changes
+      abortController.abort();
     };
   }, [
     file.fileId,
     file.id,
     file.thumbSmallUrl,
     file.cipherThumbSmallKey,
+    file.blurhash,
     hasMasterKey,
     getMasterKey,
+    isVisible,
   ]);
 
   // Get icon based on mime type

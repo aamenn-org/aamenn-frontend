@@ -7,6 +7,8 @@
  * - Infinite scroll with automatic page loading
  * - Memory-efficient as thumbnails are only loaded on demand
  * - Responsive grid sizing using Tailwind classes
+ * - Priority-based decryption (visible first)
+ * - Cancellation when scrolled away
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -23,7 +25,12 @@ const GRID_CLASSES = {
 };
 
 /**
- * LazyPhotoCard - Wrapper that only renders PhotoCard when visible
+ * LazyPhotoCard - Wrapper that tracks visibility for priority loading
+ *
+ * Improvements for 10K scale:
+ * - Tracks both enter AND exit from viewport
+ * - Passes visibility state to PhotoCard for priority-based loading
+ * - Cancels thumbnail load when scrolled away (via PhotoCard)
  */
 const LazyPhotoCard = ({
   file,
@@ -33,6 +40,7 @@ const LazyPhotoCard = ({
   onFavoriteToggle,
   mimeType,
 }) => {
+  const [isVisible, setIsVisible] = useState(false);
   const [hasBeenVisible, setHasBeenVisible] = useState(false);
   const ref = useRef(null);
 
@@ -42,7 +50,11 @@ const LazyPhotoCard = ({
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (entry.isIntersecting) {
+        const nowVisible = entry.isIntersecting;
+
+        setIsVisible(nowVisible);
+
+        if (nowVisible) {
           setHasBeenVisible(true);
         }
       },
@@ -66,9 +78,10 @@ const LazyPhotoCard = ({
           onView={onView}
           onFavoriteToggle={onFavoriteToggle}
           mimeType={mimeType}
+          isVisible={isVisible}
         />
       ) : (
-        /* Placeholder until visible */
+        /* Placeholder until first visible */
         <div className="w-full h-full bg-gray-100 dark:bg-zinc-800 rounded-sm" />
       )}
     </div>

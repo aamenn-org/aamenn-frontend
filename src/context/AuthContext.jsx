@@ -119,6 +119,27 @@ export const AuthProvider = ({ children }) => {
   // Also persisted in sessionStorage for tab refresh resilience
   const masterKeyRef = useRef(null);
 
+  // Pre-exported master key bytes (optimization: avoid repeated exportKey calls)
+  // This is exported ONCE when master key is set, then cloned for each worker call
+  const masterKeyBytesRef = useRef(null);
+
+  /**
+   * Export and cache master key bytes (called once when key is set)
+   */
+  const cacheMasterKeyBytes = async (masterKey) => {
+    if (!masterKey) {
+      masterKeyBytesRef.current = null;
+      return;
+    }
+    try {
+      const rawBytes = await crypto.subtle.exportKey('raw', masterKey);
+      masterKeyBytesRef.current = rawBytes;
+    } catch (error) {
+      console.error('Failed to cache master key bytes:', error);
+      masterKeyBytesRef.current = null;
+    }
+  };
+
   useEffect(() => {
     // Check if user is already authenticated on mount
     const checkAuth = async () => {
@@ -144,6 +165,7 @@ export const AuthProvider = ({ children }) => {
         const storedKey = await retrieveMasterKey();
         if (storedKey) {
           masterKeyRef.current = storedKey;
+          await cacheMasterKeyBytes(storedKey); // Pre-export bytes for performance
           setMasterKeyAvailable(true);
           console.log('Master key restored from session');
 
@@ -190,6 +212,7 @@ export const AuthProvider = ({ children }) => {
               kekSalt
             );
             masterKeyRef.current = masterKey;
+            await cacheMasterKeyBytes(masterKey); // Pre-export bytes for performance
             setMasterKeyAvailable(true);
             storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
             console.log('AuthContext: Master key unlocked and stored');
@@ -259,6 +282,7 @@ export const AuthProvider = ({ children }) => {
 
         // Store master key in memory and sessionStorage
         masterKeyRef.current = masterKey;
+        await cacheMasterKeyBytes(masterKey); // Pre-export bytes for performance
         setMasterKeyAvailable(true);
         storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
 
@@ -289,6 +313,7 @@ export const AuthProvider = ({ children }) => {
     authService.logout();
     localStorage.removeItem('userEmail');
     masterKeyRef.current = null;
+    masterKeyBytesRef.current = null; // Clear cached bytes
     setMasterKeyAvailable(false);
     clearStoredMasterKey(); // Clear from sessionStorage
     clearEncryptionParams(); // Clear encryption params
@@ -339,6 +364,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Get pre-exported master key bytes (avoids repeated exportKey calls)
+   * Returns a COPY to prevent mutation of cached bytes
+   */
+  const getMasterKeyBytes = () => {
+    if (!masterKeyBytesRef.current) return null;
+    return masterKeyBytesRef.current.slice(); // Return copy
+  };
+
+  /**
    * Set master key (for re-unlock after session expiry)
    * Also stores in sessionStorage for tab refresh resilience
    */
@@ -357,6 +391,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     getMasterKey,
+    getMasterKeyBytes,
     hasMasterKey,
     setMasterKey,
     masterKeyAvailable, // Boolean state for React effects
