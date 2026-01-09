@@ -61,6 +61,20 @@ console.log(
   }`
 );
 
+// Generate UUID - polyfill for older browsers (Safari 14.x, older Samsung Internet)
+const generateUUID = () => {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback using crypto.getRandomValues (widely supported)
+  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
+    (
+      c ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+    ).toString(16)
+  );
+};
+
 // SessionStorage key for persisting upload state across page refreshes
 const STORAGE_KEY = 'aamenn_upload_state';
 
@@ -650,7 +664,7 @@ export function useUpload({ onFileUploaded } = {}) {
       const newUploads = new Map();
 
       fileArray.forEach((file) => {
-        const id = crypto.randomUUID();
+        const id = generateUUID();
         const uploadInfo = {
           id,
           file,
