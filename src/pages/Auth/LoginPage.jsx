@@ -84,30 +84,65 @@ const LoginPage = () => {
       title: 'Capturing Moments,',
       subtitle: 'Creating Memories',
       icon: (
-        <svg className="w-24 h-24 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        <svg
+          className="w-24 h-24 text-white/80"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+          />
         </svg>
-      )
+      ),
     },
     {
       title: 'End-to-End',
       subtitle: 'Encrypted Storage',
       icon: (
-        <svg className="w-24 h-24 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        <svg
+          className="w-24 h-24 text-white/80"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+          />
         </svg>
-      )
+      ),
     },
     {
       title: 'Your Privacy,',
       subtitle: 'Our Priority',
       icon: (
-        <svg className="w-24 h-24 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        <svg
+          className="w-24 h-24 text-white/80"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+          />
         </svg>
-      )
-    }
+      ),
+    },
   ];
 
   useEffect(() => {
@@ -153,7 +188,7 @@ const LoginPage = () => {
             <div className="mb-8 transition-all duration-500 transform">
               {slides[currentSlide].icon}
             </div>
-            
+
             {/* Encrypted Data Visualization */}
             <div className="mb-12 relative">
               <div className="grid grid-cols-3 gap-3">
@@ -172,8 +207,18 @@ const LoginPage = () => {
               {/* Lock overlay */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-20 h-20 bg-blue-500/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg">
-                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <svg
+                    className="w-10 h-10 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
                   </svg>
                 </div>
               </div>
@@ -215,9 +260,7 @@ const LoginPage = () => {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-3">
-              Welcome back
-            </h1>
+            <h1 className="text-4xl font-bold text-white mb-3">Welcome back</h1>
             <p className="text-gray-400">
               Don't have an account?{' '}
               <Link
@@ -297,34 +340,6 @@ const LoginPage = () => {
             >
               {loading ? 'Logging in...' : 'Log in'}
             </button>
-
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-black text-gray-400">Or login with</span>
-              </div>
-            </div>
-
-            {/* Social Login Buttons */}
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-[#0a0a0a] border border-gray-800 rounded-lg text-white hover:bg-[#1a1a1a] transition-colors"
-              >
-                <GoogleIcon />
-                Google
-              </button>
-              <button
-                type="button"
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-[#0a0a0a] border border-gray-800 rounded-lg text-white hover:bg-[#1a1a1a] transition-colors"
-              >
-                <AppleIcon />
-                Apple
-              </button>
-            </div>
           </form>
         </div>
       </div>
