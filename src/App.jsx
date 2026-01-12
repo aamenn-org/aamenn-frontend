@@ -4,8 +4,17 @@ import {
   Route,
   Navigate,
 } from 'react-router-dom';
-import { AuthProvider, useAuth, ThemeProvider } from './context';
-import { LoginPage, SignUpPage, ForgotPasswordPage, Dashboard, Albums, Shared, Settings } from './pages';
+import { AuthProvider, useAuth, ThemeProvider, USER_ROLES } from './context';
+import {
+  LoginPage,
+  SignUpPage,
+  ForgotPasswordPage,
+  Dashboard,
+  Albums,
+  Shared,
+  Settings,
+} from './pages';
+import { AdminDashboard } from './pages/Admin';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -26,9 +35,32 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// Public Route Component (redirects to dashboard if already authenticated)
+// Admin Route Component
+const AdminRoute = ({ children }) => {
+  const { isAuthenticated, loading, isAdmin } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isAdmin()) {
+    return <Navigate to="/photos" replace />;
+  }
+
+  return children;
+};
+
+// Public Route Component (redirects based on role)
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, isAdmin } = useAuth();
 
   if (loading) {
     return (
@@ -39,7 +71,11 @@ const PublicRoute = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    // Redirect based on role
+    if (isAdmin()) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Navigate to="/photos" replace />;
   }
 
   return children;
@@ -74,9 +110,19 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected Routes */}
+      {/* Admin Routes */}
       <Route
-        path="/dashboard"
+        path="/dashboard/*"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        }
+      />
+
+      {/* User Protected Routes */}
+      <Route
+        path="/photos"
         element={
           <ProtectedRoute>
             <Dashboard />
@@ -84,7 +130,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/dashboard/albums"
+        path="/photos/albums"
         element={
           <ProtectedRoute>
             <Albums />
@@ -92,7 +138,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/dashboard/shared"
+        path="/photos/shared"
         element={
           <ProtectedRoute>
             <Shared />

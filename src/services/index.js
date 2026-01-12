@@ -21,6 +21,7 @@ export { default as authService } from './auth.service';
 export { default as userService } from './user.service';
 export { default as fileService } from './file.service';
 export { default as albumService } from './album.service';
+export { default as adminService } from './admin.service';
 
 // Cache system (L1: memory, L2: IndexedDB)
 export { thumbnailCache } from './cache';
