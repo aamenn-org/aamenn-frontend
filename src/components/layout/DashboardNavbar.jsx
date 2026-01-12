@@ -31,7 +31,7 @@ const DashboardNavbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-14">
           {/* Logo */}
-          <Link to="/dashboard" className="flex items-center space-x-2">
+          <Link to="/photos" className="flex items-center space-x-2">
             <div className="w-7 h-7 flex items-center justify-center">
               <img src="/logo.png" alt="" />
             </div>

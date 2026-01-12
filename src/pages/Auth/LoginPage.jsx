@@ -160,7 +160,12 @@ const LoginPage = () => {
     try {
       const result = await login(email.trim(), password.trim());
       if (result.success) {
-        navigate('/dashboard');
+        // Redirect based on role
+        if (result.role === 'admin') {
+          navigate('/dashboard');
+        } else {
+          navigate('/photos');
+        }
       } else {
         setError(result.error);
       }

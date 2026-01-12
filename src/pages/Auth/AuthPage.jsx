@@ -101,8 +101,13 @@ const AuthPage = () => {
         const result = await login(email.trim(), password.trim());
         console.log('AuthPage: Login result:', result);
         if (result.success) {
-          console.log('AuthPage: Login successful, navigating to dashboard');
-          navigate('/dashboard');
+          console.log('AuthPage: Login successful, navigating based on role');
+          // Redirect based on role
+          if (result.role === 'admin') {
+            navigate('/dashboard');
+          } else {
+            navigate('/photos');
+          }
         } else {
           console.log('AuthPage: Login failed:', result.error);
           setError(result.error);
@@ -127,8 +132,9 @@ const AuthPage = () => {
         const result = await register(email.trim(), password.trim());
         console.log('AuthPage: Register result:', result);
         if (result.success) {
-          console.log('AuthPage: Register successful, navigating to dashboard');
-          navigate('/dashboard');
+          console.log('AuthPage: Register successful, navigating to photos');
+          // Regular users always go to photos after registration
+          navigate('/photos');
         } else {
           console.log('AuthPage: Register failed:', result.error);
           setError(result.error);

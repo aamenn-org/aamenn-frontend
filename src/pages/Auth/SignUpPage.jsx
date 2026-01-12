@@ -180,7 +180,8 @@ const SignUpPage = () => {
     try {
       const result = await register(email.trim(), password.trim());
       if (result.success) {
-        navigate('/dashboard');
+        // Regular users always go to photos after registration
+        navigate('/photos');
       } else {
         setError(result.error);
       }

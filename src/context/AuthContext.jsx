@@ -9,7 +9,14 @@ const AuthContext = createContext(null);
 const MASTER_KEY_STORAGE_KEY = 'aamenn_mk';
 const MASTER_KEY_TIMESTAMP_KEY = 'aamenn_mk_ts';
 const ENCRYPTION_PARAMS_KEY = 'aamenn_enc_params';
+const USER_ROLE_KEY = 'aamenn_role';
 const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
+// User roles
+export const USER_ROLES = {
+  USER: 'user',
+  ADMIN: 'admin',
+};
 
 /**
  * Securely store master key in sessionStorage with timestamp.
@@ -114,6 +121,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [masterKeyAvailable, setMasterKeyAvailable] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   // Master key stored in memory (ref) for quick access
   // Also persisted in sessionStorage for tab refresh resilience
@@ -147,6 +155,12 @@ export const AuthProvider = ({ children }) => {
 
       if (token) {
         setIsAuthenticated(true);
+
+        // Restore role from storage
+        const storedRole = localStorage.getItem(USER_ROLE_KEY);
+        if (storedRole) {
+          setUserRole(storedRole);
+        }
 
         // Fetch full user profile from backend
         try {
@@ -188,7 +202,7 @@ export const AuthProvider = ({ children }) => {
       console.log('AuthContext: Login response:', response);
 
       // Backend returns data directly (not wrapped in success/data)
-      const { accessToken, refreshToken, encryptedMasterKey, kekSalt } =
+      const { accessToken, refreshToken, encryptedMasterKey, kekSalt, role } =
         response;
 
       if (accessToken && refreshToken) {
@@ -197,11 +211,13 @@ export const AuthProvider = ({ children }) => {
         // Store tokens
         authService.storeTokens({ accessToken, refreshToken });
 
-        // Store email for user display
+        // Store email and role for user display
         localStorage.setItem('userEmail', email);
+        localStorage.setItem(USER_ROLE_KEY, role || USER_ROLES.USER);
+        setUserRole(role || USER_ROLES.USER);
 
-        // Unlock master key with password (zero-knowledge)
-        if (encryptedMasterKey && kekSalt) {
+        // Unlock master key with password (zero-knowledge) - only for regular users
+        if (role !== USER_ROLES.ADMIN && encryptedMasterKey && kekSalt) {
           console.log('AuthContext: Attempting to unlock master key');
           // Store encryption params for password change flow
           storeEncryptionParams({ encryptedMasterKey, kekSalt });
@@ -226,16 +242,18 @@ export const AuthProvider = ({ children }) => {
             );
             // Continue anyway - some features won't work
           }
+        } else if (role === USER_ROLES.ADMIN) {
+          console.log('AuthContext: Admin user - skipping master key unlock');
         } else {
           console.warn(
             'AuthContext: No encryptedMasterKey or kekSalt received'
           );
         }
 
-        setUser({ email });
+        setUser({ email, role: role || USER_ROLES.USER });
         setIsAuthenticated(true);
         console.log('AuthContext: Returning success');
-        return { success: true, data: response };
+        return { success: true, data: response, role: role || USER_ROLES.USER };
       }
 
       console.log('AuthContext: No tokens received');
@@ -312,9 +330,11 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     authService.logout();
     localStorage.removeItem('userEmail');
+    localStorage.removeItem(USER_ROLE_KEY);
     masterKeyRef.current = null;
     masterKeyBytesRef.current = null; // Clear cached bytes
     setMasterKeyAvailable(false);
+    setUserRole(null);
     clearStoredMasterKey(); // Clear from sessionStorage
     clearEncryptionParams(); // Clear encryption params
 
@@ -382,6 +402,13 @@ export const AuthProvider = ({ children }) => {
     storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
   };
 
+  /**
+   * Check if current user is admin
+   */
+  const isAdmin = () => {
+    return userRole === USER_ROLES.ADMIN;
+  };
+
   const value = {
     user,
     setUser,
@@ -397,6 +424,8 @@ export const AuthProvider = ({ children }) => {
     masterKeyAvailable, // Boolean state for React effects
     getEncryptionParams,
     updateEncryptionParams,
+    userRole,
+    isAdmin,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
