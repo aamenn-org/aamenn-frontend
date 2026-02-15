@@ -23,7 +23,12 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      (file) => file.type.startsWith('image/') || file.type.startsWith('video/')
+      (file) => 
+        file.type.startsWith('image/') || 
+        file.type.startsWith('video/') ||
+        file.type === 'application/pdf' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.type.startsWith('text/')
     );
     setFiles((prev) => [...prev, ...droppedFiles]);
   };
@@ -62,7 +67,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
       <div className="relative bg-white dark:bg-zinc-800 rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload Photos</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload Files</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
@@ -114,13 +119,16 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             </svg>
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
-            Drag and drop your photos here, or click to browse
+            Drag and drop your files here, or click to browse
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Supported: Images, Videos, PDF, DOCX, TXT
           </p>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,video/*"
+            accept="image/*,video/*,.pdf,.docx,.txt,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={handleFileSelect}
           />

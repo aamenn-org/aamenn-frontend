@@ -3,7 +3,8 @@ import BlurhashCanvas from './BlurhashCanvas';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { fileService } from '../../services';
-import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
+import { isVideo, formatVideoDuration, isPDF, isDOCX, isTextFile, isDocumentPreviewable } from '../../utils/thumbnail';
+import { decryptFilename } from '../../utils/crypto';
 
 const PhotoCard = ({
   file,
@@ -22,12 +23,57 @@ const PhotoCard = ({
   const [decrypting, setDecrypting] = useState(false);
   const [isFavorite, setIsFavorite] = useState(file.isFavorite || false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [decryptedFileName, setDecryptedFileName] = useState(null);
 
   // AbortController for cancelling thumbnail load
   const abortControllerRef = useRef(null);
 
-  // Check if this is a video file
-  const isVideoFile = isVideo(file.mimeType || mimeType);
+  // Check file types
+  const fileMime = file.mimeType || mimeType;
+  const isVideoFile = isVideo(fileMime);
+  const isDocFile = isDocumentPreviewable(fileMime);
+
+  // Decrypt filename for document files
+  useEffect(() => {
+    const decrypt = async () => {
+      if (!isDocFile || !file?.fileNameEncrypted || !getMasterKey()) {
+        setDecryptedFileName(null);
+        return;
+      }
+      try {
+        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        setDecryptedFileName(name);
+      } catch (err) {
+        console.warn('[PhotoCard] Failed to decrypt filename:', err);
+        setDecryptedFileName(null);
+      }
+    };
+    decrypt();
+  }, [isDocFile, file?.fileNameEncrypted, getMasterKey]);
+
+  // Get Font Awesome icon class for document types
+  const getDocIconClass = () => {
+    if (isPDF(fileMime)) return 'fa-file-pdf';
+    if (isDOCX(fileMime)) return 'fa-file-word';
+    if (isTextFile(fileMime)) return 'fa-file-lines';
+    return 'fa-file';
+  };
+
+  // Get icon color for document types
+  const getDocIconColor = () => {
+    if (isPDF(fileMime)) return 'text-red-400';
+    if (isDOCX(fileMime)) return 'text-blue-400';
+    if (isTextFile(fileMime)) return 'text-gray-300';
+    return 'text-gray-400';
+  };
+
+  // Get label for document types
+  const getDocLabel = () => {
+    if (isPDF(fileMime)) return 'PDF';
+    if (isDOCX(fileMime)) return 'DOCX';
+    if (isTextFile(fileMime)) return 'TXT';
+    return 'FILE';
+  };
 
   // Update local state when file prop changes
   useEffect(() => {
@@ -36,7 +82,7 @@ const PhotoCard = ({
 
   // Load thumbnail using cache system with priority and cancellation
   useEffect(() => {
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
 
     if (
       !fileId ||
@@ -173,103 +219,120 @@ const PhotoCard = ({
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onView?.(file)}
     >
-      {/* Blurhash placeholder */}
-      {showBlurhash && (
-        <div className="absolute inset-0 z-0 bg-gray-200 dark:bg-zinc-700">
-          <BlurhashCanvas
-            hash={file.blurhash}
-            width={32}
-            height={32}
-            className="w-full h-full"
-          />
+      {/* Document file card - show Font Awesome icon */}
+      {isDocFile ? (
+        <div className="w-full h-full bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
+          <i className={`fa-solid ${getDocIconClass()} text-4xl ${getDocIconColor()}`}></i>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            {getDocLabel()}
+          </span>
+          {decryptedFileName && (
+            <span className="text-xs text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
+              {decryptedFileName}
+            </span>
+          )}
         </div>
-      )}
-
-      {/* Decrypted thumbnail image */}
-      {thumbnailUrl && !imageError ? (
-        <img
-          src={thumbnailUrl}
-          alt="Photo"
-          style={{
-            // Force complete coverage with slight overflow to prevent sub-pixel gaps
-            position: 'absolute',
-            top: '-1px',
-            left: '-1px',
-            width: 'calc(100% + 2px)',
-            height: 'calc(100% + 2px)',
-            objectFit: 'cover',
-            // Force GPU rendering to avoid sub-pixel artifacts
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-          }}
-          className={`
-            z-10 transition-all duration-300
-            group-hover:scale-105
-            ${imageLoaded ? 'opacity-100' : 'opacity-0'}
-          `}
-          onLoad={() => setImageLoaded(true)}
-          onError={() => setImageError(true)}
-        />
-      ) : !hasBlurhash && !decrypting ? (
-        /* Fallback placeholder when no blurhash or thumbnail */
-        <div className="w-full h-full bg-gray-200 dark:bg-zinc-700 flex flex-col items-center justify-center">
-          {getFileIcon()}
-        </div>
-      ) : null}
-
-      {/* Background color layer - only shows when no image loaded yet */}
-      {!imageLoaded && !hasBlurhash && (
-        <div className="absolute inset-0 bg-gray-200 dark:bg-zinc-700 z-0" />
-      )}
-
-      {/* Video indicator overlay - shows play icon and duration */}
-      {isVideoFile && imageLoaded && (
+      ) : (
         <>
-          {/* Play icon in center */}
-          <div className="absolute inset-0 flex items-center justify-center z-15 pointer-events-none">
-            <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
-              <svg
-                className="w-6 h-6 text-white ml-0.5"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
+          {/* Blurhash placeholder */}
+          {showBlurhash && (
+            <div className="absolute inset-0 z-0 bg-gray-200 dark:bg-zinc-700">
+              <BlurhashCanvas
+                hash={file.blurhash}
+                width={32}
+                height={32}
+                className="w-full h-full"
+              />
             </div>
-          </div>
+          )}
 
-          {/* Duration badge in bottom right */}
-          {file.duration && (
-            <div className="absolute bottom-2 right-2 z-15 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs font-medium pointer-events-none">
-              {formatVideoDuration(file.duration)}
+          {/* Decrypted thumbnail image */}
+          {thumbnailUrl && !imageError ? (
+            <img
+              src={thumbnailUrl}
+              alt="Photo"
+              style={{
+                // Force complete coverage with slight overflow to prevent sub-pixel gaps
+                position: 'absolute',
+                top: '-1px',
+                left: '-1px',
+                width: 'calc(100% + 2px)',
+                height: 'calc(100% + 2px)',
+                objectFit: 'cover',
+                // Force GPU rendering to avoid sub-pixel artifacts
+                transform: 'translateZ(0)',
+                backfaceVisibility: 'hidden',
+              }}
+              className={`
+                z-10 transition-all duration-300
+                group-hover:scale-105
+                ${imageLoaded ? 'opacity-100' : 'opacity-0'}
+              `}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+            />
+          ) : !hasBlurhash && !decrypting ? (
+            /* Fallback placeholder when no blurhash or thumbnail */
+            <div className="w-full h-full bg-gray-200 dark:bg-zinc-700 flex flex-col items-center justify-center">
+              {getFileIcon()}
+            </div>
+          ) : null}
+
+          {/* Background color layer - only shows when no image loaded yet */}
+          {!imageLoaded && !hasBlurhash && (
+            <div className="absolute inset-0 bg-gray-200 dark:bg-zinc-700 z-0" />
+          )}
+
+          {/* Video indicator overlay - shows play icon and duration */}
+          {isVideoFile && imageLoaded && (
+            <>
+              {/* Play icon in center */}
+              <div className="absolute inset-0 flex items-center justify-center z-15 pointer-events-none">
+                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
+                  <svg
+                    className="w-6 h-6 text-white ml-0.5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Duration badge in bottom right */}
+              {file.duration && (
+                <div className="absolute bottom-2 right-2 z-15 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs font-medium pointer-events-none">
+                  {formatVideoDuration(file.duration)}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Loading indicator */}
+          {decrypting && !imageLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 dark:bg-zinc-700/80 z-20">
+              <svg
+                className="animate-spin w-6 h-6 text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
             </div>
           )}
         </>
-      )}
-
-      {/* Loading indicator */}
-      {decrypting && !imageLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 dark:bg-zinc-700/80 z-20">
-          <svg
-            className="animate-spin w-6 h-6 text-gray-400"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        </div>
       )}
 
       {/* Selection Checkbox */}
@@ -329,7 +392,7 @@ const PhotoCard = ({
 
           setFavoriteLoading(true);
           const newFavorite = !isFavorite;
-          const fileId = file.fileId || file.id;
+          const fileId = file.fileId;
           setIsFavorite(newFavorite); // Optimistic update
 
           try {

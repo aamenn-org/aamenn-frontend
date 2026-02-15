@@ -15,3 +15,4 @@ export { default as UnlockModal } from './UnlockModal';
 export { default as BlurhashCanvas } from './BlurhashCanvas';
 export { default as GridSizeControl } from './GridSizeControl';
 export { default as UploadProgressPanel } from './UploadProgressPanel';
+export { default as RenameModal } from './RenameModal';

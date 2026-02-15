@@ -541,6 +541,7 @@ export function useUpload({ onFileUploaded } = {}) {
           if (thumbnailData) {
             formData.append('thumbSmall', thumbnailData.thumbSmallBase64);
             formData.append('thumbMedium', thumbnailData.thumbMediumBase64);
+            formData.append('thumbLarge', thumbnailData.thumbLargeBase64);
             formData.append(
               'cipherThumbSmallKey',
               thumbnailData.cipherThumbSmallKey
@@ -548,6 +549,10 @@ export function useUpload({ onFileUploaded } = {}) {
             formData.append(
               'cipherThumbMediumKey',
               thumbnailData.cipherThumbMediumKey
+            );
+            formData.append(
+              'cipherThumbLargeKey',
+              thumbnailData.cipherThumbLargeKey
             );
             formData.append('blurhash', thumbnailData.blurhash || '');
             formData.append('width', String(thumbnailData.width || 0));
@@ -712,6 +717,12 @@ export function useUpload({ onFileUploaded } = {}) {
     });
   }, []);
 
+  // Clear ALL uploads (for close button)
+  const clearAllUploads = useCallback(() => {
+    setUploads(new Map());
+    clearUploadState();
+  }, []);
+
   // Retry failed uploads (note: interrupted uploads can't be retried - File is lost)
   const retryFailed = useCallback(() => {
     setUploads((prev) => {
@@ -812,6 +823,7 @@ export function useUpload({ onFileUploaded } = {}) {
     stats,
     isUploading,
     clearCompleted,
+    clearAllUploads,
     retryFailed,
     cancelAll,
   };
@@ -821,9 +833,11 @@ export function useUpload({ onFileUploaded } = {}) {
 async function encryptThumbnails(thumbs, masterKey) {
   const smallKey = await generateFileKey();
   const mediumKey = await generateFileKey();
+  const largeKey = await generateFileKey();
 
   const smallData = await thumbs.small.arrayBuffer();
   const mediumData = await thumbs.medium.arrayBuffer();
+  const largeData = await thumbs.large.arrayBuffer();
 
   const { encryptedData: smallEnc, iv: smallIv } = await encryptFile(
     smallData,
@@ -833,9 +847,14 @@ async function encryptThumbnails(thumbs, masterKey) {
     mediumData,
     mediumKey
   );
+  const { encryptedData: largeEnc, iv: largeIv } = await encryptFile(
+    largeData,
+    largeKey
+  );
 
   const cipherThumbSmallKey = await encryptFileKey(smallKey, masterKey);
   const cipherThumbMediumKey = await encryptFileKey(mediumKey, masterKey);
+  const cipherThumbLargeKey = await encryptFileKey(largeKey, masterKey);
 
   // Combine IV + encrypted data and convert to base64
   const smallCombined = new Uint8Array(smallIv.length + smallEnc.byteLength);
@@ -846,11 +865,17 @@ async function encryptThumbnails(thumbs, masterKey) {
   mediumCombined.set(mediumIv, 0);
   mediumCombined.set(new Uint8Array(mediumEnc), mediumIv.length);
 
+  const largeCombined = new Uint8Array(largeIv.length + largeEnc.byteLength);
+  largeCombined.set(largeIv, 0);
+  largeCombined.set(new Uint8Array(largeEnc), largeIv.length);
+
   return {
     thumbSmallBase64: arrayBufferToBase64(smallCombined),
     thumbMediumBase64: arrayBufferToBase64(mediumCombined),
+    thumbLargeBase64: arrayBufferToBase64(largeCombined),
     cipherThumbSmallKey,
     cipherThumbMediumKey,
+    cipherThumbLargeKey,
     blurhash: thumbs.blurhash,
     width: thumbs.width,
     height: thumbs.height,

@@ -13,11 +13,25 @@
 import Dexie from 'dexie';
 import { fileService } from '../index';
 import { getCryptoWorkerPool, PRIORITY } from '../../workers';
+import { getDownloadLimiter } from '../../utils/download-limiter';
+import { getPerformanceMonitor } from '../../utils/performance-monitor';
 
 // Debug logging - disabled in production
 const DEBUG = false; // Set to true to enable cache debug logs
 const log = (...args: unknown[]) =>
   DEBUG && console.log('[ThumbnailCache]', ...args);
+
+// Cache configuration
+const CACHE_CONFIG = {
+  // TTL: 7 days for thumbnails, 3 days for full images
+  THUMBNAIL_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+  IMAGE_TTL_MS: 3 * 24 * 60 * 60 * 1000,
+  // Max disk usage: 500MB for thumbnails, 2GB for full images
+  MAX_THUMBNAIL_DISK_BYTES: 500 * 1024 * 1024,
+  MAX_IMAGE_DISK_BYTES: 2 * 1024 * 1024 * 1024,
+  // Eviction batch size when over limit
+  EVICTION_BATCH_SIZE: 50,
+};
 
 // ============================================================================
 // IndexedDB Schema for Decrypted Content
@@ -65,9 +79,11 @@ class DecryptedCacheDB extends Dexie {
 class SimpleLRUCache<T> {
   private cache = new Map<string, T>();
   private maxSize: number;
+  private onEvict?: (key: string, value: T) => void;
 
-  constructor(maxSize: number) {
+  constructor(maxSize: number, onEvict?: (key: string, value: T) => void) {
     this.maxSize = maxSize;
+    this.onEvict = onEvict;
   }
 
   get(key: string): T | undefined {
@@ -82,11 +98,23 @@ class SimpleLRUCache<T> {
 
   set(key: string, value: T): void {
     if (this.cache.has(key)) {
+      const oldValue = this.cache.get(key);
       this.cache.delete(key);
+      // Revoke old value if replacing
+      if (oldValue && this.onEvict) {
+        this.onEvict(key, oldValue);
+      }
     } else if (this.cache.size >= this.maxSize) {
       // Remove oldest
       const firstKey = this.cache.keys().next().value;
-      if (firstKey) this.cache.delete(firstKey);
+      if (firstKey) {
+        const evictedValue = this.cache.get(firstKey);
+        this.cache.delete(firstKey);
+        // Revoke evicted blob URL
+        if (evictedValue && this.onEvict) {
+          this.onEvict(firstKey, evictedValue);
+        }
+      }
     }
     this.cache.set(key, value);
   }
@@ -96,10 +124,21 @@ class SimpleLRUCache<T> {
   }
 
   delete(key: string): void {
+    const value = this.cache.get(key);
     this.cache.delete(key);
+    // Revoke blob URL on explicit delete
+    if (value && this.onEvict) {
+      this.onEvict(key, value);
+    }
   }
 
   clear(): void {
+    // Revoke all blob URLs before clearing
+    if (this.onEvict) {
+      for (const [key, value] of this.cache.entries()) {
+        this.onEvict(key, value);
+      }
+    }
     this.cache.clear();
   }
 
@@ -228,8 +267,27 @@ class ThumbnailCacheService {
 
   constructor() {
     this.db = new DecryptedCacheDB();
-    this.memoryCache = new SimpleLRUCache<string>(2000); // Increased to 2000 for 10K scale
-    this.imageMemoryCache = new SimpleLRUCache<string>(100); // 100 full images in memory
+    
+    // Memory cache with blob URL revocation on eviction
+    this.memoryCache = new SimpleLRUCache<string>(2000, (key, blobUrl) => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+        log(`Revoked blob URL for thumbnail: ${key}`);
+      } catch (err) {
+        // Ignore errors from already-revoked URLs
+      }
+    });
+    
+    // Image memory cache with blob URL revocation on eviction
+    this.imageMemoryCache = new SimpleLRUCache<string>(100, (key, blobUrl) => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+        log(`Revoked blob URL for image: ${key}`);
+      } catch (err) {
+        // Ignore errors from already-revoked URLs
+      }
+    });
+    
     // Bloom filters: 100K capacity, 1% false positive rate (~10KB each)
     this.thumbnailBloomFilter = new BloomFilter(100000, 0.01);
     this.imageBloomFilter = new BloomFilter(10000, 0.01); // Fewer full images
@@ -242,6 +300,15 @@ class ThumbnailCacheService {
     this.initPromise = this.db.open().then(async () => {
       // Populate bloom filters from existing IDB cache (one-time scan)
       await this.populateBloomFilters();
+      
+      // Run cache maintenance on startup (non-blocking)
+      this.evictExpired().catch((err) =>
+        console.warn('[ThumbnailCache] Failed to evict expired entries:', err)
+      );
+      this.enforceSizeLimits().catch((err) =>
+        console.warn('[ThumbnailCache] Failed to enforce size limits:', err)
+      );
+      
       this.isInitialized = true;
       log('Initialized');
     });
@@ -294,11 +361,16 @@ class ThumbnailCacheService {
     blurhash?: string
   ): Promise<string> {
     await this.init();
+    
+    const perfMonitor = getPerformanceMonitor();
+    perfMonitor.markStart(`thumbnail_${fileId}`);
 
     // L1: Check memory cache
     const memCached = this.memoryCache.get(fileId);
     if (memCached) {
       log(`L1 HIT: ${fileId}`);
+      perfMonitor.recordCacheHit('L1', 'thumbnail');
+      perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L1' });
       return memCached;
     }
 
@@ -315,6 +387,8 @@ class ThumbnailCacheService {
         const url = URL.createObjectURL(dbCached.blob);
         this.memoryCache.set(fileId, url);
         log(`L2 HIT: ${fileId}`);
+        perfMonitor.recordCacheHit('L2', 'thumbnail');
+        perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L2' });
         return url;
       }
       // False positive from bloom filter - continue to L3
@@ -324,6 +398,7 @@ class ThumbnailCacheService {
     }
 
     // L3: Download, decrypt, and cache
+    perfMonitor.recordCacheMiss('thumbnail');
     const fetchPromise = this.fetchAndCache(
       fileId,
       thumbnailUrl,
@@ -335,7 +410,9 @@ class ThumbnailCacheService {
     this.pendingRequests.set(fileId, fetchPromise);
 
     try {
-      return await fetchPromise;
+      const result = await fetchPromise;
+      perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L3' });
+      return result;
     } finally {
       this.pendingRequests.delete(fileId);
     }
@@ -492,8 +569,12 @@ class ThumbnailCacheService {
     try {
       log(`L3 FETCH: ${fileId}`);
 
-      // Download encrypted thumbnail
-      const encryptedData = await fileService.downloadFileContent(thumbnailUrl);
+      // Download encrypted thumbnail with concurrency limiting
+      const downloadLimiter = getDownloadLimiter();
+      const encryptedData = await downloadLimiter.schedule(
+        () => fileService.downloadFileContent(thumbnailUrl),
+        1 // Normal priority
+      );
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
       // Decrypt in Web Worker (non-blocking!)
@@ -567,11 +648,17 @@ class ThumbnailCacheService {
   ): Promise<string> {
     const { priority = 'normal', signal, blurhash, masterKeyBytes } = options;
 
-    // Map string priority to worker pool priority
-    const priorityMap = {
+    // Map string priority to worker pool priority and download priority
+    const workerPriorityMap = {
       high: PRIORITY.HIGH,
       normal: PRIORITY.NORMAL,
       low: PRIORITY.LOW,
+    };
+    
+    const downloadPriorityMap = {
+      high: 2,
+      normal: 1,
+      low: 0,
     };
 
     try {
@@ -582,8 +669,12 @@ class ThumbnailCacheService {
         throw new DOMException('Thumbnail load cancelled', 'AbortError');
       }
 
-      // Download encrypted thumbnail
-      const encryptedData = await fileService.downloadFileContent(thumbnailUrl);
+      // Download encrypted thumbnail with concurrency limiting and priority
+      const downloadLimiter = getDownloadLimiter();
+      const encryptedData = await downloadLimiter.schedule(
+        () => fileService.downloadFileContent(thumbnailUrl),
+        downloadPriorityMap[priority]
+      );
 
       // Check abort after download
       if (signal?.aborted) {
@@ -602,7 +693,7 @@ class ThumbnailCacheService {
         cipherThumbKey,
         keyBytes,
         {
-          priority: priorityMap[priority],
+          priority: workerPriorityMap[priority],
           signal,
         }
       );
@@ -713,6 +804,84 @@ class ThumbnailCacheService {
       diskCount: thumbnails.length,
       diskSize,
     };
+  }
+
+  /**
+   * Evict expired entries based on TTL.
+   * Call periodically or on init to clean up stale cache.
+   */
+  async evictExpired(): Promise<void> {
+    await this.init();
+
+    const now = Date.now();
+
+    // Evict expired thumbnails
+    const expiredThumbnails = await this.db.thumbnails
+      .where('timestamp')
+      .below(now - CACHE_CONFIG.THUMBNAIL_TTL_MS)
+      .toArray();
+
+    if (expiredThumbnails.length > 0) {
+      const expiredIds = expiredThumbnails.map((t) => t.fileId);
+      await this.db.thumbnails.bulkDelete(expiredIds);
+      log(`Evicted ${expiredIds.length} expired thumbnails`);
+    }
+
+    // Evict expired images
+    const expiredImages = await this.db.images
+      .where('timestamp')
+      .below(now - CACHE_CONFIG.IMAGE_TTL_MS)
+      .toArray();
+
+    if (expiredImages.length > 0) {
+      const expiredIds = expiredImages.map((i) => i.fileId);
+      await this.db.images.bulkDelete(expiredIds);
+      log(`Evicted ${expiredIds.length} expired images`);
+    }
+  }
+
+  /**
+   * Enforce size limits by evicting oldest entries.
+   * Call after adding new items to keep cache bounded.
+   */
+  async enforceSizeLimits(): Promise<void> {
+    await this.init();
+
+    // Check thumbnail cache size
+    const thumbnails = await this.db.thumbnails.orderBy('timestamp').toArray();
+    let thumbnailSize = thumbnails.reduce((sum, t) => sum + t.blob.size, 0);
+
+    if (thumbnailSize > CACHE_CONFIG.MAX_THUMBNAIL_DISK_BYTES) {
+      const toEvict: string[] = [];
+      for (const thumb of thumbnails) {
+        if (thumbnailSize <= CACHE_CONFIG.MAX_THUMBNAIL_DISK_BYTES * 0.9) break;
+        toEvict.push(thumb.fileId);
+        thumbnailSize -= thumb.blob.size;
+        if (toEvict.length >= CACHE_CONFIG.EVICTION_BATCH_SIZE) break;
+      }
+      if (toEvict.length > 0) {
+        await this.db.thumbnails.bulkDelete(toEvict);
+        log(`Evicted ${toEvict.length} thumbnails to enforce size limit`);
+      }
+    }
+
+    // Check image cache size
+    const images = await this.db.images.orderBy('timestamp').toArray();
+    let imageSize = images.reduce((sum, i) => sum + i.blob.size, 0);
+
+    if (imageSize > CACHE_CONFIG.MAX_IMAGE_DISK_BYTES) {
+      const toEvict: string[] = [];
+      for (const img of images) {
+        if (imageSize <= CACHE_CONFIG.MAX_IMAGE_DISK_BYTES * 0.9) break;
+        toEvict.push(img.fileId);
+        imageSize -= img.blob.size;
+        if (toEvict.length >= CACHE_CONFIG.EVICTION_BATCH_SIZE) break;
+      }
+      if (toEvict.length > 0) {
+        await this.db.images.bulkDelete(toEvict);
+        log(`Evicted ${toEvict.length} images to enforce size limit`);
+      }
+    }
   }
 
   // ==========================================================================
@@ -952,6 +1121,94 @@ class ThumbnailCacheService {
   }
 
   /**
+   * Get large thumbnail for viewer, using cache if available.
+   * Uses L1 memory cache for instant access.
+   */
+  async getLargeThumbnail(
+    fileId: string,
+    thumbLargeUrl: string,
+    cipherThumbLargeKey: string,
+    masterKey: CryptoKey
+  ): Promise<string> {
+    await this.init();
+
+    const cacheKey = `large_${fileId}`;
+
+    // L1: Check memory cache FIRST (instant)
+    const memCached = this.imageMemoryCache.get(cacheKey);
+    if (memCached) {
+      log(`Large thumb L1 HIT: ${fileId}`);
+      return memCached;
+    }
+
+    // Check if already fetching
+    const pending = this.pendingRequests.get(cacheKey);
+    if (pending) {
+      return pending;
+    }
+
+    // L2: Check IndexedDB (bloom filter first)
+    if (this.imageBloomFilter.mightContain(cacheKey)) {
+      const dbCached = await this.db.images.get(cacheKey);
+      if (dbCached) {
+        const url = URL.createObjectURL(dbCached.blob);
+        this.imageMemoryCache.set(cacheKey, url); // Promote to L1
+        log(`Large thumb L2 HIT: ${fileId}`);
+        return url;
+      }
+      // False positive - continue to L3
+    }
+
+    // L3: Download, decrypt, cache
+    const fetchPromise = (async () => {
+      log(`Large thumb L3 FETCH: ${fileId}`);
+
+      const encryptedData = await fileService.downloadFileContent(
+        thumbLargeUrl
+      );
+
+      // Decrypt in Web Worker (non-blocking!)
+      const workerPool = getCryptoWorkerPool();
+      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
+      const decryptedData = await workerPool.decryptFile(
+        encryptedData,
+        cipherThumbLargeKey,
+        masterKeyBytes
+      );
+
+      const blob = new Blob([decryptedData], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+
+      // Store in L1
+      this.imageMemoryCache.set(cacheKey, url);
+
+      // Add to bloom filter
+      this.imageBloomFilter.add(cacheKey);
+
+      // Store in L2 (fire and forget)
+      this.db.images
+        .put({
+          fileId: cacheKey,
+          blob,
+          timestamp: Date.now(),
+        })
+        .catch((err) =>
+          console.error('[ThumbnailCache] Failed to cache large thumb:', err)
+        );
+
+      return url;
+    })();
+
+    this.pendingRequests.set(cacheKey, fetchPromise);
+
+    try {
+      return await fetchPromise;
+    } finally {
+      this.pendingRequests.delete(cacheKey);
+    }
+  }
+
+  /**
    * Check if full image is in L1 memory (instant check).
    */
   hasFullImageInMemory(fileId: string): boolean {
@@ -971,6 +1228,13 @@ class ThumbnailCacheService {
    */
   getMediumFromMemory(fileId: string): string | null {
     return this.imageMemoryCache.get(`medium_${fileId}`) || null;
+  }
+
+  /**
+   * Get large thumbnail URL if it's already in memory.
+   */
+  getLargeThumbnailFromMemory(fileId: string): string | null {
+    return this.imageMemoryCache.get(`large_${fileId}`) || null;
   }
 
   /**

@@ -16,10 +16,12 @@ import {
   UploadProgressPanel,
   VirtualizedPhotoGrid,
 } from '../../components/gallery';
+import { FilePreviewModal } from '../../components/documents';
 import { StorageBar } from '../../components/ui';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import { useUpload } from '../../hooks';
+import { isDocumentPreviewable } from '../../utils/thumbnail';
 
 const Dashboard = () => {
   const { getMasterKey, hasMasterKey, setMasterKey } = useAuth();
@@ -43,6 +45,9 @@ const Dashboard = () => {
   // Photo viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
+
+  // Document preview state
+  const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
 
   // Grid size preference (stored in localStorage)
   const [gridSize, setGridSize] = useState(() => {
@@ -143,6 +148,7 @@ const Dashboard = () => {
     cancelAll: cancelAllUploads,
     retryFailed: retryFailedUploads,
     clearCompleted: clearUploadHistory,
+    clearAllUploads,
   } = useUpload({
     onFileUploaded: (uploadedFile) => {
       console.log('[Dashboard] File uploaded:', uploadedFile);
@@ -155,9 +161,13 @@ const Dashboard = () => {
     fetchFiles(1, false); // Initial load
   }, []);
 
+  // Filter files into photos/videos and documents
+  const photoFiles = files.filter((f) => !isDocumentPreviewable(f.mimeType));
+  const documentFiles = files.filter((f) => isDocumentPreviewable(f.mimeType));
+
   // Handle file selection
   const handleSelectFile = (file) => {
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
     setSelectedFiles((prev) => {
       if (prev.includes(fileId)) {
         return prev.filter((id) => id !== fileId);
@@ -166,7 +176,7 @@ const Dashboard = () => {
     });
   };
 
-  // Handle file view - open photo viewer
+  // Handle file view - route to appropriate viewer
   const handleViewFile = (file) => {
     // Check if master key is available
     if (!hasMasterKey()) {
@@ -176,12 +186,19 @@ const Dashboard = () => {
       return;
     }
 
-    const index = files.findIndex(
-      (f) => (f.fileId || f.id) === (file.fileId || file.id)
+    const mimeType = file.mimeType;
+    const isDoc = isDocumentPreviewable(mimeType);
+    const targetList = isDoc ? documentFiles : photoFiles;
+    const index = targetList.findIndex(
+      (f) => f.fileId === file.fileId
     );
     if (index !== -1) {
       setCurrentFileIndex(index);
-      setViewerOpen(true);
+      if (isDoc) {
+        setDocumentViewerOpen(true);
+      } else {
+        setViewerOpen(true);
+      }
     }
   };
 
@@ -193,26 +210,20 @@ const Dashboard = () => {
     if (pendingFileView) {
       const file = pendingFileView;
       setPendingFileView(null);
-      const index = files.findIndex(
-        (f) => (f.fileId || f.id) === (file.fileId || file.id)
+      const mimeType = file.mimeType;
+      const isDoc = isDocumentPreviewable(mimeType);
+      const targetList = isDoc ? documentFiles : photoFiles;
+      const index = targetList.findIndex(
+        (f) => f.fileId === file.fileId
       );
       if (index !== -1) {
         setCurrentFileIndex(index);
-        setViewerOpen(true);
+        if (isDoc) {
+          setDocumentViewerOpen(true);
+        } else {
+          setViewerOpen(true);
+        }
       }
-    }
-  };
-
-  // Navigate to next/prev photo
-  const handleNextPhoto = () => {
-    if (currentFileIndex < files.length - 1) {
-      setCurrentFileIndex(currentFileIndex + 1);
-    }
-  };
-
-  const handlePrevPhoto = () => {
-    if (currentFileIndex > 0) {
-      setCurrentFileIndex(currentFileIndex - 1);
     }
   };
 
@@ -303,7 +314,7 @@ const Dashboard = () => {
 
   // Handle add to album (single from photo viewer)
   const handleAddToAlbumSingle = (file) => {
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
     setAddToAlbumFileIds([fileId]);
     setShowAddToAlbumModal(true);
   };
@@ -335,7 +346,7 @@ const Dashboard = () => {
           {!selectedAlbum && (
             <div className="flex items-center justify-between mb-6">
               <GalleryTabs activeTab={activeTab} onTabChange={setActiveTab} />
-              {activeTab === 'photos' && (
+              {(activeTab === 'photos' || activeTab === 'files') && (
                 <GridSizeControl
                   size={gridSize}
                   onSizeChange={handleGridSizeChange}
@@ -357,7 +368,7 @@ const Dashboard = () => {
           {/* Content based on active tab */}
           {!selectedAlbum && activeTab === 'photos' && (
             <div className="w-full">
-              {files.length === 0 && !loading ? (
+              {photoFiles.length === 0 && !loading ? (
                 /* Empty State */
                 <div className="flex flex-col items-center justify-center py-20">
                   <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
@@ -405,7 +416,7 @@ const Dashboard = () => {
               ) : (
                 /* Virtualized Photo Grid with infinite scroll */
                 <VirtualizedPhotoGrid
-                  files={files}
+                  files={photoFiles}
                   selectedFiles={selectedFiles}
                   onSelectFile={handleSelectFile}
                   onViewFile={handleViewFile}
@@ -420,6 +431,69 @@ const Dashboard = () => {
 
               {/* Syncing Indicator */}
               <SyncingIndicator isSyncing={syncing} />
+            </div>
+          )}
+
+          {/* Files Tab - Documents (PDF, DOCX, TXT) */}
+          {!selectedAlbum && activeTab === 'files' && (
+            <div className="w-full">
+              {documentFiles.length === 0 && !loading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
+                    <svg
+                      className="w-12 h-12 text-gray-300 dark:text-gray-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No files yet
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
+                    Upload PDF, Word, or text documents to preview them securely.
+                  </p>
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    Upload Files
+                  </button>
+                </div>
+              ) : (
+                <VirtualizedPhotoGrid
+                  files={documentFiles}
+                  selectedFiles={selectedFiles}
+                  onSelectFile={handleSelectFile}
+                  onViewFile={handleViewFile}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  loading={loading || loadingMore}
+                  hasMore={pagination.hasMore}
+                  onLoadMore={loadMoreFiles}
+                  gridSize={gridSize}
+                  emptyMessage="No files yet"
+                />
+              )}
             </div>
           )}
 
@@ -452,20 +526,35 @@ const Dashboard = () => {
       />
 
       {/* Photo Viewer */}
-      {files.length > 0 && (
+      {photoFiles.length > 0 && (
         <PhotoViewer
-          file={files[currentFileIndex]}
-          files={files}
+          file={photoFiles[currentFileIndex]}
+          files={photoFiles}
           isOpen={viewerOpen}
           onClose={() => setViewerOpen(false)}
-          onNext={handleNextPhoto}
-          onPrev={handlePrevPhoto}
-          hasNext={currentFileIndex < files.length - 1}
+          onNext={() => setCurrentFileIndex((i) => Math.min(i + 1, photoFiles.length - 1))}
+          onPrev={() => setCurrentFileIndex((i) => Math.max(i - 1, 0))}
+          hasNext={currentFileIndex < photoFiles.length - 1}
           hasPrev={currentFileIndex > 0}
           currentIndex={currentFileIndex}
-          totalFiles={files.length}
+          totalFiles={photoFiles.length}
           onAddToAlbum={handleAddToAlbumSingle}
           onDelete={handleDeleteSingle}
+        />
+      )}
+
+      {/* Document Preview Modal */}
+      {documentFiles.length > 0 && (
+        <FilePreviewModal
+          file={documentFiles[currentFileIndex]}
+          files={documentFiles}
+          isOpen={documentViewerOpen}
+          onClose={() => setDocumentViewerOpen(false)}
+          onNext={() => setCurrentFileIndex((i) => Math.min(i + 1, documentFiles.length - 1))}
+          onPrev={() => setCurrentFileIndex((i) => Math.max(i - 1, 0))}
+          hasNext={currentFileIndex < documentFiles.length - 1}
+          hasPrev={currentFileIndex > 0}
+          currentIndex={currentFileIndex}
         />
       )}
 
@@ -520,7 +609,7 @@ const Dashboard = () => {
           stats={uploadStats}
           onCancelAll={cancelAllUploads}
           onRetryFailed={retryFailedUploads}
-          onClear={clearUploadHistory}
+          onClear={clearAllUploads}
           isMinimized={isUploadPanelMinimized}
           onToggleMinimize={() =>
             setIsUploadPanelMinimized(!isUploadPanelMinimized)

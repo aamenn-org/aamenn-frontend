@@ -44,7 +44,7 @@ const AlbumDetailView = ({ album, onBack, onViewFile, onFavoriteToggle }) => {
   }, [fetchAlbumFiles]);
 
   const handleSelectFile = (file) => {
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
     setSelectedFiles((prev) => {
       if (prev.includes(fileId)) {
         return prev.filter((id) => id !== fileId);

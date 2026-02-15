@@ -1,6 +1,7 @@
 const GalleryTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'photos', label: 'Photos' },
+    { id: 'files', label: 'Files' },
     { id: 'albums', label: 'Albums' },
     { id: 'favorites', label: 'Favorites' },
   ];

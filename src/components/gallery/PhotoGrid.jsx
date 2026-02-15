@@ -56,7 +56,7 @@ const PhotoGrid = ({
   return (
     <div className={`grid ${gridClasses} gap-1`}>
       {files.map((file) => {
-        const fileId = file.fileId || file.id;
+        const fileId = file.fileId;
         return (
           <PhotoCard
             key={fileId}

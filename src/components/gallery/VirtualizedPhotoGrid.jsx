@@ -165,7 +165,7 @@ const VirtualizedPhotoGrid = ({
       {/* Grid with all items - thumbnails load lazily */}
       <div className={`grid ${gridClasses} gap-1`}>
         {files.map((file) => {
-          const fileId = file.fileId || file.id;
+          const fileId = file.fileId;
           return (
             <LazyPhotoCard
               key={fileId}

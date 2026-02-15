@@ -236,10 +236,11 @@ export const fileService = {
   },
 
   /**
-   * Update file properties (e.g., favorite status)
+   * Update file metadata
    * @param {string} fileId - File UUID
    * @param {Object} updates - Properties to update
    * @param {boolean} [updates.isFavorite] - Favorite status
+   * @param {string} [updates.fileNameEncrypted] - Encrypted filename for rename
    */
   async updateFile(fileId, updates) {
     const response = await api.patch(`/files/${fileId}`, updates);

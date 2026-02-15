@@ -6,6 +6,7 @@ import { encode } from 'blurhash';
 export const THUMBNAIL_SIZES = {
   small: { width: 150, height: 150 },
   medium: { width: 800, height: 800 },
+  large: { width: 1600, height: 1600 },
 };
 
 /**
@@ -152,7 +153,7 @@ export function isVideo(mimeType) {
  * Uses Web Worker with OffscreenCanvas when available, falls back to main thread
  * @param file - The original image file
  * @param options - Options: { useWorker: boolean }
- * @returns Object with small/medium thumbnail blobs, blurhash string, and dimensions
+ * @returns Object with small/medium/large thumbnail blobs, blurhash string, and dimensions
  */
 export async function generateThumbnails(file, options = {}) {
   const { useWorker = true } = options;
@@ -165,10 +166,12 @@ export async function generateThumbnails(file, options = {}) {
       // Convert base64 back to blobs for consistency with main thread API
       const smallBlob = base64ToBlob(result.smallBase64, 'image/jpeg');
       const mediumBlob = base64ToBlob(result.mediumBase64, 'image/jpeg');
+      const largeBlob = base64ToBlob(result.largeBase64, 'image/jpeg');
 
       return {
         small: smallBlob,
         medium: mediumBlob,
+        large: largeBlob,
         blurhash: result.blurhash,
         width: result.width,
         height: result.height,
@@ -189,7 +192,7 @@ export async function generateThumbnails(file, options = {}) {
 /**
  * Generate thumbnails on the main thread (fallback)
  * @param file - The original image file
- * @returns Object with small/medium thumbnail blobs, blurhash string, and dimensions
+ * @returns Object with small/medium/large thumbnail blobs, blurhash string, and dimensions
  */
 async function generateThumbnailsMainThread(file) {
   // Load image
@@ -197,7 +200,7 @@ async function generateThumbnailsMainThread(file) {
   const { naturalWidth: width, naturalHeight: height } = image;
 
   // Generate thumbnails in parallel
-  const [smallBlob, mediumBlob] = await Promise.all([
+  const [smallBlob, mediumBlob, largeBlob] = await Promise.all([
     createThumbnail(
       image,
       THUMBNAIL_SIZES.small.width,
@@ -208,6 +211,11 @@ async function generateThumbnailsMainThread(file) {
       THUMBNAIL_SIZES.medium.width,
       THUMBNAIL_SIZES.medium.height
     ),
+    createThumbnail(
+      image,
+      THUMBNAIL_SIZES.large.width,
+      THUMBNAIL_SIZES.large.height
+    ),
   ]);
 
   // Generate blurhash
@@ -216,6 +224,7 @@ async function generateThumbnailsMainThread(file) {
   return {
     small: smallBlob,
     medium: mediumBlob,
+    large: largeBlob,
     blurhash,
     width,
     height,
@@ -528,4 +537,43 @@ export function formatVideoDuration(seconds) {
       .padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Check if a file is a PDF document
+ * @param mimeType - The file's MIME type
+ * @returns boolean
+ */
+export function isPDF(mimeType) {
+  return mimeType?.toLowerCase() === 'application/pdf';
+}
+
+/**
+ * Check if a file is a DOCX document
+ * @param mimeType - The file's MIME type
+ * @returns boolean
+ */
+export function isDOCX(mimeType) {
+  return (
+    mimeType?.toLowerCase() ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+}
+
+/**
+ * Check if a file is a text file
+ * @param mimeType - The file's MIME type
+ * @returns boolean
+ */
+export function isTextFile(mimeType) {
+  return mimeType?.toLowerCase()?.startsWith('text/');
+}
+
+/**
+ * Check if a file is a previewable document (PDF, DOCX, or TXT)
+ * @param mimeType - The file's MIME type
+ * @returns boolean
+ */
+export function isDocumentPreviewable(mimeType) {
+  return isPDF(mimeType) || isDOCX(mimeType) || isTextFile(mimeType);
 }

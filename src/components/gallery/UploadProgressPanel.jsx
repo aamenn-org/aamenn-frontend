@@ -106,23 +106,21 @@ const UploadProgressPanel = ({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50">
+    <div className="fixed bottom-4 right-4 w-80 bg-white dark:bg-zinc-900 rounded-lg shadow-xl border border-gray-200 dark:border-zinc-700 overflow-hidden z-50">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900">
-            {isComplete ? 'Upload Complete' : 'Uploading Files'}
+          <span className="font-medium text-gray-900 dark:text-white">
+            {isComplete ? 'Upload Complete' : 'Uploading'}
           </span>
-          {!isComplete && (
-            <span className="text-sm text-gray-500">
-              ({completed}/{total})
-            </span>
-          )}
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {completed}/{total}
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={onToggleMinimize}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors"
             title="Minimize"
           >
             <svg
@@ -139,39 +137,31 @@ const UploadProgressPanel = ({
               />
             </svg>
           </button>
-          {isComplete && (
-            <button
-              onClick={onClear}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-              title="Close"
+          <button
+            onClick={onClear}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors"
+            title="Close"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
       {/* Overall Progress */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">
-            Overall Progress
-          </span>
-          <span className="text-sm text-gray-500">{overallProgress}%</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
+      <div className="px-4 py-3">
+        <div className="w-full bg-gray-200 dark:bg-zinc-700 rounded-full h-2">
           <div
             className={`h-2 rounded-full transition-all duration-300 ${
               isComplete ? 'bg-green-500' : 'bg-blue-500'
@@ -181,130 +171,33 @@ const UploadProgressPanel = ({
         </div>
       </div>
 
-      {/* Active uploads */}
-      {activeTasks.length > 0 && (
-        <div className="max-h-48 overflow-y-auto">
-          {activeTasks.map((task) => (
-            <div
-              key={task.id}
-              className="px-4 py-2 border-b border-gray-50 last:border-0"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600 truncate flex-1 mr-2">
-                  {task.name}
-                </span>
-                <span
-                  className={`text-xs ${
-                    task.status === UploadStatus.RETRYING ||
-                    task.status === 'retrying'
-                      ? 'text-orange-500'
-                      : task.status === UploadStatus.INTERRUPTED ||
-                        task.status === 'interrupted'
-                      ? 'text-red-500'
-                      : task.status === UploadStatus.HASHING ||
-                        task.status === 'hashing'
-                      ? 'text-cyan-500'
-                      : task.status === UploadStatus.DUPLICATE ||
-                        task.status === 'duplicate'
-                      ? 'text-amber-500'
-                      : 'text-gray-400'
-                  }`}
-                >
-                  {task.status === UploadStatus.HASHING ||
-                  task.status === 'hashing'
-                    ? 'Computing hash...'
-                    : task.status === UploadStatus.ENCRYPTING ||
-                      task.status === 'encrypting'
-                    ? 'Encrypting...'
-                    : task.status === UploadStatus.UPLOADING ||
-                      task.status === 'uploading'
-                    ? 'Uploading...'
-                    : task.status === UploadStatus.RETRYING ||
-                      task.status === 'retrying'
-                    ? task.error || 'Retrying...'
-                    : task.status === UploadStatus.INTERRUPTED ||
-                      task.status === 'interrupted'
-                    ? 'Interrupted'
-                    : task.status === UploadStatus.DUPLICATE ||
-                      task.status === 'duplicate'
-                    ? 'Duplicate - Skipped'
-                    : task.status}
-                </span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-1">
-                <div
-                  className={`h-1 rounded-full transition-all duration-200 ${
-                    task.status === UploadStatus.HASHING ||
-                    task.status === 'hashing'
-                      ? 'bg-cyan-400'
-                      : task.status === UploadStatus.ENCRYPTING ||
-                        task.status === 'encrypting'
-                      ? 'bg-purple-400'
-                      : task.status === UploadStatus.RETRYING ||
-                        task.status === 'retrying'
-                      ? 'bg-orange-400'
-                      : task.status === UploadStatus.INTERRUPTED ||
-                        task.status === 'interrupted'
-                      ? 'bg-red-400'
-                      : task.status === UploadStatus.DUPLICATE ||
-                        task.status === 'duplicate'
-                      ? 'bg-amber-400'
-                      : 'bg-blue-400'
-                  }`}
-                  style={{ width: `${task.progress}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {/* Status summary */}
-      <div className="px-4 py-2 bg-gray-50 flex items-center justify-between text-xs text-gray-500">
-        <div className="flex items-center gap-3">
-          {queued > 0 && <span>Queued: {queued}</span>}
-          {hashing > 0 && (
-            <span className="text-cyan-600">Hashing: {hashing}</span>
+      {/* Simple Status */}
+      <div className="px-4 py-2 bg-gray-50 dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700">
+        <div className="flex items-center justify-between text-sm">
+          {!isComplete && (
+            <span className="text-gray-600 dark:text-gray-400">Uploading...</span>
           )}
-          {active > 0 && <span>Active: {active}</span>}
-          {retrying > 0 && (
-            <span className="text-orange-600">Retrying: {retrying}</span>
+          {isComplete && completed > 0 && (
+            <span className="text-green-600 dark:text-green-500">✓ {completed} uploaded</span>
           )}
-          {interrupted > 0 && (
-            <span className="text-red-600">Interrupted: {interrupted}</span>
+          {failed > 0 && (
+            <span className="text-red-600 dark:text-red-500">✗ {failed} failed</span>
           )}
-          {duplicate > 0 && (
-            <span className="text-amber-600">Skipped: {duplicate}</span>
-          )}
-          {completed > 0 && (
-            <span className="text-green-600">Done: {completed}</span>
-          )}
-          {failed > 0 && <span className="text-red-600">Failed: {failed}</span>}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {!isComplete && (
-            <button
-              onClick={onCancelAll}
-              className="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-            >
-              Cancel All
-            </button>
-          )}
-        </div>
-
-        {(failed > 0 || interrupted > 0) && (
+      {failed > 0 && (
+        <div className="px-4 py-3 bg-gray-50 dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-center">
           <button
-            onClick={onClear}
-            className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded"
+            onClick={onRetryFailed}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
           >
-            Clear {interrupted > 0 ? 'Interrupted' : 'Failed'}
+            Retry Failed
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

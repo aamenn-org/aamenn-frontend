@@ -16,6 +16,7 @@ import { encode as encodeBlurhash } from 'blurhash';
 const THUMBNAIL_SIZES = {
   small: { width: 150, height: 150 },
   medium: { width: 800, height: 800 },
+  large: { width: 1600, height: 1600 },
 };
 
 /**
@@ -98,14 +99,14 @@ async function blobToBase64(blob) {
 /**
  * Generate thumbnails from image data
  * @param {ImageBitmap} imageBitmap - Source image bitmap
- * @returns {Promise<Object>} Thumbnail data with small, medium, blurhash, dimensions
+ * @returns {Promise<Object>} Thumbnail data with small, medium, large, blurhash, dimensions
  */
 async function generateThumbnailsFromBitmap(imageBitmap) {
   const width = imageBitmap.width;
   const height = imageBitmap.height;
 
   // Generate thumbnails in parallel
-  const [smallBlob, mediumBlob] = await Promise.all([
+  const [smallBlob, mediumBlob, largeBlob] = await Promise.all([
     createThumbnail(
       imageBitmap,
       THUMBNAIL_SIZES.small.width,
@@ -116,20 +117,27 @@ async function generateThumbnailsFromBitmap(imageBitmap) {
       THUMBNAIL_SIZES.medium.width,
       THUMBNAIL_SIZES.medium.height
     ),
+    createThumbnail(
+      imageBitmap,
+      THUMBNAIL_SIZES.large.width,
+      THUMBNAIL_SIZES.large.height
+    ),
   ]);
 
   // Generate blurhash
   const blurhash = generateBlurhash(imageBitmap);
 
   // Convert blobs to base64 for transfer
-  const [smallBase64, mediumBase64] = await Promise.all([
+  const [smallBase64, mediumBase64, largeBase64] = await Promise.all([
     blobToBase64(smallBlob),
     blobToBase64(mediumBlob),
+    blobToBase64(largeBlob),
   ]);
 
   return {
     smallBase64,
     mediumBase64,
+    largeBase64,
     blurhash,
     width,
     height,

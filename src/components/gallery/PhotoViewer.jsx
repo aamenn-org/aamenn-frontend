@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import BlurhashCanvas from './BlurhashCanvas';
 import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
+import { decryptFilename, encryptFilename } from '../../utils/crypto';
+import RenameModal from './RenameModal';
 
 /**
  * MediaViewer (PhotoViewer) with INSTANT loading like Ente.io:
@@ -39,9 +42,10 @@ const PhotoViewer = ({
 
   // Image/Video URLs - progressive quality
   const [displayUrl, setDisplayUrl] = useState(null);
-  const [quality, setQuality] = useState('none'); // none | small | medium | full
+  const [quality, setQuality] = useState('none'); // none | small | medium | large
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
 
   // Video-specific state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -66,6 +70,57 @@ const PhotoViewer = ({
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const menuRef = useRef(null);
 
+  // Decrypted filename
+  const [decryptedFileName, setDecryptedFileName] = useState(null);
+  useEffect(() => {
+    const decrypt = async () => {
+      if (!file?.fileNameEncrypted || !getMasterKey()) {
+        setDecryptedFileName(null);
+        return;
+      }
+      try {
+        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        setDecryptedFileName(name);
+      } catch (err) {
+        console.warn('[PhotoViewer] Failed to decrypt filename:', err);
+        setDecryptedFileName(null);
+      }
+    };
+    decrypt();
+  }, [file?.fileNameEncrypted, getMasterKey]);
+
+  // Rename modal state
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  // Handle rename
+  const handleRename = async (newName) => {
+    if (!file?.fileId || !getMasterKey()) return;
+
+    setIsRenaming(true);
+    try {
+      const masterKey = getMasterKey();
+      const encryptedName = await encryptFilename(newName, masterKey);
+      
+      await fileService.updateFile(file.fileId, {
+        fileNameEncrypted: encryptedName,
+      });
+
+      // Update local state
+      setDecryptedFileName(newName);
+      
+      // Update file object if there's a callback
+      if (file) {
+        file.fileNameEncrypted = encryptedName;
+      }
+    } catch (err) {
+      console.error('[PhotoViewer] Failed to rename file:', err);
+      throw err;
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
   // Timers for auto-hide
   const leftArrowTimerRef = useRef(null);
   const rightArrowTimerRef = useRef(null);
@@ -79,9 +134,9 @@ const PhotoViewer = ({
 
   // Get the best available cached image INSTANTLY (synchronous check)
   const getBestCachedUrl = useCallback((fileId) => {
-    // Check L1 memory in order of preference: full > medium > small
-    const fullUrl = thumbnailCache.getFullImageFromMemory(fileId);
-    if (fullUrl) return { url: fullUrl, quality: 'full' };
+    // Check L1 memory in order of preference: large > medium > small
+    const largeUrl = thumbnailCache.getLargeThumbnailFromMemory(fileId);
+    if (largeUrl) return { url: largeUrl, quality: 'large' };
 
     const mediumUrl = thumbnailCache.getMediumFromMemory(fileId);
     if (mediumUrl) return { url: mediumUrl, quality: 'medium' };
@@ -109,10 +164,10 @@ const PhotoViewer = ({
         // Check if we're still viewing the same file
         if (currentFileIdRef.current !== fileId) return;
 
-        // Step 2: Load medium thumbnail (if not already at medium/full quality)
+        // Step 2: Load medium thumbnail (if not already at medium/large quality)
         if (
           quality !== 'medium' &&
-          quality !== 'full' &&
+          quality !== 'large' &&
           fileData.thumbMediumUrl
         ) {
           try {
@@ -122,7 +177,7 @@ const PhotoViewer = ({
               fileData.cipherThumbMediumKey,
               masterKey
             );
-            if (currentFileIdRef.current === fileId && quality !== 'full') {
+            if (currentFileIdRef.current === fileId && quality !== 'large') {
               setDisplayUrl(mediumUrl);
               setQuality('medium');
             }
@@ -131,8 +186,22 @@ const PhotoViewer = ({
           }
         }
 
-        // Step 3: Load full image
-        if (fileData.downloadUrl && fileData.cipherFileKey) {
+        // Step 3: Load large thumbnail (preferred for viewer)
+        // Fallback to original if large thumbnail not available (older files)
+        if (fileData.thumbLargeUrl && fileData.cipherThumbLargeKey) {
+          const largeUrl = await thumbnailCache.getLargeThumbnail(
+            fileId,
+            fileData.thumbLargeUrl,
+            fileData.cipherThumbLargeKey,
+            masterKey
+          );
+          if (currentFileIdRef.current === fileId) {
+            setDisplayUrl(largeUrl);
+            setQuality('large');
+          }
+        } else if (fileData.downloadUrl && fileData.cipherFileKey) {
+          // Fallback to original for older files without large thumbnail
+          console.log('[PhotoViewer] No large thumbnail, falling back to original');
           const fullUrl = await thumbnailCache.getFullImage(
             fileId,
             fileData.downloadUrl,
@@ -142,7 +211,7 @@ const PhotoViewer = ({
           );
           if (currentFileIdRef.current === fileId) {
             setDisplayUrl(fullUrl);
-            setQuality('full');
+            setQuality('large'); // Treat as large quality
           }
         }
       } catch (err) {
@@ -395,7 +464,7 @@ const PhotoViewer = ({
   useEffect(() => {
     if (!isOpen || !file) return;
 
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
     if (!fileId) return;
 
     // Track current file
@@ -472,8 +541,7 @@ const PhotoViewer = ({
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       const extension = isVideoFile ? 'mp4' : 'jpg';
-      link.download =
-        file.originalName || file.fileNameEncrypted || `media.${extension}`;
+      link.download = decryptedFileName || `media.${extension}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -641,7 +709,7 @@ const PhotoViewer = ({
   // Handle delete action
   const handleDeleteFile = async () => {
     if (!file) return;
-    const fileId = file.fileId || file.id;
+    const fileId = file.fileId;
 
     const confirmMessage =
       'Are you sure you want to permanently delete this file? This action cannot be undone.';
@@ -855,7 +923,7 @@ const PhotoViewer = ({
   // Determine loading state - only show blurhash if we have NOTHING cached
   const isLoading = !displayUrl;
   const hasBlurhash = file.blurhash && file.blurhash.length > 0;
-  const isFullQuality = quality === 'full';
+  const isFullQuality = quality === 'large';
 
   return (
     <div
@@ -1005,14 +1073,106 @@ const PhotoViewer = ({
               </div>
             )}
 
-            {/* Actual image - full screen with aspect ratio preserved */}
+            {/* Actual image - full screen with zoom/pan support */}
             {displayUrl && (
-              <img
-                src={displayUrl}
-                alt="Photo"
-                className="w-full h-full object-contain"
-                draggable={false}
-              />
+              <TransformWrapper
+                initialScale={1}
+                minScale={1}
+                maxScale={4}
+                centerOnInit={true}
+                onTransformed={(ref, state) => {
+                  setZoomScale(state.scale);
+                }}
+                wheel={{
+                  step: 0.01,
+                  smoothStep: 0.02
+                }}
+                doubleClick={{ mode: 'reset' }}
+                panning={{ 
+                  disabled: false,
+                }}
+                velocityAnimation={{ 
+                  sensitivity: 0.002,
+                  animationTime: 200
+                }}
+              >
+                {({ zoomIn, zoomOut, resetTransform, state }) => (
+                  <>
+                    {/* Zoom Controls - unified design with percentage and hover activation */}
+                    <div
+                      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group"
+                    >
+                      <div className={`flex items-center gap-1 px-2 py-1.5 bg-black/60 rounded-full transition-opacity duration-300 ${
+                        showCloseButton ? 'opacity-100' : 'opacity-0'
+                      } group-hover:opacity-100`}>
+                        <button
+                          onClick={() => zoomIn()}
+                          className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
+                          title="Zoom In"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                            />
+                          </svg>
+                        </button>
+                        <span className="px-2 text-white text-sm font-medium min-w-[3rem] text-center">
+                          {Math.round(zoomScale * 100)}%
+                        </span>
+                        <button
+                          onClick={() => zoomOut()}
+                          className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
+                          title="Zoom Out"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M20 12H4"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <TransformComponent
+                      wrapperClass="!w-full !h-full !overflow-hidden"
+                      contentClass="flex items-center justify-center"
+                      wrapperStyle={{
+                        width: '100%',
+                        height: '100%',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <img
+                        src={displayUrl}
+                        alt="Photo"
+                        style={{
+                          maxWidth: '100vw',
+                          maxHeight: '100vh',
+                          width: 'auto',
+                          height: 'auto'
+                        }}
+                        draggable={false}
+                      />
+                    </TransformComponent>
+                  </>
+                )}
+              </TransformWrapper>
             )}
           </>
         )}
@@ -1425,11 +1585,32 @@ const PhotoViewer = ({
 
             {/* Filename */}
             <div className="space-y-1">
-              <div className="text-gray-500 text-xs uppercase tracking-wide">
-                Filename
+              <div className="flex items-center justify-between">
+                <div className="text-gray-500 text-xs uppercase tracking-wide">
+                  Filename
+                </div>
+                <button
+                  onClick={() => setShowRenameModal(true)}
+                  className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
+                  title="Rename file"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
               </div>
               <div className="text-white text-sm break-all">
-                {file?.originalName || file?.fileNameEncrypted || 'Unknown'}
+                {decryptedFileName || 'Unknown'}
               </div>
             </div>
 
@@ -1492,6 +1673,15 @@ const PhotoViewer = ({
           </div>
         </div>
       </div>
+
+      {/* Rename Modal */}
+      <RenameModal
+        isOpen={showRenameModal}
+        onClose={() => setShowRenameModal(false)}
+        currentName={decryptedFileName || 'Unknown'}
+        onRename={handleRename}
+        isRenaming={isRenaming}
+      />
     </div>
   );
 };
