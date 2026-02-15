@@ -26,18 +26,6 @@ export const authService = {
     return response.data;
   },
 
-  /**
-   * Change password with zero-knowledge re-encryption
-   * @param {Object} data - Change password data
-   * @param {string} data.currentPassword - Current password
-   * @param {string} data.newPassword - New password
-   * @param {string} data.newEncryptedMasterKey - Re-encrypted master key with new KEK
-   * @param {string} data.newKekSalt - New KEK salt
-   */
-  async changePassword(data) {
-    const response = await api.post('/auth/change-password', data);
-    return response.data;
-  },
 
   /**
    * Refresh access token
@@ -81,14 +69,6 @@ export const authService = {
     localStorage.setItem('refreshToken', tokens.refreshToken);
   },
 
-  /**
-   * Get encryption keys for re-unlocking master key
-   * Returns encryptedMasterKey and kekSalt for the current user
-   */
-  async getEncryptionKeys() {
-    const response = await api.get('/auth/encryption-keys');
-    return response.data;
-  },
 };
 
 export default authService;

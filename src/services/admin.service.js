@@ -22,12 +22,10 @@ export const getUsers = async (params = {}) => {
 
 /**
  * Get top users by storage
+ * @deprecated Use getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit }) instead
  */
 export const getTopUsersByStorage = async (limit = 10) => {
-  const response = await api.get('/admin/users/top-storage', {
-    params: { limit },
-  });
-  return response.data;
+  return getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit });
 };
 
 /**
@@ -65,7 +63,7 @@ export const getAlerts = async () => {
 export default {
   getDashboardStats,
   getUsers,
-  getTopUsersByStorage,
+  getTopUsersByStorage, // Deprecated: use getUsers with params
   updateUserStatus,
   getStorageStats,
   getSystemHealth,

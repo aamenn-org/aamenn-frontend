@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fileService } from '../../services';
+import { userService } from '../../services';
 
 // Debounce delay to prevent excessive API calls during bulk uploads
 const STORAGE_REFRESH_DEBOUNCE_MS = 2000;
@@ -13,7 +13,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
   useEffect(() => {
     const fetchStorageUsage = async () => {
       try {
-        const data = await fileService.getStorageUsage();
+        const data = await userService.getStorageUsage();
         setStorageData(data);
         lastFetchRef.current = Date.now();
       } catch (error) {

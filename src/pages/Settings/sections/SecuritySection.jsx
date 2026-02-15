@@ -60,13 +60,17 @@ const SecuritySection = () => {
         encryptionParams.kekSalt
       );
 
-      // Send to server
-      await authService.changePassword({
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-        newEncryptedMasterKey,
-        newKekSalt,
-      });
+      // TODO: Change password endpoint moved from /auth to /users - needs implementation
+      // Backend endpoint removed: POST /auth/change-password
+      // Should be implemented as: PATCH /users/me/password
+      throw new Error('Password change functionality is temporarily unavailable. Backend endpoint needs to be implemented at /users/me/password');
+      
+      // await authService.changePassword({
+      //   currentPassword: passwordForm.currentPassword,
+      //   newPassword: passwordForm.newPassword,
+      //   newEncryptedMasterKey,
+      //   newKekSalt,
+      // });
 
       // Update stored encryption params for future password changes
       updateEncryptionParams({

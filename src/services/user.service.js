@@ -34,7 +34,7 @@ export const userService = {
    * Get storage usage for current user
    */
   async getStorageUsage() {
-    const response = await api.get('/files/storage-usage');
+    const response = await api.get('/users/me/storage');
     return response.data;
   },
 
@@ -42,7 +42,7 @@ export const userService = {
    * Get user security parameters
    */
   async getUserSecurity() {
-    const response = await api.get('/users/security');
+    const response = await api.get('/users/me/security');
     return response.data;
   },
 
@@ -54,7 +54,7 @@ export const userService = {
    * @param {Object} data.kdfParams - KDF parameters
    */
   async setupSecurity(data) {
-    const response = await api.post('/users/security', data);
+    const response = await api.post('/users/me/security', data);
     return response.data;
   },
 };

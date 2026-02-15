@@ -333,10 +333,10 @@ const PhotoCard = ({
           setIsFavorite(newFavorite); // Optimistic update
 
           try {
-            await fileService.toggleFavorite(fileId);
+            await fileService.updateFile(fileId, { isFavorite: newFavorite });
             onFavoriteToggle?.(fileId, newFavorite);
           } catch (error) {
-            console.error('Failed to toggle favorite:', error);
+            console.error('Failed to update favorite:', error);
             setIsFavorite(!newFavorite); // Revert on error
           } finally {
             setFavoriteLoading(false);

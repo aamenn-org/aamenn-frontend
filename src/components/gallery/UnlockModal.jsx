@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { unlockMasterKey } from '../../utils/crypto';
-import { authService } from '../../services';
+import { authService, userService } from '../../services';
 
 const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
   const [password, setPassword] = useState('');
@@ -14,7 +14,7 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
 
     try {
       // Get encryption keys from server using current session
-      const response = await authService.getEncryptionKeys();
+      const response = await userService.getUserSecurity();
 
       console.log('[UnlockModal] Encryption keys response:', {
         hasEncryptedMasterKey: !!response.encryptedMasterKey,

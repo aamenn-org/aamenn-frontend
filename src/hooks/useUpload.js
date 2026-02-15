@@ -14,7 +14,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../context';
 import api from '../services/api';
-import { fileService } from '../services/file.service';
+import fileService from '../services/file.service';
 import {
   generateThumbnails,
   generateVideoThumbnails,

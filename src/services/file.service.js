@@ -236,11 +236,13 @@ export const fileService = {
   },
 
   /**
-   * Toggle favorite status for a file
+   * Update file properties (e.g., favorite status)
    * @param {string} fileId - File UUID
+   * @param {Object} updates - Properties to update
+   * @param {boolean} [updates.isFavorite] - Favorite status
    */
-  async toggleFavorite(fileId) {
-    const response = await api.post(`/files/${fileId}/favorite`);
+  async updateFile(fileId, updates) {
+    const response = await api.patch(`/files/${fileId}`, updates);
     return response.data;
   },
 
@@ -251,32 +253,8 @@ export const fileService = {
    * @param {number} params.limit - Items per page (default: 50)
    */
   async listFavorites(params = {}) {
-    try {
-      const response = await api.get('/files/favorites/list', { params });
-
-      // Cache favorites for offline access
-      if (response.data?.files) {
-        await thumbnailCache.cacheFavoritesList(response.data.files);
-      }
-
-      return response.data;
-    } catch (error) {
-      // If network error, try to return cached data
-      if (error.message === 'Network Error' || !navigator.onLine) {
-        log('Network error, trying cached favorites...');
-        const cachedFavorites = await thumbnailCache.getCachedFavoritesList();
-
-        if (cachedFavorites) {
-          log('Returning cached favorites');
-          return {
-            files: cachedFavorites,
-            total: cachedFavorites.length,
-            fromCache: true,
-          };
-        }
-      }
-      throw error;
-    }
+    // Use unified listFiles endpoint with favorite filter
+    return this.listFiles({ ...params, favorite: true });
   },
 
   /**
@@ -288,14 +266,6 @@ export const fileService = {
     return response.arrayBuffer();
   },
 
-  /**
-   * Get storage usage for the current user
-   * @returns {Promise<{usedBytes: number, usedGb: number, limitBytes: number, limitGb: number, exceeded: boolean, percentUsed: number}>}
-   */
-  async getStorageUsage() {
-    const response = await api.get('/files/storage-usage');
-    return response.data;
-  },
 };
 
 export default fileService;
