@@ -23,9 +23,14 @@ export const getUsers = async (params = {}) => {
 /**
  * Get top users by storage
  * @deprecated Use getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit }) instead
+ *
+ * NOTE: the backend `/admin/users` returns a paginated object { users, total, ... }.
+ * Historically this helper was expected to return an array — normalize here for callers.
  */
 export const getTopUsersByStorage = async (limit = 10) => {
-  return getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit });
+  const res = await getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit });
+  // If API already returns an array, return it; otherwise return the `users` array or empty array.
+  return Array.isArray(res) ? res : res?.users || [];
 };
 
 /**

@@ -142,7 +142,8 @@ const Overview = () => {
           adminService.getTopUsersByStorage(5),
         ]);
         setStats(dashboardStats);
-        setTopUsers(usersData);
+        // Defensive: ensure we always set an array to avoid `map` errors in the table
+        setTopUsers(Array.isArray(usersData) ? usersData : usersData?.users || []);
       } catch (err) {
         setError('Failed to load dashboard data');
         console.error(err);
