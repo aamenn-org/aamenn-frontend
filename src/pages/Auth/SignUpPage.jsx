@@ -178,7 +178,8 @@ const SignUpPage = () => {
     setLoading(true);
 
     try {
-      const result = await register(email.trim(), password.trim());
+      const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const result = await register(email.trim(), password.trim(), displayName);
       if (result.success) {
         // Regular users always go to photos after registration
         navigate('/photos');

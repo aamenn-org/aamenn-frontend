@@ -269,7 +269,7 @@ export const AuthProvider = ({ children }) => {
   /**
    * Register user with zero-knowledge encryption
    */
-  const register = async (email, password) => {
+  const register = async (email, password, displayName) => {
     try {
       console.log('AuthContext: Starting registration');
       // Generate encryption keys on client side
@@ -285,6 +285,7 @@ export const AuthProvider = ({ children }) => {
         encryptedMasterKey,
         kekSalt,
         kdfParams,
+        displayName,
       });
       console.log('AuthContext: Register response:', response);
 
