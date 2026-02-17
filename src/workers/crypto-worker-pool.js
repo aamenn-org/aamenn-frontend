@@ -473,5 +473,3 @@ export function terminateCryptoWorkerPool() {
 
 // Export priority constants for external use
 export { PRIORITY };
-
-export default CryptoWorkerPool;

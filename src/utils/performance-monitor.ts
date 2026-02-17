@@ -211,5 +211,3 @@ export function getPerformanceMonitor(): PerformanceMonitor {
   }
   return instance;
 }
-
-export default PerformanceMonitor;

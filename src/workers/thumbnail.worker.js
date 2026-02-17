@@ -13,10 +13,18 @@
 import { encode as encodeBlurhash } from 'blurhash';
 
 // Thumbnail sizes (must match main thread config)
+// Medium and Large share same dimensions but differ in JPEG quality
 const THUMBNAIL_SIZES = {
   small: { width: 150, height: 150 },
-  medium: { width: 800, height: 800 },
-  large: { width: 1600, height: 1600 },
+  medium: { width: 1600, height: 1600 }, // Same as large, lower quality
+  large: { width: 1600, height: 1600 },  // Same as medium, higher quality
+};
+
+// JPEG quality settings
+const THUMBNAIL_QUALITY = {
+  small: 0.30,  // Grid thumbnails - good quality
+  medium: 0.60, // Preview initial - lower quality, faster load
+  large: 0.90,  // Preview final - high quality
 };
 
 /**
@@ -24,9 +32,10 @@ const THUMBNAIL_SIZES = {
  * @param {ImageBitmap} imageBitmap - Source image
  * @param {number} maxWidth - Target width
  * @param {number} maxHeight - Target height
+ * @param {number} quality - JPEG quality (0.0 to 1.0)
  * @returns {Promise<Blob>} JPEG blob
  */
-async function createThumbnail(imageBitmap, maxWidth, maxHeight) {
+async function createThumbnailCover(imageBitmap, maxWidth, maxHeight, quality = 0.85) {
   const canvas = new OffscreenCanvas(maxWidth, maxHeight);
   const ctx = canvas.getContext('2d');
 
@@ -51,8 +60,26 @@ async function createThumbnail(imageBitmap, maxWidth, maxHeight) {
   // Draw the scaled image centered (will be cropped by canvas bounds)
   ctx.drawImage(imageBitmap, x, y, scaledWidth, scaledHeight);
 
-  // Convert to blob
-  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+  // Convert to blob with specified quality
+  return canvas.convertToBlob({ type: 'image/jpeg', quality });
+}
+
+async function createThumbnailContain(imageBitmap, maxWidth, maxHeight, quality = 0.85) {
+  const srcWidth = imageBitmap.width;
+  const srcHeight = imageBitmap.height;
+
+  const scale = Math.min(maxWidth / srcWidth, maxHeight / srcHeight);
+  const targetWidth = Math.max(1, Math.round(srcWidth * scale));
+  const targetHeight = Math.max(1, Math.round(srcHeight * scale));
+
+  const canvas = new OffscreenCanvas(targetWidth, targetHeight);
+  const ctx = canvas.getContext('2d');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(imageBitmap, 0, 0, targetWidth, targetHeight);
+
+  return canvas.convertToBlob({ type: 'image/jpeg', quality });
 }
 
 /**
@@ -105,22 +132,25 @@ async function generateThumbnailsFromBitmap(imageBitmap) {
   const width = imageBitmap.width;
   const height = imageBitmap.height;
 
-  // Generate thumbnails in parallel
+  // Generate thumbnails in parallel with different quality levels
   const [smallBlob, mediumBlob, largeBlob] = await Promise.all([
-    createThumbnail(
+    createThumbnailCover(
       imageBitmap,
       THUMBNAIL_SIZES.small.width,
-      THUMBNAIL_SIZES.small.height
+      THUMBNAIL_SIZES.small.height,
+      THUMBNAIL_QUALITY.small
     ),
-    createThumbnail(
+    createThumbnailContain(
       imageBitmap,
       THUMBNAIL_SIZES.medium.width,
-      THUMBNAIL_SIZES.medium.height
+      THUMBNAIL_SIZES.medium.height,
+      THUMBNAIL_QUALITY.medium
     ),
-    createThumbnail(
+    createThumbnailContain(
       imageBitmap,
       THUMBNAIL_SIZES.large.width,
-      THUMBNAIL_SIZES.large.height
+      THUMBNAIL_SIZES.large.height,
+      THUMBNAIL_QUALITY.large
     ),
   ]);
 

@@ -17,7 +17,7 @@
  */
 
 // KDF Configuration - must match backend expectations
-export const KDF_CONFIG = {
+const KDF_CONFIG = {
   algorithm: 'pbkdf2',
   iterations: 100000,
   hashLength: 32,
@@ -37,7 +37,7 @@ const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 /**
  * Check if Web Crypto API is available (requires secure context in modern browsers)
  */
-export function isCryptoAvailable() {
+function isCryptoAvailable() {
   if (!crypto || !crypto.subtle) {
     console.error(
       '[Crypto] Web Crypto API not available. Ensure you are using HTTPS.'
@@ -543,24 +543,3 @@ export async function reEncryptMasterKey(
   };
 }
 
-export default {
-  KDF_CONFIG,
-  arrayBufferToBase64,
-  base64ToArrayBuffer,
-  generateRandomBytes,
-  computeSHA1,
-  deriveKEK,
-  generateMasterKey,
-  encryptMasterKey,
-  decryptMasterKey,
-  generateFileKey,
-  encryptFile,
-  decryptFile,
-  encryptFileKey,
-  decryptFileKey,
-  encryptFilename,
-  decryptFilename,
-  generateRegistrationKeys,
-  unlockMasterKey,
-  reEncryptMasterKey,
-};

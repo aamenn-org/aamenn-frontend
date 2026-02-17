@@ -2,11 +2,21 @@ import { encode } from 'blurhash';
 
 /**
  * Thumbnail sizes configuration
+ * Medium and Large share same dimensions but differ in JPEG quality
  */
 export const THUMBNAIL_SIZES = {
   small: { width: 150, height: 150 },
-  medium: { width: 800, height: 800 },
-  large: { width: 1600, height: 1600 },
+  medium: { width: 1600, height: 1600 }, // Same as large, lower quality
+  large: { width: 1600, height: 1600 },  // Same as medium, higher quality
+};
+
+/**
+ * JPEG quality settings for thumbnails
+ */
+export const THUMBNAIL_QUALITY = {
+  small: 0.30,  // Grid thumbnails - good quality
+  medium: 0.60, // Preview initial - lower quality, faster load
+  large: 0.90,  // Preview final - high quality
 };
 
 /**
@@ -199,22 +209,25 @@ async function generateThumbnailsMainThread(file) {
   const image = await loadImage(file);
   const { naturalWidth: width, naturalHeight: height } = image;
 
-  // Generate thumbnails in parallel
+  // Generate thumbnails in parallel with different quality levels
   const [smallBlob, mediumBlob, largeBlob] = await Promise.all([
-    createThumbnail(
+    createThumbnailCover(
       image,
       THUMBNAIL_SIZES.small.width,
-      THUMBNAIL_SIZES.small.height
+      THUMBNAIL_SIZES.small.height,
+      THUMBNAIL_QUALITY.small
     ),
-    createThumbnail(
+    createThumbnailContain(
       image,
       THUMBNAIL_SIZES.medium.width,
-      THUMBNAIL_SIZES.medium.height
+      THUMBNAIL_SIZES.medium.height,
+      THUMBNAIL_QUALITY.medium
     ),
-    createThumbnail(
+    createThumbnailContain(
       image,
       THUMBNAIL_SIZES.large.width,
-      THUMBNAIL_SIZES.large.height
+      THUMBNAIL_SIZES.large.height,
+      THUMBNAIL_QUALITY.large
     ),
   ]);
 
@@ -302,17 +315,25 @@ export async function generateVideoThumbnails(file, seekTime = 0.5) {
 
         const frameImage = await loadImageFromBlob(frameBlob);
 
-        // Generate thumbnails in parallel
-        const [smallBlob, mediumBlob] = await Promise.all([
-          createThumbnail(
+        // Generate thumbnails in parallel with quality settings
+        const [smallBlob, mediumBlob, largeBlob] = await Promise.all([
+          createThumbnailCover(
             frameImage,
             THUMBNAIL_SIZES.small.width,
-            THUMBNAIL_SIZES.small.height
+            THUMBNAIL_SIZES.small.height,
+            THUMBNAIL_QUALITY.small
           ),
-          createThumbnail(
+          createThumbnailContain(
             frameImage,
             THUMBNAIL_SIZES.medium.width,
-            THUMBNAIL_SIZES.medium.height
+            THUMBNAIL_SIZES.medium.height,
+            THUMBNAIL_QUALITY.medium
+          ),
+          createThumbnailContain(
+            frameImage,
+            THUMBNAIL_SIZES.large.width,
+            THUMBNAIL_SIZES.large.height,
+            THUMBNAIL_QUALITY.large
           ),
         ]);
 
@@ -324,6 +345,7 @@ export async function generateVideoThumbnails(file, seekTime = 0.5) {
         resolve({
           small: smallBlob,
           medium: mediumBlob,
+          large: largeBlob,
           blurhash,
           width,
           height,
@@ -399,37 +421,28 @@ async function loadImage(file) {
  * @param image - The source image element
  * @param maxWidth - Maximum width
  * @param maxHeight - Maximum height
+ * @param quality - JPEG quality (0.0 to 1.0)
  * @returns Blob of the thumbnail as JPEG
  */
-async function createThumbnail(image, maxWidth, maxHeight) {
+async function createThumbnailCover(image, maxWidth, maxHeight, quality = 0.85) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
   const { naturalWidth: srcWidth, naturalHeight: srcHeight } = image;
 
-  // Set canvas to target dimensions
   canvas.width = maxWidth;
   canvas.height = maxHeight;
 
-  // Calculate scale to COVER the canvas (image fills entire canvas, may crop)
   const scale = Math.max(maxWidth / srcWidth, maxHeight / srcHeight);
-
-  // Calculate scaled dimensions
   const scaledWidth = srcWidth * scale;
   const scaledHeight = srcHeight * scale;
-
-  // Calculate position to center the image (negative values = crop edges)
   const x = (maxWidth - scaledWidth) / 2;
   const y = (maxHeight - scaledHeight) / 2;
 
-  // Enable high-quality scaling
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-
-  // Draw the scaled image centered (will be cropped by canvas bounds)
   ctx.drawImage(image, x, y, scaledWidth, scaledHeight);
 
-  // Convert to blob
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -440,7 +453,39 @@ async function createThumbnail(image, maxWidth, maxHeight) {
         }
       },
       'image/jpeg',
-      0.85
+      quality
+    );
+  });
+}
+
+async function createThumbnailContain(image, maxWidth, maxHeight, quality = 0.85) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const { naturalWidth: srcWidth, naturalHeight: srcHeight } = image;
+
+  const scale = Math.min(maxWidth / srcWidth, maxHeight / srcHeight);
+  const targetWidth = Math.max(1, Math.round(srcWidth * scale));
+  const targetHeight = Math.max(1, Math.round(srcHeight * scale));
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to create thumbnail blob'));
+        }
+      },
+      'image/jpeg',
+      quality
     );
   });
 }

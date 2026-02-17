@@ -269,7 +269,8 @@ class ThumbnailCacheService {
     this.db = new DecryptedCacheDB();
     
     // Memory cache with blob URL revocation on eviction
-    this.memoryCache = new SimpleLRUCache<string>(2000, (key, blobUrl) => {
+    // Increased capacity for better grid scrolling performance
+    this.memoryCache = new SimpleLRUCache<string>(3000, (key, blobUrl) => {
       try {
         URL.revokeObjectURL(blobUrl);
         log(`Revoked blob URL for thumbnail: ${key}`);
@@ -279,7 +280,8 @@ class ThumbnailCacheService {
     });
     
     // Image memory cache with blob URL revocation on eviction
-    this.imageMemoryCache = new SimpleLRUCache<string>(100, (key, blobUrl) => {
+    // Increased to 200 for better viewer navigation (medium + large for ~100 images)
+    this.imageMemoryCache = new SimpleLRUCache<string>(200, (key, blobUrl) => {
       try {
         URL.revokeObjectURL(blobUrl);
         log(`Revoked blob URL for image: ${key}`);

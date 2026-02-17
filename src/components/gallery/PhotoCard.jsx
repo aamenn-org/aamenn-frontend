@@ -27,6 +27,8 @@ const PhotoCard = ({
 
   // AbortController for cancelling thumbnail load
   const abortControllerRef = useRef(null);
+  // Track if we've already preloaded medium for this file
+  const mediumPreloadedRef = useRef(false);
 
   // Check file types
   const fileMime = file.mimeType || mimeType;
@@ -165,6 +167,53 @@ const PhotoCard = ({
     isVisible,
   ]);
 
+  // Preload medium thumbnail on hover for instant viewer opening
+  // This eliminates blurhash delay when user clicks to view
+  useEffect(() => {
+    if (!isHovered || mediumPreloadedRef.current) return;
+    if (!file?.thumbMediumUrl || !file?.cipherThumbMediumKey) return;
+    if (!hasMasterKey()) return;
+
+    // Check if already in L1 cache
+    if (thumbnailCache.getMediumFromMemory(file.fileId)) {
+      mediumPreloadedRef.current = true;
+      return;
+    }
+
+    // Preload medium in background (fire and forget)
+    const preloadMedium = async () => {
+      try {
+        const masterKey = getMasterKey();
+        if (!masterKey) return;
+
+        // Load medium thumbnail into L1 cache
+        await thumbnailCache.getMediumThumbnail(
+          file.fileId,
+          file.thumbMediumUrl,
+          file.cipherThumbMediumKey,
+          masterKey
+        );
+        
+        mediumPreloadedRef.current = true;
+        console.log(`[PhotoCard] Preloaded medium for ${file.fileId} on hover`);
+      } catch (err) {
+        // Silently fail - not critical
+        console.debug('[PhotoCard] Medium preload failed:', err);
+      }
+    };
+
+    // Delay preload slightly to avoid loading on accidental hovers
+    const timer = setTimeout(preloadMedium, 300);
+    return () => clearTimeout(timer);
+  }, [
+    isHovered,
+    file?.fileId,
+    file?.thumbMediumUrl,
+    file?.cipherThumbMediumKey,
+    hasMasterKey,
+    getMasterKey,
+  ]);
+
   // Get icon based on mime type
   const getFileIcon = () => {
     if (mimeType?.startsWith('video/')) {
@@ -218,6 +267,7 @@ const PhotoCard = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onView?.(file)}
+      title="Hover to preload, click to view"
     >
       {/* Document file card - show Font Awesome icon */}
       {isDocFile ? (

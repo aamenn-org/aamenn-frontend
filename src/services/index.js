@@ -4,7 +4,8 @@
  * Centralized exports for all API services and utilities.
  *
  * Structure:
- * - api: Axios instance with auth interceptors
+ * - api: Axios instance with auth interceptors and unified response handling
+ * - apiResponseHandler: Utilities for handling unified API responses
  * - authService: Authentication (login, register, tokens)
  * - userService: User profile and security
  * - fileService: File CRUD, favorites, batch operations
@@ -13,8 +14,16 @@
  * - uploadPrewarmer: Worker pre-warming for fast uploads
  */
 
-// Core API client
+// Core API client with unified response handling
 export { default as api } from './api';
+
+// API response handler utilities (for custom error handling)
+export { 
+  ApiError, 
+  ErrorType, 
+  isApiError,
+  wrapApiCall 
+} from './api-response-handler';
 
 // Domain services
 export { default as authService } from './auth.service';
@@ -28,7 +37,6 @@ export { thumbnailCache } from './cache';
 
 // Upload optimization
 export {
-  getUploadPrewarmer,
   triggerWarmup,
   resetPrewarmer,
 } from './upload-prewarmer';

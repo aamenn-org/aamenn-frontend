@@ -147,6 +147,20 @@ const PhotoViewer = ({
     return { url: null, quality: 'none' };
   }, []);
 
+  // Get best cached for VIEWER ONLY (excludes small grid thumbnails)
+  // This ensures preview never shows small, only medium->large upgrade
+  const getBestCachedUrlForViewer = useCallback((fileId) => {
+    // Check L1 memory: large > medium only (skip small)
+    const largeUrl = thumbnailCache.getLargeThumbnailFromMemory(fileId);
+    if (largeUrl) return { url: largeUrl, quality: 'large' };
+
+    const mediumUrl = thumbnailCache.getMediumFromMemory(fileId);
+    if (mediumUrl) return { url: mediumUrl, quality: 'medium' };
+
+    // Return null if only small is available - show blurhash instead
+    return { url: null, quality: 'none' };
+  }, []);
+
   // Load and upgrade image quality
   const loadImage = useCallback(
     async (targetFile, fileId) => {
@@ -180,6 +194,12 @@ const PhotoViewer = ({
             if (currentFileIdRef.current === fileId && quality !== 'large') {
               setDisplayUrl(mediumUrl);
               setQuality('medium');
+              
+              // Performance: Decode image immediately for instant rendering
+              // This prevents jank when browser decodes on first paint
+              const img = new Image();
+              img.src = mediumUrl;
+              img.decode().catch(() => {}); // Fire and forget
             }
           } catch (err) {
             console.warn('Failed to load medium:', err);
@@ -198,6 +218,11 @@ const PhotoViewer = ({
           if (currentFileIdRef.current === fileId) {
             setDisplayUrl(largeUrl);
             setQuality('large');
+            
+            // Performance: Decode large image for instant rendering
+            const img = new Image();
+            img.src = largeUrl;
+            img.decode().catch(() => {}); // Fire and forget
           }
         } else if (fileData.downloadUrl && fileData.cipherFileKey) {
           // Fallback to original for older files without large thumbnail
@@ -492,27 +517,28 @@ const PhotoViewer = ({
       }
       loadVideo(file, fileId);
     } else {
-      // INSTANT: Check memory cache synchronously for images
-      const cached = getBestCachedUrl(fileId);
+      // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
+      const cached = getBestCachedUrlForViewer(fileId);
       if (cached.url) {
-        // We have something cached - show it IMMEDIATELY
+        // We have medium or large cached - show it IMMEDIATELY
         setDisplayUrl(cached.url);
         setQuality(cached.quality);
         console.log(`[PhotoViewer] Instant display from L1: ${cached.quality}`);
       } else {
-        // Nothing in memory - show blurhash, will load async
+        // Only small or nothing in memory - show blurhash until medium loads
         setDisplayUrl(null);
         setQuality('none');
+        console.log('[PhotoViewer] No medium/large in L1, showing blurhash');
       }
 
       // Start loading better quality in background
       loadImage(file, fileId);
     }
 
-    // Preload adjacent images after a short delay (skip videos for now)
-    // Full images first (immediate ±2), then medium (±10 zone)
-    const fullPreloadTimer = setTimeout(preloadFullAdjacent, 100);
-    const mediumPreloadTimer = setTimeout(preloadMediumAdjacent, 500);
+    // Preload adjacent images aggressively for instant navigation
+    // Medium first (faster, good enough for preview), then full
+    const mediumPreloadTimer = setTimeout(preloadMediumAdjacent, 50); // Start immediately
+    const fullPreloadTimer = setTimeout(preloadFullAdjacent, 200); // Then full quality
 
     return () => {
       clearTimeout(fullPreloadTimer);
@@ -523,7 +549,7 @@ const PhotoViewer = ({
     file?.id,
     file?.mimeType,
     isOpen,
-    getBestCachedUrl,
+    getBestCachedUrlForViewer,
     loadImage,
     loadVideo,
     preloadFullAdjacent,
@@ -1040,36 +1066,10 @@ const PhotoViewer = ({
         ) : (
           /* Image Display */
           <>
-            {/* Blurhash placeholder (shown while loading) */}
-            {hasBlurhash && !displayUrl && (
-              <div className="w-full h-full flex items-center justify-center">
-                <div
-                  className="max-w-full max-h-full"
-                  style={{
-                    aspectRatio:
-                      file.width && file.height
-                        ? `${file.width}/${file.height}`
-                        : '16/9',
-                    width: '100%',
-                    height: '100%',
-                    maxWidth: file.width ? `${file.width}px` : '100%',
-                    maxHeight: file.height ? `${file.height}px` : '100%',
-                  }}
-                >
-                  <BlurhashCanvas
-                    hash={file.blurhash}
-                    width={64}
-                    height={64}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Empty placeholder (no blurhash) */}
-            {!hasBlurhash && isLoading && (
+            {/* Empty placeholder - no blurhash, no spinner */}
+            {isLoading && (
               <div className="flex items-center justify-center w-full h-full">
-                {/* No spinner - just wait for image */}
+                {/* Just wait for image - black background */}
               </div>
             )}
 
@@ -1165,9 +1165,15 @@ const PhotoViewer = ({
                           maxWidth: '100vw',
                           maxHeight: '100vh',
                           width: 'auto',
-                          height: 'auto'
+                          height: 'auto',
+                          // Smooth transition when upgrading medium->large (same dimensions)
+                          transition: 'opacity 0.2s ease-in-out'
                         }}
                         draggable={false}
+                        // Performance: decode image async for instant rendering
+                        decoding="async"
+                        // Performance: hint browser this is high priority
+                        fetchpriority="high"
                       />
                     </TransformComponent>
                   </>
@@ -1489,8 +1495,7 @@ const PhotoViewer = ({
             showCloseButton ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {quality === 'small' ? 'Preview' : 'HD'} • Loading full...
-        </div>
+          </div>
       )}
 
       {/* Left navigation arrow - overlaid on image */}

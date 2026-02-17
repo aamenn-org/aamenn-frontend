@@ -136,5 +136,3 @@ export function resetPrewarmer() {
     instance.reset();
   }
 }
-
-export default UploadPrewarmer;

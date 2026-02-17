@@ -140,5 +140,3 @@ function getOptimalConcurrency(): number {
   // Default to 6 if Network Information API not available
   return 6;
 }
-
-export default DownloadLimiter;
