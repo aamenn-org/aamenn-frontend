@@ -543,3 +543,191 @@ export async function reEncryptMasterKey(
   };
 }
 
+// ==================== RECOVERY KEY HELPERS ====================
+
+/**
+ * Generate a human-readable recovery key (24 random words).
+ * Uses a compact 256-word list for simplicity. 24 words = 192 bits of entropy.
+ *
+ * @returns {{ recoveryPhrase: string, recoveryKeyBytes: Uint8Array }}
+ */
+export function generateRecoveryKey() {
+  // Generate 24 bytes of randomness (192 bits)
+  const recoveryKeyBytes = generateRandomBytes(24);
+
+  // Convert to a display-friendly format: groups of 4 hex chars separated by dashes
+  // e.g. "a3f1-b2c4-d5e6-..."  (24 bytes = 48 hex chars = 12 groups)
+  const hex = Array.from(recoveryKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const groups = [];
+  for (let i = 0; i < hex.length; i += 4) {
+    groups.push(hex.slice(i, i + 4));
+  }
+  const recoveryPhrase = groups.join('-');
+
+  return { recoveryPhrase, recoveryKeyBytes };
+}
+
+/**
+ * Parse a recovery phrase back to bytes.
+ *
+ * @param {string} recoveryPhrase - e.g. "a3f1-b2c4-d5e6-..."
+ * @returns {Uint8Array}
+ */
+export function parseRecoveryPhrase(recoveryPhrase) {
+  const hex = recoveryPhrase.replace(/-/g, '').replace(/\s/g, '');
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Generate recovery encryption params.
+ * Encrypts the masterKey with a KEK derived from the recovery key.
+ * Also encrypts the recovery key with the masterKey (for "view later" in Settings).
+ *
+ * @param {CryptoKey} masterKey - The user's master key
+ * @returns {Promise<{
+ *   recoveryPhrase: string,
+ *   recoveryEncryptedMasterKey: string,
+ *   recoverySalt: string,
+ *   recoveryKdfParams: object,
+ *   encryptedRecoveryKey: string
+ * }>}
+ */
+export async function generateRecoveryParams(masterKey) {
+  log('Generating recovery key params...');
+
+  // Step 1: Generate recovery key
+  const { recoveryPhrase, recoveryKeyBytes } = generateRecoveryKey();
+
+  // Step 2: Derive a KEK from the recovery key bytes
+  const recoverySaltBytes = generateRandomBytes(16);
+  const recoverySalt = arrayBufferToBase64(recoverySaltBytes);
+
+  // Import recovery key bytes as PBKDF2 key material
+  const recoveryKeyMaterial = await crypto.subtle.importKey(
+    'raw',
+    recoveryKeyBytes,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey']
+  );
+
+  const recoveryKek = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: recoverySaltBytes,
+      iterations: KDF_CONFIG.iterations,
+      hash: 'SHA-256',
+    },
+    recoveryKeyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  // Step 3: Encrypt masterKey with recovery KEK
+  const recoveryEncryptedMasterKey = await encryptMasterKey(masterKey, recoveryKek);
+
+  // Step 4: Encrypt recovery key bytes with masterKey (for "view later")
+  const iv = generateRandomBytes(12);
+  const encryptedRecoveryBytes = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    masterKey,
+    recoveryKeyBytes
+  );
+  const combined = new Uint8Array(iv.length + encryptedRecoveryBytes.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encryptedRecoveryBytes), iv.length);
+  const encryptedRecoveryKey = arrayBufferToBase64(combined);
+
+  log('Recovery key params generated');
+
+  return {
+    recoveryPhrase,
+    recoveryEncryptedMasterKey,
+    recoverySalt,
+    recoveryKdfParams: KDF_CONFIG,
+    encryptedRecoveryKey,
+  };
+}
+
+/**
+ * Decrypt the masterKey using a recovery key (for forgot-password flow).
+ *
+ * @param {string} recoveryPhrase - The user's recovery phrase
+ * @param {string} recoveryEncryptedMasterKey - From server
+ * @param {string} recoverySalt - From server
+ * @param {object} recoveryKdfParams - From server (unused currently, uses KDF_CONFIG)
+ * @returns {Promise<CryptoKey>} - Decrypted master key
+ */
+export async function unlockMasterKeyWithRecovery(
+  recoveryPhrase,
+  recoveryEncryptedMasterKey,
+  recoverySalt,
+  recoveryKdfParams
+) {
+  log('Unlocking master key with recovery key...');
+
+  const recoveryKeyBytes = parseRecoveryPhrase(recoveryPhrase);
+  const recoverySaltBytes = new Uint8Array(base64ToArrayBuffer(recoverySalt));
+
+  // Derive recovery KEK
+  const recoveryKeyMaterial = await crypto.subtle.importKey(
+    'raw',
+    recoveryKeyBytes,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey']
+  );
+
+  const recoveryKek = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: recoverySaltBytes,
+      iterations: (recoveryKdfParams?.iterations) || KDF_CONFIG.iterations,
+      hash: 'SHA-256',
+    },
+    recoveryKeyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  // Decrypt master key
+  const masterKey = await decryptMasterKey(recoveryEncryptedMasterKey, recoveryKek);
+
+  log('Master key unlocked with recovery key');
+  return masterKey;
+}
+
+/**
+ * Decrypt the recovery key using the masterKey (for "view recovery key" in Settings).
+ *
+ * @param {string} encryptedRecoveryKeyBase64 - From server
+ * @param {CryptoKey} masterKey - User's master key
+ * @returns {Promise<string>} - Recovery phrase
+ */
+export async function decryptRecoveryKey(encryptedRecoveryKeyBase64, masterKey) {
+  const combined = new Uint8Array(base64ToArrayBuffer(encryptedRecoveryKeyBase64));
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+
+  const recoveryKeyBytes = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    masterKey,
+    ciphertext
+  );
+
+  // Convert bytes back to hex phrase
+  const bytes = new Uint8Array(recoveryKeyBytes);
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const groups = [];
+  for (let i = 0; i < hex.length; i += 4) {
+    groups.push(hex.slice(i, i + 4));
+  }
+  return groups.join('-');
+}
+

@@ -11,6 +11,9 @@ const ProfileSection = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // Check if user is a Google user
+  const isGoogleUser = user?.authProvider === 'google';
+
   useEffect(() => {
     if (user?.displayName) {
       setDisplayName(user.displayName);
@@ -63,13 +66,19 @@ const ProfileSection = () => {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t('profile.fullNamePlaceholder')}
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-600 
-                rounded-lg text-gray-900 dark:text-white text-sm
-                placeholder:text-gray-400 dark:placeholder:text-gray-500
-                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                transition-all duration-200"
+              disabled={isGoogleUser}
+              className={`w-full px-4 py-3 border rounded-lg text-sm transition-all duration-200
+                ${isGoogleUser 
+                  ? 'bg-gray-100 dark:bg-zinc-900/50 border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                  : 'bg-gray-50 dark:bg-zinc-900 border-gray-200 dark:border-zinc-600 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent'
+                }`}
               maxLength={255}
             />
+            {isGoogleUser && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+                Your name is managed by Google and cannot be changed here.
+              </p>
+            )}
           </div>
 
           {/* Email (Read-only) */}
@@ -90,7 +99,10 @@ const ProfileSection = () => {
                 rounded-lg text-gray-500 dark:text-gray-400 text-sm cursor-not-allowed"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-              {t('profile.emailDescription')}
+              {isGoogleUser 
+                ? 'Your email is managed by Google and cannot be changed here.'
+                : t('profile.emailDescription')
+              }
             </p>
           </div>
 
@@ -133,44 +145,46 @@ const ProfileSection = () => {
             </div>
           )}
 
-          {/* Submit Button */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2.5 bg-primary-500 text-white text-sm font-medium rounded-lg
-                hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-                disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200
-                dark:focus:ring-offset-zinc-800"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  {t('common:actions.loading')}
-                </span>
-              ) : (
-                t('profile.saveChanges')
-              )}
-            </button>
-          </div>
+          {/* Submit Button - Only show for non-Google users */}
+          {!isGoogleUser && (
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2.5 bg-primary-500 text-white text-sm font-medium rounded-lg
+                  hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200
+                  dark:focus:ring-offset-zinc-800"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    {t('common:actions.loading')}
+                  </span>
+                ) : (
+                  t('profile.saveChanges')
+                )}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

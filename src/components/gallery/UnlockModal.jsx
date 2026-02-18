@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { unlockMasterKey } from '../../utils/crypto';
-import { authService, userService } from '../../services';
+import { userService } from '../../services';
 
 const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
   const [password, setPassword] = useState('');
@@ -15,34 +15,19 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
     try {
       // Get encryption keys from server using current session
       const response = await userService.getUserSecurity();
-
-      console.log('[UnlockModal] Encryption keys response:', {
-        hasEncryptedMasterKey: !!response.encryptedMasterKey,
-        encryptedMasterKeyLength: response.encryptedMasterKey?.length,
-        hasKekSalt: !!response.kekSalt,
-        kekSaltLength: response.kekSalt?.length,
-      });
-
       const { encryptedMasterKey, kekSalt } = response;
 
       if (!encryptedMasterKey || !kekSalt) {
-        console.error('[UnlockModal] Missing keys:', {
-          encryptedMasterKey,
-          kekSalt,
-        });
         throw new Error('Failed to retrieve encryption keys');
       }
 
       // Unlock master key with password (trim to remove accidental whitespace)
       const trimmedPassword = password.trim();
-      console.log('[UnlockModal] Attempting to unlock master key...');
       const masterKey = await unlockMasterKey(
         trimmedPassword,
         encryptedMasterKey,
         kekSalt
       );
-
-      console.log('[UnlockModal] Master key unlocked successfully');
 
       // Notify parent that unlock was successful
       onUnlocked(masterKey);
@@ -95,10 +80,10 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
-                Session Locked
+                Vault Locked
               </h3>
               <p className="text-sm text-gray-400">
-                Enter your password to unlock
+                Enter your Vault Password to unlock your encrypted files
               </p>
             </div>
           </div>
@@ -126,13 +111,13 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
         <form onSubmit={handleUnlock}>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Password
+              Vault Password
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder="Enter your Vault Password"
               className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               autoFocus
               required
@@ -144,6 +129,15 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
               <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
+
+          <div className="mb-3 text-right">
+            <a
+              href="/forgot-password"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Forgot Vault Password?
+            </a>
+          </div>
 
           <div className="flex gap-3">
             <button

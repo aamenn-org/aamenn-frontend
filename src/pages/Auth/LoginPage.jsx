@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context';
+import GoogleSignInButton from '../../components/GoogleSignInButton';
 
 const EyeIcon = () => (
   <svg
@@ -68,7 +69,6 @@ const AppleIcon = () => (
 );
 
 const LoginPage = () => {
-  const navigate = useNavigate();
   const { login } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const slides = [
@@ -158,13 +158,13 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const result = await login(email.trim(), password.trim());
+      const result = await login(email.trim(), password.trim(), rememberMe);
       if (result.success) {
         // Redirect based on role
         if (result.role === 'admin') {
-          navigate('/dashboard');
+          window.location.href = '/dashboard';
         } else {
-          navigate('/photos');
+          window.location.href = '/photos';
         }
       } else {
         setError(result.error);
@@ -346,6 +346,31 @@ const LoginPage = () => {
               {loading ? 'Logging in...' : 'Log in'}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-800"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-black text-gray-400">Or continue with</span>
+            </div>
+          </div>
+
+          {/* Google Sign-In */}
+          <GoogleSignInButton
+            onSuccess={(result) => {
+              if (result.requiresVaultSetup) {
+                // New Google user - need to set up Vault Password
+                window.location.href = '/photos?setupVault=true';
+              } else if (result.role === 'admin') {
+                window.location.href = '/dashboard';
+              } else {
+                window.location.href = '/photos';
+              }
+            }}
+            onError={(error) => setError(error)}
+          />
         </div>
       </div>
     </div>

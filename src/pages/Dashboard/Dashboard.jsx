@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../context';
+import { useVaultState } from '../../hooks/useVaultState';
+import { fileService } from '../../services';
+import { useUpload } from '../../hooks/useUpload';
+import { isDocumentPreviewable } from '../../utils/thumbnail';
 import { DashboardNavbar } from '../../components/layout';
+import { StorageBar } from '../../components/ui';
+import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 import {
   GalleryHeader,
   GalleryTabs,
@@ -15,16 +23,13 @@ import {
   GridSizeControl,
   UploadProgressPanel,
   VirtualizedPhotoGrid,
+  VaultSetupModal,
 } from '../../components/gallery';
-import { FilePreviewModal } from '../../components/documents';
-import { StorageBar } from '../../components/ui';
-import { fileService } from '../../services';
-import { useAuth } from '../../context';
-import { useUpload } from '../../hooks';
-import { isDocumentPreviewable } from '../../utils/thumbnail';
 
 const Dashboard = () => {
-  const { getMasterKey, hasMasterKey, setMasterKey } = useAuth();
+  const { hasMasterKey, setMasterKey, getMasterKey, user, setUser } = useAuth();
+  const { needsVaultSetup, loading: vaultStateLoading } = useVaultState();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('photos');
   const [files, setFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -48,6 +53,10 @@ const Dashboard = () => {
 
   // Document preview state
   const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
+
+  // Recovery key download state
+  const [showRecoveryKeyPrompt, setShowRecoveryKeyPrompt] = useState(false);
+  const [recoveryKeyPhrase, setRecoveryKeyPhrase] = useState('');
 
   // Grid size preference (stored in localStorage)
   const [gridSize, setGridSize] = useState(() => {
@@ -91,8 +100,6 @@ const Dashboard = () => {
           limit: pagination.limit,
         });
 
-        console.log('Files response:', response);
-
         const filesData = response.files || response.data?.files || [];
         const paginationData =
           response.pagination || response.data?.pagination || {};
@@ -120,7 +127,10 @@ const Dashboard = () => {
           hasMore: page < (paginationData.totalPages || 1),
         }));
       } catch (error) {
-        console.error('Failed to fetch files:', error);
+        // Don't log 401 errors - they're expected after logout/deletion
+        if (error.response?.status !== 401) {
+          console.error('Failed to fetch files:', error);
+        }
         if (!append) {
           setFiles([]);
         }
@@ -151,15 +161,50 @@ const Dashboard = () => {
     clearAllUploads,
   } = useUpload({
     onFileUploaded: (uploadedFile) => {
-      console.log('[Dashboard] File uploaded:', uploadedFile);
       // Add the new file to the list immediately without a full refresh
       setFiles((prev) => [uploadedFile, ...prev]);
     },
   });
 
+  // Mandatory vault setup check - redirect if vault not set up and not already on setup page
   useEffect(() => {
-    fetchFiles(1, false); // Initial load
-  }, []);
+    // Wait for vault state to load before making decisions
+    if (vaultStateLoading) return;
+
+    const setupVault = searchParams.get('setupVault');
+    
+    // Check for vault setup parameter first
+    if (setupVault === 'true') {
+      // Remove the parameter from URL
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    // Only redirect if vault needs setup and not already on setup page
+    if (needsVaultSetup) {
+      // Redirect to vault setup page
+      window.location.href = '/photos?setupVault=true';
+      return;
+    }
+  }, [needsVaultSetup, searchParams, vaultStateLoading]);
+
+  useEffect(() => {
+    // Only fetch files if vault is set up and state is loaded
+    if (!needsVaultSetup && !vaultStateLoading) {
+      fetchFiles(1, false); // Initial load
+    }
+  }, [needsVaultSetup, vaultStateLoading]);
+
+  // Check for recovery key in URL params and show download prompt
+  useEffect(() => {
+    const recoveryKey = searchParams.get('recoveryKey');
+    if (recoveryKey) {
+      setRecoveryKeyPhrase(recoveryKey);
+      setShowRecoveryKeyPrompt(true);
+      // Remove the parameter from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
 
   // Filter files into photos/videos and documents
   const photoFiles = files.filter((f) => !isDocumentPreviewable(f.mimeType));
@@ -206,6 +251,17 @@ const Dashboard = () => {
   const handleMasterKeyUnlocked = (masterKey) => {
     setMasterKey(masterKey);
 
+    // Update user state to reflect vault setup completion
+    if (user) {
+      setUser({ ...user, hasSecuritySetup: true });
+    }
+
+    // If we're coming from vault setup, redirect to clean URL to prevent loop
+    if (window.location.pathname === '/photos' && searchParams.has('setupVault')) {
+      window.location.href = '/photos';
+      return;
+    }
+
     // If user was trying to view a file, open it now
     if (pendingFileView) {
       const file = pendingFileView;
@@ -232,7 +288,6 @@ const Dashboard = () => {
     const masterKey = getMasterKey();
 
     if (!masterKey) {
-      console.error('No master key available. Please log in again.');
       alert('Session expired. Please log in again to upload files.');
       return;
     }
@@ -242,8 +297,7 @@ const Dashboard = () => {
       setIsUploadPanelMinimized(false);
 
       // Add files to upload queue - encryption and upload happens in background
-      const taskIds = await uploadFilesWithEncryption(files);
-      console.log('[Dashboard] Started upload tasks:', taskIds);
+      await uploadFilesWithEncryption(files);
 
       // Signal to the upload modal that files were accepted
       onProgress(100);
@@ -324,6 +378,31 @@ const Dashboard = () => {
     setSelectedFiles([]);
     setAddToAlbumFileIds([]);
   };
+
+  // If vault state is loading, show loading spinner
+  if (vaultStateLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If vault needs setup, show only the setup modal
+  if (needsVaultSetup) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 flex items-center justify-center">
+        <VaultSetupModal
+          isOpen={true}
+          onClose={() => {}} // No-op - cannot close
+          onSetup={handleMasterKeyUnlocked}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 flex flex-col">
@@ -558,8 +637,8 @@ const Dashboard = () => {
         />
       )}
 
-      {/* Session Locked Notification */}
-      {!hasMasterKey() && (
+      {/* Session Locked Notification - Only show if user has vault configured but not unlocked */}
+      {!hasMasterKey() && !needsVaultSetup && (
         <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-zinc-900 border border-amber-500/30 rounded-lg p-4 shadow-lg z-50">
           <div className="flex items-start">
             <svg
@@ -577,16 +656,16 @@ const Dashboard = () => {
             </svg>
             <div className="flex-1">
               <h4 className="text-sm font-medium text-amber-400">
-                Session Locked
+                Vault Locked
               </h4>
               <p className="text-sm text-gray-400 mt-1">
-                Enter your password to view and manage your photos.
+                Enter your Vault Password to view and manage your encrypted photos.
               </p>
               <button
                 onClick={() => setShowUnlockModal(true)}
                 className="mt-3 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black text-sm font-medium rounded-lg transition-colors"
               >
-                Unlock
+                Unlock Vault
               </button>
             </div>
           </div>
@@ -602,6 +681,15 @@ const Dashboard = () => {
         }}
         onUnlocked={handleMasterKeyUnlocked}
       />
+
+      
+      {/* Recovery Key Download Prompt */}
+      {showRecoveryKeyPrompt && (
+        <RecoveryKeyDownloadPrompt
+          recoveryPhrase={recoveryKeyPhrase}
+          onDismiss={() => setShowRecoveryKeyPrompt(false)}
+        />
+      )}
 
       {/* Upload Progress Panel */}
       {uploadStats.total > 0 && (

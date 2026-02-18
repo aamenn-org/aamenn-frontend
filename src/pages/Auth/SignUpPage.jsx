@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context';
+import GoogleSignInButton from '../../components/GoogleSignInButton';
+import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 
 const EyeIcon = () => (
   <svg
@@ -68,7 +70,6 @@ const AppleIcon = () => (
 );
 
 const SignUpPage = () => {
-  const navigate = useNavigate();
   const { register } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -82,6 +83,7 @@ const SignUpPage = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [recoveryPhrase, setRecoveryPhrase] = useState(null);
 
   const slides = [
     {
@@ -181,8 +183,12 @@ const SignUpPage = () => {
       const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const result = await register(email.trim(), password.trim(), displayName);
       if (result.success) {
-        // Regular users always go to photos after registration
-        navigate('/photos');
+        if (result.recoveryPhrase) {
+          // Show recovery key modal before navigating
+          setRecoveryPhrase(result.recoveryPhrase);
+        } else {
+          window.location.href = '/photos';
+        }
       } else {
         setError(result.error);
       }
@@ -195,6 +201,16 @@ const SignUpPage = () => {
   };
 
   return (
+    <>
+    {recoveryPhrase && (
+      <RecoveryKeyDownloadPrompt
+        recoveryPhrase={recoveryPhrase}
+        onDismiss={() => {
+          setRecoveryPhrase(null);
+          window.location.href = `/photos?recoveryKey=${encodeURIComponent(recoveryPhrase)}`;
+        }}
+      />
+    )}
     <div className="min-h-screen flex bg-black">
       {/* Left Section - Image/Illustration */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden">
@@ -403,9 +419,32 @@ const SignUpPage = () => {
               {loading ? 'Creating account...' : 'Create account'}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-800"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-black text-gray-400">Or continue with</span>
+            </div>
+          </div>
+
+          {/* Google Sign-In */}
+          <GoogleSignInButton
+            onSuccess={(result) => {
+              if (result.requiresVaultSetup) {
+                window.location.href = '/photos?setupVault=true';
+              } else {
+                window.location.href = '/photos';
+              }
+            }}
+            onError={(error) => setError(error)}
+          />
         </div>
       </div>
     </div>
+    </>
   );
 };
 

@@ -92,16 +92,12 @@ const AuthPage = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    console.log('AuthPage: handleSubmit called, isLogin:', isLogin);
 
     try {
       if (isLogin) {
         // Login
-        console.log('AuthPage: Calling login');
         const result = await login(email.trim(), password.trim());
-        console.log('AuthPage: Login result:', result);
         if (result.success) {
-          console.log('AuthPage: Login successful, navigating based on role');
           // Redirect based on role
           if (result.role === 'admin') {
             navigate('/dashboard');
@@ -109,7 +105,6 @@ const AuthPage = () => {
             navigate('/photos');
           }
         } else {
-          console.log('AuthPage: Login failed:', result.error);
           setError(result.error);
         }
       } else {
@@ -128,15 +123,11 @@ const AuthPage = () => {
 
         // Register with zero-knowledge encryption
         // The register function handles key generation internally
-        console.log('AuthPage: Calling register');
         const result = await register(email.trim(), password.trim());
-        console.log('AuthPage: Register result:', result);
         if (result.success) {
-          console.log('AuthPage: Register successful, navigating to photos');
           // Regular users always go to photos after registration
           navigate('/photos');
         } else {
-          console.log('AuthPage: Register failed:', result.error);
           setError(result.error);
         }
       }

@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context';
+import { useVaultState } from '../../../hooks/useVaultState';
 import { authService, userService } from '../../../services';
 import { reEncryptMasterKey } from '../../../utils/crypto';
 
 const SecuritySection = () => {
   const { t } = useTranslation('settings');
-  const { user, logout, getEncryptionParams, updateEncryptionParams } =
-    useAuth();
+  const { user, logout, getEncryptionParams, updateEncryptionParams } = useAuth();
+  const { vaultConfigured, needsVaultSetup } = useVaultState();
   const navigate = useNavigate();
+
+  // Check if user is OAuth (Google) user
+  const isOAuthUser = localStorage.getItem('authProvider') !== 'local';
 
   // Change password state
   const [passwordForm, setPasswordForm] = useState({
@@ -60,17 +64,13 @@ const SecuritySection = () => {
         encryptionParams.kekSalt
       );
 
-      // TODO: Change password endpoint moved from /auth to /users - needs implementation
-      // Backend endpoint removed: POST /auth/change-password
-      // Should be implemented as: PATCH /users/me/password
-      throw new Error('Password change functionality is temporarily unavailable. Backend endpoint needs to be implemented at /users/me/password');
-      
-      // await authService.changePassword({
-      //   currentPassword: passwordForm.currentPassword,
-      //   newPassword: passwordForm.newPassword,
-      //   newEncryptedMasterKey,
-      //   newKekSalt,
-      // });
+      // Call the vault password change endpoint
+      await authService.changeVaultPassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        newEncryptedMasterKey,
+        newKekSalt,
+      });
 
       // Update stored encryption params for future password changes
       updateEncryptionParams({
@@ -106,13 +106,14 @@ const SecuritySection = () => {
     setDeleteLoading(true);
 
     try {
+      // Always use the provided password (now required for both local and Google users)
       await userService.deleteAccount(deletePassword);
       logout();
       navigate('/');
     } catch (err) {
       console.error('Account deletion failed:', err);
       if (err.response?.status === 401) {
-        setDeleteError(t('deleteAccount.incorrectPassword'));
+        setDeleteError(isOAuthUser ? 'Invalid Vault Password' : t('deleteAccount.incorrectPassword'));
       } else {
         setDeleteError(
           err.response?.data?.message || t('deleteAccount.deleteError')
@@ -122,9 +123,6 @@ const SecuritySection = () => {
       setDeleteLoading(false);
     }
   };
-
-  // Check if user uses OAuth (no password change available)
-  const isOAuthUser = user?.authProvider && user.authProvider !== 'local';
 
   return (
     <div className="space-y-6">
@@ -289,8 +287,49 @@ const SecuritySection = () => {
         </div>
       )}
 
-      {/* Delete Account Card */}
-      <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-red-200 dark:border-red-900/50 p-6">
+      {/* Vault Setup Required for New Google Users */}
+      {needsVaultSetup && isOAuthUser && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/30 rounded-xl p-6">
+          <div className="flex gap-3 mb-4">
+            <svg
+              className="w-6 h-6 text-blue-500 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                Set Up Your Vault Password
+              </h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mb-4">
+                You're signed in with Google, but you need to create a vault password to secure your encrypted files. This password is used to encrypt and decrypt your photos and documents.
+              </p>
+              <div className="bg-blue-100 dark:bg-blue-900/40 rounded-lg p-3 mb-4">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  <strong>Important:</strong> Your vault password is different from your Google password. Only you can access your encrypted files with this password.
+                </p>
+              </div>
+              <button
+                onClick={() => window.location.href = '/photos?setupVault=true'}
+                className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Set Up Vault Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Card - Only show if user has vault setup */}
+      {vaultConfigured && (
+        <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-red-200 dark:border-red-900/50 p-6">
         <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-1">
           {t('deleteAccount.title')}
         </h2>
@@ -339,16 +378,23 @@ const SecuritySection = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                {t('deleteAccount.passwordLabel')}
+                {isOAuthUser ? 'Vault Password' : t('deleteAccount.passwordLabel')}
               </label>
               <input
                 type="password"
                 value={deletePassword}
                 onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder={isOAuthUser ? 'Enter your vault password' : t('deleteAccount.passwordPlaceholder')}
                 className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 
                   rounded-lg text-gray-900 dark:text-white text-sm
                   focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                required
               />
+              {isOAuthUser && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Enter your vault password to confirm account deletion
+                </p>
+              )}
             </div>
 
             {deleteError && (
@@ -419,6 +465,7 @@ const SecuritySection = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

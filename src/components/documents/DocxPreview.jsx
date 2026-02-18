@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import mammoth from 'mammoth';
+import DOMPurify from 'dompurify';
 
 /**
  * DOCX Preview Component
  * Converts DOCX to HTML using mammoth and renders it
+ * SECURITY: Uses DOMPurify to sanitize HTML and prevent XSS attacks
  */
 const DocxPreview = ({ blobUrl, fileName }) => {
   const [html, setHtml] = useState('');
@@ -24,7 +26,13 @@ const DocxPreview = ({ blobUrl, fileName }) => {
 
         // Convert DOCX to HTML
         const result = await mammoth.convertToHtml({ arrayBuffer });
-        setHtml(result.value);
+        
+        // SECURITY: Sanitize HTML to prevent XSS attacks
+        const sanitizedHtml = DOMPurify.sanitize(result.value, {
+          ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'tbody', 'thead', 'span', 'div'],
+          ALLOWED_ATTR: ['style', 'class'],
+        });
+        setHtml(sanitizedHtml);
 
         // Log any warnings
         if (result.messages.length > 0) {

@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
 } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth, ThemeProvider, USER_ROLES } from './context';
 import {
   LoginPage,
@@ -15,6 +16,7 @@ import {
   Settings,
 } from './pages';
 import { AdminDashboard } from './pages/Admin';
+import config from './config';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -165,13 +167,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <Router>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </ThemeProvider>
-    </Router>
+    <GoogleOAuthProvider clientId={config.googleClientId}>
+      <Router>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </ThemeProvider>
+      </Router>
+    </GoogleOAuthProvider>
   );
 }
 

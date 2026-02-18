@@ -17,7 +17,10 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
         setStorageData(data);
         lastFetchRef.current = Date.now();
       } catch (error) {
-        console.error('Failed to fetch storage usage:', error);
+        // Don't log 401 errors - they're expected after logout/deletion
+        if (error.response?.status !== 401) {
+          console.error('Failed to fetch storage usage:', error);
+        }
       } finally {
         setLoading(false);
       }

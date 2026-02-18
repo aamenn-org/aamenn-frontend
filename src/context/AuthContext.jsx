@@ -1,16 +1,16 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authService, userService } from '../services';
-import { generateRegistrationKeys, unlockMasterKey } from '../utils/crypto';
+import { generateRegistrationKeys, unlockMasterKey, generateRecoveryParams } from '../utils/crypto';
 import { triggerWarmup, resetPrewarmer } from '../services/upload-prewarmer';
 
 const AuthContext = createContext(null);
 
-// Session storage keys
+// Storage keys
 const MASTER_KEY_STORAGE_KEY = 'aamenn_mk';
 const MASTER_KEY_TIMESTAMP_KEY = 'aamenn_mk_ts';
 const ENCRYPTION_PARAMS_KEY = 'aamenn_enc_params';
 const USER_ROLE_KEY = 'aamenn_role';
-const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+const MASTER_KEY_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
 // User roles
 export const USER_ROLES = {
@@ -19,30 +19,33 @@ export const USER_ROLES = {
 };
 
 /**
- * Securely store master key in sessionStorage with timestamp.
- * SessionStorage is tab-specific and cleared when tab closes.
+ * Securely store master key in localStorage with timestamp for expiration.
+ * Master key expires after 3 hours for security.
  */
-const storeMasterKey = (masterKey) => {
+const storeMasterKey = async (masterKey) => {
   try {
-    // Convert CryptoKey to exportable format (raw bytes -> base64)
-    crypto.subtle.exportKey('raw', masterKey).then((rawKey) => {
-      const base64Key = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
-      sessionStorage.setItem(MASTER_KEY_STORAGE_KEY, base64Key);
-      sessionStorage.setItem(MASTER_KEY_TIMESTAMP_KEY, Date.now().toString());
-    });
+    // Convert CryptoKey to storable format
+    const rawKey = await crypto.subtle.exportKey('raw', masterKey);
+    const base64Key = btoa(
+      String.fromCharCode(...new Uint8Array(rawKey))
+    );
+
+    // Store in localStorage with timestamp (persists across browser sessions)
+    localStorage.setItem(MASTER_KEY_STORAGE_KEY, base64Key);
+    localStorage.setItem(MASTER_KEY_TIMESTAMP_KEY, Date.now().toString());
   } catch (error) {
     console.error('Failed to store master key:', error);
   }
 };
 
 /**
- * Retrieve master key from sessionStorage if valid and not expired.
+ * Retrieve master key from localStorage if valid and not expired.
  * Returns null if expired or invalid.
  */
 const retrieveMasterKey = async () => {
   try {
-    const base64Key = sessionStorage.getItem(MASTER_KEY_STORAGE_KEY);
-    const timestamp = sessionStorage.getItem(MASTER_KEY_TIMESTAMP_KEY);
+    const base64Key = localStorage.getItem(MASTER_KEY_STORAGE_KEY);
+    const timestamp = localStorage.getItem(MASTER_KEY_TIMESTAMP_KEY);
 
     if (!base64Key || !timestamp) {
       return null;
@@ -50,7 +53,7 @@ const retrieveMasterKey = async () => {
 
     // Check expiration (3 hours)
     const storedTime = parseInt(timestamp, 10);
-    if (Date.now() - storedTime > SESSION_TIMEOUT_MS) {
+    if (Date.now() - storedTime > MASTER_KEY_TIMEOUT_MS) {
       clearStoredMasterKey();
       return null;
     }
@@ -79,11 +82,11 @@ const retrieveMasterKey = async () => {
 };
 
 /**
- * Clear stored master key from sessionStorage.
+ * Clear stored master key from localStorage.
  */
 const clearStoredMasterKey = () => {
-  sessionStorage.removeItem(MASTER_KEY_STORAGE_KEY);
-  sessionStorage.removeItem(MASTER_KEY_TIMESTAMP_KEY);
+  localStorage.removeItem(MASTER_KEY_STORAGE_KEY);
+  localStorage.removeItem(MASTER_KEY_TIMESTAMP_KEY);
 };
 
 /**
@@ -124,7 +127,7 @@ export const AuthProvider = ({ children }) => {
   const [userRole, setUserRole] = useState(null);
 
   // Master key stored in memory (ref) for quick access
-  // Also persisted in sessionStorage for tab refresh resilience
+  // Also persisted in localStorage (3-hour timeout) for session resilience
   const masterKeyRef = useRef(null);
 
   // Pre-exported master key bytes (optimization: avoid repeated exportKey calls)
@@ -175,13 +178,13 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
-        // Try to restore master key from sessionStorage
+        // Try to restore master key from localStorage (if not expired)
         const storedKey = await retrieveMasterKey();
         if (storedKey) {
           masterKeyRef.current = storedKey;
           await cacheMasterKeyBytes(storedKey); // Pre-export bytes for performance
           setMasterKeyAvailable(true);
-          console.log('Master key restored from session');
+          console.log('Master key restored from storage');
 
           // Pre-warm workers for fast uploads (non-blocking)
           triggerWarmup();
@@ -194,26 +197,30 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Login user and unlock master key
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @param {boolean} rememberMe - Whether to persist login across browser sessions
    */
-  const login = async (email, password) => {
+  const login = async (email, password, rememberMe = true) => {
     try {
       console.log('AuthContext: Calling authService.login');
       const response = await authService.login({ email, password });
       console.log('AuthContext: Login response:', response);
 
       // Backend returns data directly (not wrapped in success/data)
-      const { accessToken, refreshToken, encryptedMasterKey, kekSalt, role } =
+      const { accessToken, refreshToken, encryptedMasterKey, kekSalt, role, authProvider } =
         response;
 
       if (accessToken && refreshToken) {
         console.log('AuthContext: Login successful, tokens received');
 
-        // Store tokens
-        authService.storeTokens({ accessToken, refreshToken });
+        // Store tokens based on remember me preference
+        authService.storeTokens({ accessToken, refreshToken, rememberMe });
 
-        // Store email and role for user display
+        // Store email, role, and authProvider for user display
         localStorage.setItem('userEmail', email);
         localStorage.setItem(USER_ROLE_KEY, role || USER_ROLES.USER);
+        localStorage.setItem('authProvider', authProvider || 'local');
         setUserRole(role || USER_ROLES.USER);
 
         // Unlock master key with password (zero-knowledge) - only for regular users
@@ -230,7 +237,7 @@ export const AuthProvider = ({ children }) => {
             masterKeyRef.current = masterKey;
             await cacheMasterKeyBytes(masterKey); // Pre-export bytes for performance
             setMasterKeyAvailable(true);
-            storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
+            storeMasterKey(masterKey); // Persist in localStorage for 3 hours
             console.log('AuthContext: Master key unlocked and stored');
 
             // Pre-warm workers for fast uploads (non-blocking)
@@ -268,8 +275,12 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Register user with zero-knowledge encryption
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @param {string} displayName - User display name
+   * @param {boolean} rememberMe - Whether to persist login (defaults to true for new users)
    */
-  const register = async (email, password, displayName) => {
+  const register = async (email, password, displayName, rememberMe = true) => {
     try {
       console.log('AuthContext: Starting registration');
       // Generate encryption keys on client side
@@ -277,6 +288,12 @@ export const AuthProvider = ({ children }) => {
       const { encryptedMasterKey, kekSalt, kdfParams, masterKey } =
         await generateRegistrationKeys(password);
       console.log('AuthContext: Keys generated successfully');
+
+      // Generate recovery key params (Ente-style: masterKey encrypted with recovery key)
+      console.log('AuthContext: Generating recovery key');
+      const recoveryData = await generateRecoveryParams(masterKey);
+      console.log('AuthContext: Recovery key generated:', recoveryData.recoveryPhrase);
+      console.log('AuthContext: Full recovery data:', recoveryData);
 
       // Send to server (server cannot decrypt master key)
       const response = await authService.register({
@@ -286,6 +303,10 @@ export const AuthProvider = ({ children }) => {
         kekSalt,
         kdfParams,
         displayName,
+        recoveryEncryptedMasterKey: recoveryData.recoveryEncryptedMasterKey,
+        recoverySalt: recoveryData.recoverySalt,
+        recoveryKdfParams: recoveryData.recoveryKdfParams,
+        encryptedRecoveryKey: recoveryData.encryptedRecoveryKey,
       });
       console.log('AuthContext: Register response:', response);
 
@@ -294,7 +315,7 @@ export const AuthProvider = ({ children }) => {
 
       if (accessToken && refreshToken) {
         console.log('AuthContext: Registration successful, storing tokens');
-        authService.storeTokens({ accessToken, refreshToken });
+        authService.storeTokens({ accessToken, refreshToken, rememberMe });
 
         // Store email for user display
         localStorage.setItem('userEmail', email);
@@ -308,10 +329,19 @@ export const AuthProvider = ({ children }) => {
         // Pre-warm workers for fast uploads (non-blocking)
         triggerWarmup();
 
-        setUser({ email });
+        setUser({ email, hasSecuritySetup: true });
         setIsAuthenticated(true);
         console.log('AuthContext: Returning success');
-        return { success: true, data: response };
+        console.log('AuthContext: About to return recoveryPhrase:', recoveryData.recoveryPhrase);
+        
+        // DEBUG: Alert to verify recovery key is being returned
+        if (recoveryData.recoveryPhrase) {
+          console.log('✅ Recovery phrase exists:', recoveryData.recoveryPhrase);
+        } else {
+          console.error('❌ Recovery phrase is missing!');
+        }
+        
+        return { success: true, data: response, recoveryPhrase: recoveryData.recoveryPhrase };
       }
 
       console.log('AuthContext: No tokens received');
@@ -321,6 +351,43 @@ export const AuthProvider = ({ children }) => {
       const message =
         error.response?.data?.message ||
         'Registration failed. Please try again.';
+      return { success: false, error: message };
+    }
+  };
+
+  /**
+   * Login with Google
+   */
+  const loginWithGoogle = async (idToken) => {
+    try {
+      const response = await authService.googleLogin({ idToken });
+      const { accessToken, refreshToken, role, authProvider, requiresVaultSetup } = response;
+
+      if (accessToken && refreshToken) {
+        authService.storeTokens({ accessToken, refreshToken, rememberMe: true });
+        localStorage.setItem(USER_ROLE_KEY, role || USER_ROLES.USER);
+        localStorage.setItem('authProvider', authProvider || 'google');
+        setUserRole(role || USER_ROLES.USER);
+        setUser({ 
+          email: response.email || 'Google User', 
+          role: role || USER_ROLES.USER,
+          hasSecuritySetup: !requiresVaultSetup 
+        });
+        setIsAuthenticated(true);
+
+        return {
+          success: true,
+          requiresVaultSetup,
+          encryptedMasterKey: response.encryptedMasterKey,
+          kekSalt: response.kekSalt,
+          kdfParams: response.kdfParams,
+        };
+      }
+
+      return { success: false, error: 'Google login failed' };
+    } catch (error) {
+      console.error('AuthContext: Google login error:', error);
+      const message = error.response?.data?.message || 'Google login failed';
       return { success: false, error: message };
     }
   };
@@ -417,6 +484,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     login,
     register,
+    loginWithGoogle,
     logout,
     getMasterKey,
     getMasterKeyBytes,

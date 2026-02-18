@@ -12,6 +12,7 @@ export { default as UploadModal } from './UploadModal';
 export { default as SyncingIndicator } from './SyncingIndicator';
 export { default as PhotoViewer } from './PhotoViewer';
 export { default as UnlockModal } from './UnlockModal';
+export { default as VaultSetupModal } from './VaultSetupModal';
 export { default as BlurhashCanvas } from './BlurhashCanvas';
 export { default as GridSizeControl } from './GridSizeControl';
 export { default as UploadProgressPanel } from './UploadProgressPanel';
