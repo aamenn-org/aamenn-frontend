@@ -7,6 +7,7 @@ import { useUpload } from '../../hooks/useUpload';
 import { isDocumentPreviewable } from '../../utils/thumbnail';
 import { DashboardNavbar } from '../../components/layout';
 import { StorageBar } from '../../components/ui';
+import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 import {
   GalleryHeader,
