@@ -41,7 +41,6 @@ interface DecryptedThumbnailEntry {
   fileId: string;
   blob: Blob;
   timestamp: number;
-  blurhash?: string;
 }
 
 interface DecryptedImageEntry {
@@ -358,10 +357,14 @@ class ThumbnailCacheService {
   async getThumbnail(
     fileId: string,
     thumbnailUrl: string,
-    cipherThumbKey: string,
     masterKey: CryptoKey,
-    blurhash?: string
+    cipherFileKey: string,
   ): Promise<string> {
+    // Validate inputs
+    if (!fileId || !thumbnailUrl || !masterKey || !cipherFileKey) {
+      throw new Error(`Invalid inputs: fileId=${!!fileId}, thumbnailUrl=${!!thumbnailUrl}, masterKey=${!!masterKey}, cipherFileKey=${!!cipherFileKey} - all are required`);
+    }
+
     await this.init();
     
     const perfMonitor = getPerformanceMonitor();
@@ -404,9 +407,8 @@ class ThumbnailCacheService {
     const fetchPromise = this.fetchAndCache(
       fileId,
       thumbnailUrl,
-      cipherThumbKey,
       masterKey,
-      blurhash
+      cipherFileKey,
     );
 
     this.pendingRequests.set(fileId, fetchPromise);
@@ -434,18 +436,20 @@ class ThumbnailCacheService {
   async getThumbnailWithPriority(
     fileId: string,
     thumbnailUrl: string,
-    cipherThumbKey: string,
     masterKey: CryptoKey,
+    cipherFileKey: string,
     options: {
       priority?: 'high' | 'normal' | 'low';
       signal?: AbortSignal;
-      blurhash?: string;
       masterKeyBytes?: ArrayBuffer; // Pre-exported key bytes to avoid repeated exportKey
     } = {}
   ): Promise<string> {
     await this.init();
 
-    const { priority = 'normal', signal, blurhash, masterKeyBytes } = options;
+    const { priority = 'normal', signal, masterKeyBytes } = options;
+    
+    const perfMonitor = getPerformanceMonitor();
+    perfMonitor.markStart(`thumbnail_${fileId}`);
 
     // Check if already aborted
     if (signal?.aborted) {
@@ -456,6 +460,8 @@ class ThumbnailCacheService {
     const memCached = this.memoryCache.get(fileId);
     if (memCached) {
       log(`L1 HIT: ${fileId}`);
+      perfMonitor.recordCacheHit('L1', 'thumbnail');
+      perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L1' });
       return memCached;
     }
 
@@ -489,24 +495,32 @@ class ThumbnailCacheService {
         const url = URL.createObjectURL(dbCached.blob);
         this.memoryCache.set(fileId, url);
         log(`L2 HIT: ${fileId}`);
+        perfMonitor.recordCacheHit('L2', 'thumbnail');
+        perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L2' });
         return url;
       }
       // False positive from bloom filter - continue to L3
+      log(`L2 BLOOM FALSE POSITIVE: ${fileId}`);
+    } else {
+      log(`L2 BLOOM SKIP: ${fileId} (definitely not cached)`);
     }
 
-    // L3: Download, decrypt, and cache with priority
+    // L3: Download, decrypt, and cache
+    perfMonitor.recordCacheMiss('thumbnail');
     const fetchPromise = this.fetchAndCacheWithPriority(
       fileId,
       thumbnailUrl,
-      cipherThumbKey,
       masterKey,
-      { priority, signal, blurhash, masterKeyBytes }
+      cipherFileKey,
+      options
     );
 
     this.pendingRequests.set(fileId, fetchPromise);
 
     try {
-      return await fetchPromise;
+      const result = await fetchPromise;
+      perfMonitor.markEnd(`thumbnail_${fileId}`, { cache: 'L3' });
+      return result;
     } finally {
       this.pendingRequests.delete(fileId);
     }
@@ -564,9 +578,8 @@ class ThumbnailCacheService {
   private async fetchAndCache(
     fileId: string,
     thumbnailUrl: string,
-    cipherThumbKey: string,
     masterKey: CryptoKey,
-    blurhash?: string
+    cipherFileKey: string,
   ): Promise<string> {
     try {
       log(`L3 FETCH: ${fileId}`);
@@ -579,12 +592,12 @@ class ThumbnailCacheService {
       );
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
-      // Decrypt in Web Worker (non-blocking!)
+      // Decrypt in Web Worker using unified file key approach
       const workerPool = getCryptoWorkerPool();
       const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
-        cipherThumbKey,
+        cipherFileKey,  // Use file key encrypted with master key
         masterKeyBytes
       );
 
@@ -620,7 +633,6 @@ class ThumbnailCacheService {
           fileId,
           blob,
           timestamp: Date.now(),
-          blurhash,
         })
         .catch(() => {
           // Silent fail for persistence - data is still in memory
@@ -639,16 +651,15 @@ class ThumbnailCacheService {
   private async fetchAndCacheWithPriority(
     fileId: string,
     thumbnailUrl: string,
-    cipherThumbKey: string,
     masterKey: CryptoKey,
+    cipherFileKey: string,
     options: {
       priority?: 'high' | 'normal' | 'low';
       signal?: AbortSignal;
-      blurhash?: string;
       masterKeyBytes?: ArrayBuffer; // Pre-exported to avoid repeated exportKey calls
     } = {}
   ): Promise<string> {
-    const { priority = 'normal', signal, blurhash, masterKeyBytes } = options;
+    const { priority = 'normal', signal, masterKeyBytes } = options;
 
     // Map string priority to worker pool priority and download priority
     const workerPriorityMap = {
@@ -692,7 +703,7 @@ class ThumbnailCacheService {
         masterKeyBytes ?? (await crypto.subtle.exportKey('raw', masterKey));
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
-        cipherThumbKey,
+        cipherFileKey,  // Use file key encrypted with master key
         keyBytes,
         {
           priority: workerPriorityMap[priority],
@@ -718,7 +729,6 @@ class ThumbnailCacheService {
           fileId,
           blob,
           timestamp: Date.now(),
-          blurhash,
         })
         .catch(() => {
           // Silent fail for persistence
@@ -738,23 +748,19 @@ class ThumbnailCacheService {
   /**
    * Preload thumbnails in background.
    */
-  preload(
+  async preloadThumbnails(
     files: Array<{
       fileId: string;
       thumbnailUrl: string;
-      cipherThumbKey: string;
-      blurhash?: string;
     }>,
     masterKey: CryptoKey
-  ): void {
+  ): Promise<void> {
     for (const file of files) {
       // Fire and forget
       this.getThumbnail(
         file.fileId,
         file.thumbnailUrl,
-        file.cipherThumbKey,
-        masterKey,
-        file.blurhash
+        masterKey
       ).catch(() => {}); // Ignore preload failures
     }
   }
@@ -954,8 +960,8 @@ class ThumbnailCacheService {
   async getFullImage(
     fileId: string,
     downloadUrl: string,
-    cipherFileKey: string,
     masterKey: CryptoKey,
+    cipherFileKey: string,
     mimeType: string = 'image/jpeg'
   ): Promise<string> {
     await this.init();
@@ -993,12 +999,12 @@ class ThumbnailCacheService {
 
       const encryptedData = await fileService.downloadFileContent(downloadUrl);
 
-      // Decrypt in Web Worker (non-blocking!)
+      // Decrypt in Web Worker using unified file key approach
       const workerPool = getCryptoWorkerPool();
       const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
-        cipherFileKey,
+        cipherFileKey,  // Use file key encrypted with master key
         masterKeyBytes
       );
 
@@ -1041,8 +1047,8 @@ class ThumbnailCacheService {
   async getMediumThumbnail(
     fileId: string,
     thumbMediumUrl: string,
-    cipherThumbMediumKey: string,
-    masterKey: CryptoKey
+    masterKey: CryptoKey,
+    cipherFileKey: string
   ): Promise<string> {
     await this.init();
 
@@ -1081,12 +1087,12 @@ class ThumbnailCacheService {
         thumbMediumUrl
       );
 
-      // Decrypt in Web Worker (non-blocking!)
+      // Decrypt in Web Worker using unified file key approach
       const workerPool = getCryptoWorkerPool();
       const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
-        cipherThumbMediumKey,
+        cipherFileKey,  // Use file key encrypted with master key
         masterKeyBytes
       );
 
@@ -1129,8 +1135,8 @@ class ThumbnailCacheService {
   async getLargeThumbnail(
     fileId: string,
     thumbLargeUrl: string,
-    cipherThumbLargeKey: string,
-    masterKey: CryptoKey
+    masterKey: CryptoKey,
+    cipherFileKey: string
   ): Promise<string> {
     await this.init();
 
@@ -1169,12 +1175,12 @@ class ThumbnailCacheService {
         thumbLargeUrl
       );
 
-      // Decrypt in Web Worker (non-blocking!)
+      // Decrypt in Web Worker using unified file key approach
       const workerPool = getCryptoWorkerPool();
       const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
-        cipherThumbLargeKey,
+        cipherFileKey,  // Use file key encrypted with master key
         masterKeyBytes
       );
 
@@ -1254,9 +1260,7 @@ class ThumbnailCacheService {
     files: Array<{
       fileId: string;
       downloadUrl?: string;
-      cipherFileKey?: string;
       thumbMediumUrl?: string;
-      cipherThumbMediumKey?: string;
       mimeType?: string;
     }>,
     masterKey: CryptoKey
@@ -1278,21 +1282,19 @@ class ThumbnailCacheService {
 
           try {
             // Preload medium first (faster, good for quick swipes)
-            if (file.thumbMediumUrl && file.cipherThumbMediumKey) {
+            if (file.thumbMediumUrl) {
               await this.getMediumThumbnail(
                 fileId,
                 file.thumbMediumUrl,
-                file.cipherThumbMediumKey,
                 masterKey
               );
             }
 
             // Then preload full image
-            if (file.downloadUrl && file.cipherFileKey) {
+            if (file.downloadUrl) {
               await this.getFullImage(
                 fileId,
                 file.downloadUrl,
-                file.cipherFileKey,
                 masterKey,
                 file.mimeType || 'image/jpeg'
               );
@@ -1317,13 +1319,10 @@ class ThumbnailCacheService {
     filesMetadata: Array<{
       fileId: string;
       downloadUrl: string;
-      cipherFileKey: string;
-      thumbMediumUrl?: string;
-      cipherThumbMediumKey?: string;
-      mimeType?: string;
+      thumbMediumUrl: string;
+      mimeType: string;
     }>,
-    masterKey: CryptoKey,
-    _options: { prioritizeMedium?: boolean } = {}
+    masterKey: CryptoKey
   ): Promise<void> {
     // Filter out files that already have medium thumbnail cached
     const toPreload = filesMetadata.filter(
@@ -1339,12 +1338,11 @@ class ThumbnailCacheService {
 
     // Preload medium thumbnails
     const mediumPromises = toPreload
-      .filter((f) => f.thumbMediumUrl && f.cipherThumbMediumKey)
+      .filter((f) => f.thumbMediumUrl)
       .map((f) =>
         this.getMediumThumbnail(
           f.fileId,
           f.thumbMediumUrl!,
-          f.cipherThumbMediumKey!,
           masterKey
         ).catch(() => null)
       );
@@ -1360,7 +1358,6 @@ class ThumbnailCacheService {
     filesMetadata: Array<{
       fileId: string;
       downloadUrl: string;
-      cipherFileKey: string;
       mimeType?: string;
     }>,
     masterKey: CryptoKey
@@ -1378,12 +1375,11 @@ class ThumbnailCacheService {
     log(`Batch preloading ${toPreload.length} full images`);
 
     const fullPromises = toPreload
-      .filter((f) => f.downloadUrl && f.cipherFileKey)
+      .filter((f) => f.downloadUrl)
       .map((f) =>
         this.getFullImage(
           f.fileId,
           f.downloadUrl,
-          f.cipherFileKey,
           masterKey,
           f.mimeType || 'image/jpeg'
         ).catch(() => null)

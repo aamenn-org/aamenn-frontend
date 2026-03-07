@@ -15,7 +15,17 @@
     "emailDescription": "Your email cannot be changed",
     "saveChanges": "Save Changes",
     "updateSuccess": "Profile updated successfully",
-    "updateError": "Failed to update profile"
+    "updateError": "Failed to update profile",
+    "avatar": {
+      "title": "Profile Photo",
+      "remove": "Remove photo",
+      "upload": "Upload new photo",
+      "uploading": "Uploading...",
+      "deleteConfirm": "Are you sure you want to remove your profile photo?",
+      "error": "Failed to upload photo",
+      "sizeError": "Image must be smaller than 5MB",
+      "typeError": "Invalid file type. Please upload an image."
+    }
   },
   "password": {
     "title": "Change Password",

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
-import BlurhashCanvas from './BlurhashCanvas';
 import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
 import RenameModal from './RenameModal';
@@ -34,8 +34,10 @@ const PhotoViewer = ({
   // totalFiles - removed, no longer displayed in minimal UI
   onAddToAlbum,
   onDelete,
+  onShare,
 }) => {
   const { getMasterKey } = useAuth();
+  const { t } = useTranslation(['photos', 'common']);
 
   // Determine if this is a video file
   const isVideoFile = isVideo(file?.mimeType);
@@ -157,7 +159,7 @@ const PhotoViewer = ({
     const mediumUrl = thumbnailCache.getMediumFromMemory(fileId);
     if (mediumUrl) return { url: mediumUrl, quality: 'medium' };
 
-    // Return null if only small is available - show blurhash instead
+    // Return null if only small is available
     return { url: null, quality: 'none' };
   }, []);
 
@@ -188,8 +190,8 @@ const PhotoViewer = ({
             const mediumUrl = await thumbnailCache.getMediumThumbnail(
               fileId,
               fileData.thumbMediumUrl,
-              fileData.cipherThumbMediumKey,
-              masterKey
+              masterKey,
+              fileData.cipherFileKey  // Pass cipherFileKey for unified decryption
             );
             if (currentFileIdRef.current === fileId && quality !== 'large') {
               setDisplayUrl(mediumUrl);
@@ -208,12 +210,12 @@ const PhotoViewer = ({
 
         // Step 3: Load large thumbnail (preferred for viewer)
         // Fallback to original if large thumbnail not available (older files)
-        if (fileData.thumbLargeUrl && fileData.cipherThumbLargeKey) {
+        if (fileData.thumbLargeUrl) {
           const largeUrl = await thumbnailCache.getLargeThumbnail(
             fileId,
             fileData.thumbLargeUrl,
-            fileData.cipherThumbLargeKey,
-            masterKey
+            masterKey,
+            fileData.cipherFileKey  // Pass cipherFileKey for unified decryption
           );
           if (currentFileIdRef.current === fileId) {
             setDisplayUrl(largeUrl);
@@ -224,15 +226,15 @@ const PhotoViewer = ({
             img.src = largeUrl;
             img.decode().catch(() => {}); // Fire and forget
           }
-        } else if (fileData.downloadUrl && fileData.cipherFileKey) {
+        } else if (fileData.downloadUrl) {
           // Fallback to original for older files without large thumbnail
           console.log('[PhotoViewer] No large thumbnail, falling back to original');
           const fullUrl = await thumbnailCache.getFullImage(
             fileId,
             fileData.downloadUrl,
-            fileData.cipherFileKey,
             masterKey,
-            targetFile.mimeType || 'image/jpeg'
+            fileData.cipherFileKey,  // Pass cipherFileKey for unified decryption
+            fileData.mimeType
           );
           if (currentFileIdRef.current === fileId) {
             setDisplayUrl(fullUrl);
@@ -320,7 +322,6 @@ const PhotoViewer = ({
           filesMetadata.map((f) => ({
             fileId: f.fileId,
             downloadUrl: f.downloadUrl,
-            cipherFileKey: f.cipherFileKey,
             mimeType: f.mimeType,
           })),
           masterKey
@@ -430,9 +431,7 @@ const PhotoViewer = ({
           filesMetadata.map((f) => ({
             fileId: f.fileId,
             downloadUrl: f.downloadUrl,
-            cipherFileKey: f.cipherFileKey,
             thumbMediumUrl: f.thumbMediumUrl,
-            cipherThumbMediumKey: f.cipherThumbMediumKey,
             mimeType: f.mimeType,
           })),
           masterKey,
@@ -462,17 +461,17 @@ const PhotoViewer = ({
         if (currentFileIdRef.current !== fileId) return;
 
         // Load full video
-        if (fileData.downloadUrl && fileData.cipherFileKey) {
+        if (fileData.downloadUrl) {
           const videoUrl = await thumbnailCache.getFullImage(
             fileId,
             fileData.downloadUrl,
-            fileData.cipherFileKey,
             masterKey,
-            targetFile.mimeType || 'video/mp4'
+            fileData.cipherFileKey,  // Pass cipherFileKey for unified decryption
+            fileData.mimeType
           );
           if (currentFileIdRef.current === fileId) {
             setDisplayUrl(videoUrl);
-            setQuality('full');
+            setQuality('large'); // Treat as large quality
           }
         }
       } catch (err) {
@@ -525,10 +524,10 @@ const PhotoViewer = ({
         setQuality(cached.quality);
         console.log(`[PhotoViewer] Instant display from L1: ${cached.quality}`);
       } else {
-        // Only small or nothing in memory - show blurhash until medium loads
+        // Only small or nothing in memory - show loading state until medium loads
         setDisplayUrl(null);
         setQuality('none');
-        console.log('[PhotoViewer] No medium/large in L1, showing blurhash');
+        console.log('[PhotoViewer] No medium/large in L1, loading...');
       }
 
       // Start loading better quality in background
@@ -737,8 +736,7 @@ const PhotoViewer = ({
     if (!file) return;
     const fileId = file.fileId;
 
-    const confirmMessage =
-      'Are you sure you want to permanently delete this file? This action cannot be undone.';
+    const confirmMessage = 'Move this file to trash?';
     if (!window.confirm(confirmMessage)) return;
 
     setShowMenu(false);
@@ -946,9 +944,8 @@ const PhotoViewer = ({
 
   if (!isOpen) return null;
 
-  // Determine loading state - only show blurhash if we have NOTHING cached
+  // Determine loading state
   const isLoading = !displayUrl;
-  const hasBlurhash = file.blurhash && file.blurhash.length > 0;
   const isFullQuality = quality === 'large';
 
   return (
@@ -959,7 +956,7 @@ const PhotoViewer = ({
       onMouseLeave={handleMouseLeave}
     >
       {/* Full-screen media container */}
-      <div className="w-full h-full flex items-center justify-center">
+      <div className="w-full h-full flex items-center justify-center" style={{ direction: 'ltr' }}>
         {/* Error State */}
         {error && !displayUrl ? (
           <div className="flex flex-col items-center justify-center text-gray-400">
@@ -985,34 +982,8 @@ const PhotoViewer = ({
         ) : isVideoFile ? (
           /* Video Player */
           <>
-            {/* Blurhash placeholder while video loads */}
-            {hasBlurhash && !displayUrl && (
-              <div className="w-full h-full flex items-center justify-center">
-                <div
-                  className="max-w-full max-h-full"
-                  style={{
-                    aspectRatio:
-                      file.width && file.height
-                        ? `${file.width}/${file.height}`
-                        : '16/9',
-                    width: '100%',
-                    height: '100%',
-                    maxWidth: file.width ? `${file.width}px` : '100%',
-                    maxHeight: file.height ? `${file.height}px` : '100%',
-                  }}
-                >
-                  <BlurhashCanvas
-                    hash={file.blurhash}
-                    width={64}
-                    height={64}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Loading spinner for video */}
-            {!displayUrl && !hasBlurhash && (
+            {!displayUrl && (
               <div className="flex flex-col items-center justify-center text-gray-400">
                 <div className="animate-spin rounded-full h-12 w-12 border-2 border-white border-t-transparent mb-4"></div>
                 <p>Loading video...</p>
@@ -1023,6 +994,7 @@ const PhotoViewer = ({
             {displayUrl && (
               <div
                 className="relative w-full h-full flex items-center justify-center cursor-pointer"
+                style={{ direction: 'ltr' }}
                 onClick={handleVideoClick}
               >
                 <video
@@ -1152,6 +1124,7 @@ const PhotoViewer = ({
                     <TransformComponent
                       wrapperClass="!w-full !h-full !overflow-hidden"
                       contentClass="flex items-center justify-center"
+                      contentStyle={{ direction: 'ltr' }}
                       wrapperStyle={{
                         width: '100%',
                         height: '100%',
@@ -1166,6 +1139,9 @@ const PhotoViewer = ({
                           maxHeight: '100vh',
                           width: 'auto',
                           height: 'auto',
+                          // RTL fix: Ensure proper positioning in RTL mode
+                          margin: '0 auto',
+                          display: 'block',
                           // Smooth transition when upgrading medium->large (same dimensions)
                           transition: 'opacity 0.2s ease-in-out'
                         }}
@@ -1242,7 +1218,7 @@ const PhotoViewer = ({
                 <button
                   onClick={() => skipTime(-10)}
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title="Rewind 10s"
+                  title={t('video.rewind', 'Rewind 10s')}
                 >
                   <svg
                     className="w-5 h-5 text-white"
@@ -1257,7 +1233,7 @@ const PhotoViewer = ({
                 <button
                   onClick={() => skipTime(10)}
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title="Forward 10s"
+                  title={t('video.forward', 'Forward 10s')}
                 >
                   <svg
                     className="w-5 h-5 text-white"
@@ -1315,7 +1291,7 @@ const PhotoViewer = ({
                 <button
                   onClick={toggleFullscreen}
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title="Fullscreen (F)"
+                  title={t('video.fullscreen', 'Fullscreen (F)')}
                 >
                   {isFullscreen ? (
                     <svg
@@ -1353,7 +1329,7 @@ const PhotoViewer = ({
           className={`p-3 rounded-full text-white transition-colors ${
             showInfoPanel ? 'bg-white/20' : 'bg-black/60 hover:bg-black/80'
           }`}
-          title="File info"
+          title={t('fileInfo', 'File info')}
         >
           <svg
             className="w-5 h-5"
@@ -1377,7 +1353,7 @@ const PhotoViewer = ({
             className={`p-3 rounded-full text-white transition-colors ${
               showMenu ? 'bg-white/20' : 'bg-black/60 hover:bg-black/80'
             }`}
-            title="More options"
+            title={t('moreOptions', 'More options')}
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
@@ -1408,7 +1384,7 @@ const PhotoViewer = ({
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
-                Add to Album
+                {t('addToAlbum', 'Add to Album')}
               </button>
 
               {/* Download */}
@@ -1437,7 +1413,31 @@ const PhotoViewer = ({
                     />
                   </svg>
                 )}
-                Download
+                {downloading ? t('downloading', 'Downloading...') : t('download', 'Download')}
+              </button>
+
+              {/* Share */}
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  onShare?.(file);
+                }}
+                className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
+              >
+                <svg
+                  className="w-5 h-5 mr-3 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                  />
+                </svg>
+                {t('share', 'Share')}
               </button>
 
               {/* Divider */}
@@ -1461,7 +1461,7 @@ const PhotoViewer = ({
                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                   />
                 </svg>
-                Delete
+                {t('delete', 'Delete')}
               </button>
             </div>
           )}
@@ -1555,7 +1555,7 @@ const PhotoViewer = ({
         <div className="flex flex-col h-full">
           {/* Panel Header */}
           <div className="flex items-center justify-between p-4 border-b border-zinc-700">
-            <h3 className="text-white font-medium">File Info</h3>
+            <h3 className="text-white font-medium">{t('fileInfo', 'File Info')}</h3>
             <button
               onClick={() => setShowInfoPanel(false)}
               className="p-2 hover:bg-zinc-800 rounded-full text-gray-400 hover:text-white transition-colors"
@@ -1592,12 +1592,12 @@ const PhotoViewer = ({
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                  Filename
+                  {t('filename', 'Filename')}
                 </div>
                 <button
                   onClick={() => setShowRenameModal(true)}
                   className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
-                  title="Rename file"
+                  title={t('renameFile', 'Rename file')}
                 >
                   <svg
                     className="w-4 h-4"
@@ -1615,7 +1615,7 @@ const PhotoViewer = ({
                 </button>
               </div>
               <div className="text-white text-sm break-all">
-                {decryptedFileName || 'Unknown'}
+                {decryptedFileName || t('unknown', 'Unknown')}
               </div>
             </div>
 
@@ -1623,8 +1623,8 @@ const PhotoViewer = ({
             {file?.width && file?.height && (
               <div className="space-y-1">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                  Resolution
-                </div>
+                {t('resolution', 'Resolution')}
+              </div>
                 <div className="text-white text-sm">
                   {getMegapixels(file.width, file.height)} • {file.width} ×{' '}
                   {file.height}
@@ -1635,7 +1635,7 @@ const PhotoViewer = ({
             {/* File Size */}
             <div className="space-y-1">
               <div className="text-gray-500 text-xs uppercase tracking-wide">
-                Size
+                {t('size', 'Size')}
               </div>
               <div className="text-white text-sm">
                 {formatFileSize(file?.sizeBytes)}
@@ -1646,7 +1646,7 @@ const PhotoViewer = ({
             {getCategory(file?.mimeType) && (
               <div className="space-y-1">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                  Type
+                  {t('type', 'Type')}
                 </div>
                 <div className="text-white text-sm">
                   {getCategory(file?.mimeType)}
@@ -1658,7 +1658,7 @@ const PhotoViewer = ({
             {isVideoFile && file?.duration && (
               <div className="space-y-1">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                  Duration
+                  {t('duration', 'Duration')}
                 </div>
                 <div className="text-white text-sm">
                   {formatVideoDuration(file.duration)}
@@ -1669,10 +1669,10 @@ const PhotoViewer = ({
             {/* MIME Type */}
             <div className="space-y-1">
               <div className="text-gray-500 text-xs uppercase tracking-wide">
-                Format
+                {t('format', 'Format')}
               </div>
               <div className="text-white text-sm">
-                {file?.mimeType || 'Unknown'}
+                {file?.mimeType || t('unknown', 'Unknown')}
               </div>
             </div>
           </div>

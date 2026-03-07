@@ -1,18 +1,22 @@
+import { useTranslation } from 'react-i18next';
+
 const GridSizeControl = ({ size, onSizeChange }) => {
+  const { t } = useTranslation('photos');
+  
   const sizes = [
-    { value: 'small', icon: 'S', label: 'Small' },
-    { value: 'medium', icon: 'M', label: 'Medium' },
-    { value: 'large', icon: 'L', label: 'Large' },
+    { value: 'small', icon: 'S', label: t('gridSize.small', 'Small') },
+    { value: 'medium', icon: 'M', label: t('gridSize.medium', 'Medium') },
+    { value: 'large', icon: 'L', label: t('gridSize.large', 'Large') },
   ];
 
   return (
-    <div className="flex items-center space-x-1 bg-gray-100 dark:bg-zinc-800 p-1">
+    <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 p-0.5 sm:p-1 rounded">
       {sizes.map((s) => (
         <button
           key={s.value}
           onClick={() => onSizeChange(s.value)}
           className={`
-            px-3 py-1.5 text-xs font-medium transition-all
+            px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium transition-all rounded
             ${
               size === s.value
                 ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm'

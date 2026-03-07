@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { userService } from '../../../services';
+import { useAuth } from '../../../context';
 
 // Format bytes to human readable format
 const formatBytes = (bytes, decimals = 2) => {
@@ -14,9 +15,13 @@ const formatBytes = (bytes, decimals = 2) => {
 
 const StorageSection = () => {
   const { t } = useTranslation('settings');
+  const { user, setUser } = useAuth();
   const [storageData, setStorageData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [trashRetentionDays, setTrashRetentionDays] = useState(30);
+  const [savingRetention, setSavingRetention] = useState(false);
+  const [retentionSuccess, setRetentionSuccess] = useState(false);
 
   useEffect(() => {
     const fetchStorageUsage = async () => {
@@ -33,6 +38,30 @@ const StorageSection = () => {
 
     fetchStorageUsage();
   }, []);
+
+  useEffect(() => {
+    if (user?.trashRetentionDays) {
+      setTrashRetentionDays(user.trashRetentionDays);
+    }
+  }, [user?.trashRetentionDays]);
+
+  const handleSaveRetention = async () => {
+    setSavingRetention(true);
+    setError('');
+    setRetentionSuccess(false);
+
+    try {
+      await userService.updateProfile({ trashRetentionDays });
+      setUser((prev) => ({ ...prev, trashRetentionDays }));
+      setRetentionSuccess(true);
+      setTimeout(() => setRetentionSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to update trash retention:', err);
+      setError('Failed to update trash retention setting');
+    } finally {
+      setSavingRetention(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -189,6 +218,67 @@ const StorageSection = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Trash Retention Settings */}
+      <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+          Trash Settings
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          Configure how long deleted files are kept in trash before permanent deletion.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="trashRetention"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            >
+              Trash retention period (days)
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                id="trashRetention"
+                type="number"
+                min="1"
+                max="365"
+                value={trashRetentionDays}
+                onChange={(e) => setTrashRetentionDays(parseInt(e.target.value, 10))}
+                className="w-32 px-4 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-600 text-gray-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button
+                onClick={handleSaveRetention}
+                disabled={savingRetention || trashRetentionDays === user?.trashRetentionDays}
+                className="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {savingRetention ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Files in trash will be automatically deleted after {trashRetentionDays} days.
+            </p>
+          </div>
+
+          {retentionSuccess && (
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-sm">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              Trash retention updated successfully
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

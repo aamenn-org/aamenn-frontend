@@ -18,8 +18,8 @@ import fileService from '../services/file.service';
 import {
   generateThumbnails,
   generateVideoThumbnails,
-  isImageSupported,
-  isVideoSupported,
+  getFileType,
+  FILE_HANDLERS,
 } from '../utils/thumbnail';
 import {
   generateFileKey,
@@ -407,35 +407,21 @@ export function useUpload({ onFileUploaded } = {}) {
         const fileNameEncrypted = await encryptFilename(file.name, masterKey);
         updateUpload(id, { progress: 35 });
 
-        // Progressive upload: For large files, skip thumbnails to start upload faster
-        // Thumbnails can be generated asynchronously and attached later
-        const isLargeFile = file.size > PROGRESSIVE_UPLOAD_THRESHOLD;
+        // Generate thumbnails using file type handler (clean DRY approach)
         let thumbnailData = null;
+        const fileType = getFileType(file.type);
+        const handler = FILE_HANDLERS[fileType];
 
-        if (!isLargeFile) {
-          // Small files: Generate thumbnails before upload (current behavior)
-          if (isImageSupported(file.type)) {
-            try {
-              const thumbs = await generateThumbnails(file);
-              thumbnailData = await encryptThumbnails(thumbs, masterKey);
-            } catch (e) {
-              console.warn('Thumbnail generation failed:', e);
-            }
-          } else if (isVideoSupported(file.type)) {
-            try {
-              const thumbs = await generateVideoThumbnails(file);
-              thumbnailData = await encryptThumbnails(thumbs, masterKey);
-            } catch (e) {
-              console.warn('Video thumbnail generation failed:', e);
-            }
+        if (handler.generateThumbnails) {
+          try {
+            const thumbs = await handler.generateThumbnails(file);
+            thumbnailData = await encryptThumbnails(thumbs, masterKey, fileKey);
+          } catch (e) {
+            console.warn(`${fileType} thumbnail generation failed:`, e);
+            throw new Error(`Thumbnail generation failed for ${fileType} ${file.name}: ${e.message}`);
           }
-        } else {
-          console.log(
-            `[useUpload] Progressive upload: Skipping thumbnails for large file ${
-              file.name
-            } (${(file.size / 1024 / 1024).toFixed(1)}MB)`
-          );
         }
+        // Files without thumbnail support (documents, other) - no thumbnails needed
         updateUpload(id, { progress: 45 });
 
         // Combine IV + encrypted data
@@ -542,19 +528,6 @@ export function useUpload({ onFileUploaded } = {}) {
             formData.append('thumbSmall', thumbnailData.thumbSmallBase64);
             formData.append('thumbMedium', thumbnailData.thumbMediumBase64);
             formData.append('thumbLarge', thumbnailData.thumbLargeBase64);
-            formData.append(
-              'cipherThumbSmallKey',
-              thumbnailData.cipherThumbSmallKey
-            );
-            formData.append(
-              'cipherThumbMediumKey',
-              thumbnailData.cipherThumbMediumKey
-            );
-            formData.append(
-              'cipherThumbLargeKey',
-              thumbnailData.cipherThumbLargeKey
-            );
-            formData.append('blurhash', thumbnailData.blurhash || '');
             formData.append('width', String(thumbnailData.width || 0));
             formData.append('height', String(thumbnailData.height || 0));
             if (thumbnailData.duration !== undefined) {
@@ -830,31 +803,24 @@ export function useUpload({ onFileUploaded } = {}) {
 }
 
 // Helper: Encrypt thumbnails and return base64 strings (backend expects base64)
-async function encryptThumbnails(thumbs, masterKey) {
-  const smallKey = await generateFileKey();
-  const mediumKey = await generateFileKey();
-  const largeKey = await generateFileKey();
-
+async function encryptThumbnails(thumbs, masterKey, fileKey) {
   const smallData = await thumbs.small.arrayBuffer();
   const mediumData = await thumbs.medium.arrayBuffer();
   const largeData = await thumbs.large.arrayBuffer();
 
+  // Encrypt thumbnails with file key (unified approach)
   const { encryptedData: smallEnc, iv: smallIv } = await encryptFile(
     smallData,
-    smallKey
+    fileKey  // Use file key instead of master key
   );
   const { encryptedData: mediumEnc, iv: mediumIv } = await encryptFile(
     mediumData,
-    mediumKey
+    fileKey  // Use file key instead of master key
   );
   const { encryptedData: largeEnc, iv: largeIv } = await encryptFile(
     largeData,
-    largeKey
+    fileKey  // Use file key instead of master key
   );
-
-  const cipherThumbSmallKey = await encryptFileKey(smallKey, masterKey);
-  const cipherThumbMediumKey = await encryptFileKey(mediumKey, masterKey);
-  const cipherThumbLargeKey = await encryptFileKey(largeKey, masterKey);
 
   // Combine IV + encrypted data and convert to base64
   const smallCombined = new Uint8Array(smallIv.length + smallEnc.byteLength);
@@ -873,10 +839,6 @@ async function encryptThumbnails(thumbs, masterKey) {
     thumbSmallBase64: arrayBufferToBase64(smallCombined),
     thumbMediumBase64: arrayBufferToBase64(mediumCombined),
     thumbLargeBase64: arrayBufferToBase64(largeCombined),
-    cipherThumbSmallKey,
-    cipherThumbMediumKey,
-    cipherThumbLargeKey,
-    blurhash: thumbs.blurhash,
     width: thumbs.width,
     height: thumbs.height,
     duration: thumbs.duration,

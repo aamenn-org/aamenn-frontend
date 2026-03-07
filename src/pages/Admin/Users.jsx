@@ -7,6 +7,7 @@ import {
   UserX,
   UserCheck,
   ArrowUpDown,
+  Trash2,
 } from 'lucide-react';
 
 /**
@@ -46,6 +47,9 @@ const UsersPage = () => {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [actionLoading, setActionLoading] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, email, fileCount, storageBytes }
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -82,6 +86,22 @@ const UsersPage = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleDeleteUser = async () => {
+    if (!deleteConfirm) return;
+    try {
+      setDeleteLoading(true);
+      await adminService.deleteUser(deleteConfirm.id);
+      setSuccessMessage(`User ${deleteConfirm.email} and all their data have been permanently deleted.`);
+      setDeleteConfirm(null);
+      fetchUsers();
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const handleToggleStatus = async (userId, currentStatus) => {
     try {
@@ -144,6 +164,13 @@ const UsersPage = () => {
         </div>
       </div>
 
+      {/* Success */}
+      {successMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-4 rounded">
+          {successMessage}
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4">
@@ -169,6 +196,9 @@ const UsersPage = () => {
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Delete
                 </th>
               </tr>
             </thead>
@@ -249,6 +279,21 @@ const UsersPage = () => {
                         )}
                       </button>
                     </td>
+                    {/* Delete button */}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        onClick={() => setDeleteConfirm({
+                          id: user.id,
+                          email: user.email,
+                          fileCount: user.fileCount,
+                          storageBytes: user.storageBytes,
+                        })}
+                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        title="Delete user permanently"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -290,6 +335,52 @@ const UsersPage = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Delete User</h3>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+              Are you sure you want to permanently delete:
+            </p>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded p-3 mb-4 text-sm">
+              <p className="font-medium text-gray-900 dark:text-white">{deleteConfirm.email}</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                {deleteConfirm.fileCount.toLocaleString()} files &bull; {formatBytes(deleteConfirm.storageBytes)}
+              </p>
+            </div>
+            <p className="text-xs text-red-600 dark:text-red-400 mb-5">
+              ⚠️ This will permanently delete the user account, all files from storage, and all associated data. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleteLoading ? (
+                  <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Deleting...</>
+                ) : (
+                  <><Trash2 size={14} /> Delete Permanently</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

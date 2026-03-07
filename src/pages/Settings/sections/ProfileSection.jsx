@@ -1,15 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../context';
-import { userService } from '../../../services';
+import { userService, fileService } from '../../../services';
+import { getCryptoWorkerPool } from '../../../workers';
 
 const ProfileSection = () => {
   const { t } = useTranslation('settings');
-  const { user, setUser } = useAuth();
+  const { user, setUser, avatarUrl, setAvatarUrl, getMasterKey, getMasterKeyBytes } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  
+  // Avatar states
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [isDeletingAvatar, setIsDeletingAvatar] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Check if user is a Google user
   const isGoogleUser = user?.authProvider === 'google';
@@ -18,7 +24,150 @@ const ProfileSection = () => {
     if (user?.displayName) {
       setDisplayName(user.displayName);
     }
-  }, [user]);
+  }, [user?.displayName]);
+
+  const resizeImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 512;
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Canvas toBlob failed'));
+          }
+        }, 'image/jpeg', 0.9);
+        
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        reject(new Error('Image load failed'));
+      };
+    });
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        setError(t('profile.avatar.typeError'));
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        setError(t('profile.avatar.sizeError'));
+        return;
+    }
+
+    setAvatarLoading(true);
+    setError('');
+
+    try {
+      const masterKeyBytes = getMasterKeyBytes();
+      if (!masterKeyBytes) {
+        throw new Error('Vault is locked. Profile updates require an unlocked vault.');
+      }
+
+      // 1. Resize
+      const resizedBlob = await resizeImage(file);
+      const arrayBuffer = await resizedBlob.arrayBuffer();
+
+      // 2. Encrypt
+      const workerPool = getCryptoWorkerPool();
+      const encryptionResult = await workerPool.encryptFile(
+        arrayBuffer,
+        masterKeyBytes,
+        'avatar.jpg',
+        'image/jpeg'
+      );
+
+      // 3. Upload to B2 via proxy
+      const uploadResult = await fileService.uploadFile(
+        new Blob([encryptionResult.encryptedData], { type: 'application/octet-stream' }),
+        {
+          fileNameEncrypted: encryptionResult.fileNameEncrypted,
+          cipherFileKey: encryptionResult.cipherFileKey,
+          mimeType: 'image/jpeg',
+          sha1Hash: encryptionResult.sha1Hash
+        }
+      );
+
+      // 4. Update user profile with new avatarFileId
+      const updatedUser = await userService.updateProfile({
+        avatarFileId: uploadResult.fileId
+      });
+
+      setUser((prev) => ({ ...prev, ...updatedUser }));
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+      setError(err.message || t('profile.avatar.error'));
+    } finally {
+      setAvatarLoading(false);
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    if (!window.confirm(t('profile.avatar.deleteConfirm'))) return;
+
+    setIsDeletingAvatar(true);
+    setError('');
+
+    try {
+      const oldAvatarId = user?.avatarFileId;
+      
+      // 1. Update user profile (remove link)
+      const updatedUser = await userService.updateProfile({
+        avatarFileId: null
+      });
+
+      setUser((prev) => ({ ...prev, ...updatedUser }));
+      
+      // 2. Clean up file from storage (optional but recommended)
+      if (oldAvatarId) {
+        try {
+            await fileService.deleteFile(oldAvatarId);
+        } catch (delErr) {
+            console.warn('Failed to delete old avatar file:', delErr);
+        }
+      }
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(t('profile.updateError'));
+    } finally {
+      setIsDeletingAvatar(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,8 +189,96 @@ const ProfileSection = () => {
     }
   };
 
+  const renderAvatarPlaceholder = () => {
+    const initials = user?.displayName
+      ? user.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+      : user?.email?.[0].toUpperCase() || '?';
+    
+    return (
+      <div className="w-24 h-24 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 text-2xl font-bold border-2 border-white dark:border-zinc-800 shadow-sm">
+        {initials}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Profile Photo Card */}
+      <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-700 p-6">
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="relative group">
+            {avatarLoading ? (
+              <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center">
+                <svg className="animate-spin h-8 w-8 text-primary-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              </div>
+            ) : avatarUrl ? (
+              <div className="relative">
+                <img 
+                  src={avatarUrl} 
+                  alt="Profile" 
+                  className="w-24 h-24 rounded-full object-cover border-2 border-white dark:border-zinc-800 shadow-sm"
+                />
+                <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition-all duration-200" />
+              </div>
+            ) : (
+              renderAvatarPlaceholder()
+            )}
+            
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarLoading}
+              className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full 
+                flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-800 transition-all duration-200
+                disabled:opacity-50 disabled:cursor-not-allowed"
+              title={t('profile.avatar.upload')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleAvatarChange}
+              accept="image/*"
+              className="hidden"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 flex-1">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+              {user?.displayName || user?.email}
+            </h3>
+
+            
+            <div className="flex gap-4 mt-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarLoading}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
+              >
+                {t('profile.avatar.upload')}
+              </button>
+              
+              {user?.avatarFileId && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAvatar}
+                  disabled={isDeletingAvatar || avatarLoading}
+                  className="text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+                >
+                  {isDeletingAvatar ? t('common:actions.loading') : t('profile.avatar.remove')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Profile Information Card */}
       <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-700 p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
@@ -66,17 +303,15 @@ const ProfileSection = () => {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t('profile.fullNamePlaceholder')}
-              disabled={isGoogleUser}
-              className={`w-full px-4 py-3 border rounded-lg text-sm transition-all duration-200
-                ${isGoogleUser 
-                  ? 'bg-gray-100 dark:bg-zinc-900/50 border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                  : 'bg-gray-50 dark:bg-zinc-900 border-gray-200 dark:border-zinc-600 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent'
-                }`}
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-600 
+                text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-lg text-sm 
+                transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               maxLength={255}
             />
             {isGoogleUser && (
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-                Your name is managed by Google and cannot be changed here.
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">
+                {/* Note: You can now change your display name locally even if you use Google. */}
+                This will only change your name on AAMENN.
               </p>
             )}
           </div>
@@ -99,10 +334,7 @@ const ProfileSection = () => {
                 rounded-lg text-gray-500 dark:text-gray-400 text-sm cursor-not-allowed"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-              {isGoogleUser 
-                ? 'Your email is managed by Google and cannot be changed here.'
-                : t('profile.emailDescription')
-              }
+              {t('profile.emailDescription')}
             </p>
           </div>
 
@@ -145,46 +377,44 @@ const ProfileSection = () => {
             </div>
           )}
 
-          {/* Submit Button - Only show for non-Google users */}
-          {!isGoogleUser && (
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2.5 bg-primary-500 text-white text-sm font-medium rounded-lg
-                  hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-                  disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200
-                  dark:focus:ring-offset-zinc-800"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    {t('common:actions.loading')}
-                  </span>
-                ) : (
-                  t('profile.saveChanges')
-                )}
-              </button>
-            </div>
-          )}
+          {/* Submit Button */}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2.5 bg-primary-500 text-white text-sm font-medium rounded-lg
+                hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+                disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200
+                dark:focus:ring-offset-zinc-800"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  {t('common:actions.loading')}
+                </span>
+              ) : (
+                t('profile.saveChanges')
+              )}
+            </button>
+          </div>
         </form>
       </div>
     </div>

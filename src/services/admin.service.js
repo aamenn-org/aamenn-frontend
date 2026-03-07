@@ -34,6 +34,14 @@ export const getTopUsersByStorage = async (limit = 10) => {
 };
 
 /**
+ * Permanently delete a user and all their data
+ */
+export const deleteUser = async (userId) => {
+  const response = await api.delete(`/admin/users/${userId}`);
+  return response.data;
+};
+
+/**
  * Update user status (enable/disable)
  */
 export const updateUserStatus = async (userId, status) => {
@@ -69,6 +77,7 @@ export default {
   getDashboardStats,
   getUsers,
   getTopUsersByStorage, // Deprecated: use getUsers with params
+  deleteUser,
   updateUserStatus,
   getStorageStats,
   getSystemHealth,

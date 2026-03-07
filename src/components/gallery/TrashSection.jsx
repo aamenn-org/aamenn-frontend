@@ -1,0 +1,280 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { fileService } from '../../services';
+import { useAuth } from '../../context';
+import VirtualizedPhotoGrid from './VirtualizedPhotoGrid';
+
+const TrashSection = ({ onViewFile, gridSize }) => {
+  const { user } = useAuth();
+  const { t } = useTranslation('photos');
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 100,
+    total: 0,
+    totalPages: 0,
+    hasMore: true,
+  });
+
+  const fetchTrash = useCallback(async (page = 1, append = false) => {
+    try {
+      if (!append) {
+        setLoading(true);
+      }
+
+      const response = await fileService.listTrash({
+        page,
+        limit: pagination.limit,
+      });
+
+      const filesData = response.files || [];
+      const paginationData = response.pagination || {};
+
+      if (append) {
+        setFiles((prev) => {
+          const existingIds = new Set(prev.map((f) => f.fileId || f.id));
+          const newFiles = filesData.filter(
+            (f) => !existingIds.has(f.fileId || f.id)
+          );
+          return [...prev, ...newFiles];
+        });
+      } else {
+        setFiles(filesData);
+      }
+
+      setPagination((prev) => ({
+        ...prev,
+        page,
+        total: paginationData.total || 0,
+        totalPages: paginationData.totalPages || 1,
+        hasMore: page < (paginationData.totalPages || 1),
+      }));
+    } catch (error) {
+      console.error('Failed to fetch trash:', error);
+      if (!append) {
+        setFiles([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.limit]);
+
+  useEffect(() => {
+    fetchTrash(1, false);
+  }, [fetchTrash]);
+
+  const loadMoreFiles = useCallback(() => {
+    if (pagination.hasMore && !loading) {
+      fetchTrash(pagination.page + 1, true);
+    }
+  }, [pagination.page, pagination.hasMore, loading, fetchTrash]);
+
+  const handleSelectFile = (file) => {
+    const fileId = file.fileId;
+    setSelectedFiles((prev) => {
+      if (prev.includes(fileId)) {
+        return prev.filter((id) => id !== fileId);
+      }
+      return [...prev, fileId];
+    });
+  };
+
+  const handleRestore = async () => {
+    if (selectedFiles.length === 0) return;
+
+    const confirmMessage =
+      selectedFiles.length === 1
+        ? 'Restore this file?'
+        : `Restore ${selectedFiles.length} files?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      await fileService.restoreFilesBulk(selectedFiles);
+      setSelectedFiles([]);
+      await fetchTrash(1, false);
+    } catch (error) {
+      console.error('Failed to restore files:', error);
+      alert('Failed to restore files. Please try again.');
+    }
+  };
+
+  const handleDeletePermanently = async () => {
+    if (selectedFiles.length === 0) return;
+
+    const confirmMessage =
+      selectedFiles.length === 1
+        ? 'Permanently delete this file? This action cannot be undone.'
+        : `Permanently delete ${selectedFiles.length} files? This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      await fileService.deleteFilesPermanentlyBulk(selectedFiles);
+      setSelectedFiles([]);
+      await fetchTrash(1, false);
+    } catch (error) {
+      console.error('Failed to delete files:', error);
+      alert('Failed to delete files. Please try again.');
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (files.length === 0) return;
+
+    const confirmMessage = `Permanently delete all ${files.length} files in trash? This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      await fileService.emptyTrash();
+      setSelectedFiles([]);
+      await fetchTrash(1, false);
+    } catch (error) {
+      console.error('Failed to empty trash:', error);
+      alert('Failed to empty trash. Please try again.');
+    }
+  };
+
+  const getDaysRemaining = (deletedAt) => {
+    if (!deletedAt || !user?.trashRetentionDays) return null;
+    
+    const deleted = new Date(deletedAt);
+    const expiresAt = new Date(deleted);
+    expiresAt.setDate(expiresAt.getDate() + user.trashRetentionDays);
+    
+    const now = new Date();
+    const daysLeft = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+    
+    return daysLeft > 0 ? daysLeft : 0;
+  };
+
+  if (loading && files.length === 0) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {[...Array(10)].map((_, i) => (
+          <div
+            key={i}
+            className="aspect-square bg-gray-200 dark:bg-zinc-700 rounded-xl animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (files.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
+          <svg
+            className="w-12 h-12 text-gray-300 dark:text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          {t('trash.empty.title', 'Trash is empty')}
+        </h3>
+        <p className="text-gray-500 dark:text-gray-400 text-center max-w-md">
+          {t('trash.empty.description', 'Deleted files will appear here and be automatically removed after {{days}} days.', { days: user?.trashRetentionDays || 30 })}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header with actions */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {selectedFiles.length > 0 && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {t('selected', '{{count}} selected', { count: selectedFiles.length })}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {selectedFiles.length > 0 && (
+            <>
+              <button
+                onClick={handleRestore}
+                className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors rounded-lg"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {t('restore', 'Restore')}
+              </button>
+              <button
+                onClick={handleDeletePermanently}
+                className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors rounded-lg"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+                {t('deleteForever', 'Delete Forever')}
+              </button>
+            </>
+          )}
+
+          {files.length > 0 && (
+            <button
+              onClick={handleEmptyTrash}
+              className="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors rounded-lg"
+            >
+              {t('emptyTrash', 'Empty Trash')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Files grid */}
+      <VirtualizedPhotoGrid
+        files={files}
+        selectedFiles={selectedFiles}
+        onSelectFile={handleSelectFile}
+        onViewFile={onViewFile}
+        loading={loading}
+        hasMore={pagination.hasMore}
+        onLoadMore={loadMoreFiles}
+        gridSize={gridSize}
+        emptyMessage={t('trash.empty.title', 'Trash is empty')}
+        showDaysRemaining={true}
+        getDaysRemaining={getDaysRemaining}
+      />
+    </div>
+  );
+};
+
+export default TrashSection;

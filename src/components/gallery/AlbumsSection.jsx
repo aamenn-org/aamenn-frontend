@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { albumService } from '../../services';
 import { useAuth } from '../../context';
 import { encryptFilename, decryptFilename } from '../../utils/crypto';
 
 const AlbumsSection = ({ onAlbumSelect }) => {
+  const { t } = useTranslation(['albums', 'common']);
   const { getMasterKey, hasMasterKey } = useAuth();
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,14 +32,14 @@ const AlbumsSection = ({ onAlbumSelect }) => {
               return { ...album, title: decryptedTitle };
             } catch (error) {
               console.warn('Failed to decrypt album title:', error);
-              return { ...album, title: 'Encrypted Album' };
+              return { ...album, title: t('encryptedAlbum', 'Encrypted Album') };
             }
           })
         );
         setAlbums(decryptedAlbums);
       } else {
         setAlbums(
-          albumsData.map((album) => ({ ...album, title: 'Encrypted Album' }))
+          albumsData.map((album) => ({ ...album, title: t('encryptedAlbum', 'Encrypted Album') }))
         );
       }
     } catch (error) {
@@ -76,7 +78,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
   };
 
   const handleDeleteAlbum = async (albumId) => {
-    if (!confirm('Delete this album? Photos will not be deleted.')) return;
+    if (!confirm(t('confirmDelete.message', 'Delete this album? Photos will not be deleted.'))) return;
 
     try {
       await albumService.deleteAlbum(albumId);
@@ -121,7 +123,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
               d="M12 4v16m8-8H4"
             />
           </svg>
-          New Album
+          {t('createAlbum', 'New Album')}
         </button>
       </div>
 
@@ -144,10 +146,10 @@ const AlbumsSection = ({ onAlbumSelect }) => {
             </svg>
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            No albums yet
+            {t('empty.title', 'No albums yet')}
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-            Create your first album to organize your photos.
+            {t('empty.description', 'Create your first album to organize your photos.')}
           </p>
         </div>
       ) : (
@@ -177,7 +179,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
                   {album.title}
                 </span>
                 <span className="text-white/70 text-xs mt-1">
-                  {album.fileCount || 0} photos
+                  {t('photoCount', '{{count}} photos', { count: album.fileCount || 0 })}
                 </span>
               </div>
 
@@ -213,13 +215,13 @@ const AlbumsSection = ({ onAlbumSelect }) => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-zinc-800 p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Create Album
+              {t('create.title', 'Create Album')}
             </h2>
             <input
               type="text"
               value={newAlbumName}
               onChange={(e) => setNewAlbumName(e.target.value)}
-              placeholder="Album name"
+              placeholder={t('namePlaceholder', 'Album name')}
               className="w-full px-4 py-3 border border-gray-200 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-zinc-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
               autoFocus
               onKeyDown={(e) => {
@@ -232,14 +234,14 @@ const AlbumsSection = ({ onAlbumSelect }) => {
                 onClick={() => setShowCreateModal(false)}
                 className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
               >
-                Cancel
+                {t('cancel', 'Cancel')}
               </button>
               <button
                 onClick={handleCreateAlbum}
                 disabled={!newAlbumName.trim() || creating}
                 className="px-4 py-2 bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
               >
-                {creating ? 'Creating...' : 'Create'}
+                {creating ? t('creating', 'Creating...') : t('create', 'Create')}
               </button>
             </div>
           </div>

@@ -31,7 +31,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Changa', 'system-ui', '-apple-system', 'sans-serif'],
+        arabic: ['Aref Ruqaa', 'serif'],
+        tech: ['Electrolize', 'sans-serif'],
       },
     },
   },

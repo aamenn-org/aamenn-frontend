@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Upload states - matches useUpload hook
 const UploadStatus = {
@@ -31,6 +32,7 @@ const UploadProgressPanel = ({
   isMinimized = false,
   onToggleMinimize,
 }) => {
+  const { t } = useTranslation('photos');
   const {
     total,
     queued,
@@ -52,6 +54,9 @@ const UploadProgressPanel = ({
     queued === 0 &&
     interrupted === 0 &&
     hashing === 0;
+
+  // Calculate progress based on completed files, not bytes
+  const filesProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   if (!hasUploads) return null;
 
@@ -81,22 +86,22 @@ const UploadProgressPanel = ({
                 stroke={isComplete ? '#10b981' : '#3b82f6'}
                 strokeWidth="4"
                 fill="none"
-                strokeDasharray={`${overallProgress} 100`}
+                strokeDasharray={`${filesProgress} 100`}
                 strokeLinecap="round"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
-              {overallProgress}%
+              {filesProgress}%
             </span>
           </div>
 
           {/* Status text */}
           <div className="text-sm">
             {isComplete ? (
-              <span className="text-green-600 font-medium">Complete</span>
+              <span className="text-green-600 font-medium">{t('upload.complete', 'Complete')}</span>
             ) : (
               <span className="text-gray-600">
-                Uploading {active + queued} files...
+                {t('upload.uploadingFiles', 'Uploading {{count}} files...', { count: active + queued })}
               </span>
             )}
           </div>
@@ -166,7 +171,7 @@ const UploadProgressPanel = ({
             className={`h-2 rounded-full transition-all duration-300 ${
               isComplete ? 'bg-green-500' : 'bg-blue-500'
             }`}
-            style={{ width: `${overallProgress}%` }}
+            style={{ width: `${filesProgress}%` }}
           />
         </div>
       </div>
@@ -176,10 +181,12 @@ const UploadProgressPanel = ({
       <div className="px-4 py-2 bg-gray-50 dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700">
         <div className="flex items-center justify-between text-sm">
           {!isComplete && (
-            <span className="text-gray-600 dark:text-gray-400">Uploading...</span>
+            <span className="text-gray-600 dark:text-gray-400">
+              {completed} of {total} files uploaded
+            </span>
           )}
           {isComplete && completed > 0 && (
-            <span className="text-green-600 dark:text-green-500">✓ {completed} uploaded</span>
+            <span className="text-green-600 dark:text-green-500">✓ {completed} of {total} uploaded</span>
           )}
           {failed > 0 && (
             <span className="text-red-600 dark:text-red-500">✗ {failed} failed</span>
