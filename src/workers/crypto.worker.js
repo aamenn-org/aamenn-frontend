@@ -189,7 +189,11 @@ async function encryptFileChunked(fileData, fileKey, onProgress) {
 
   // For files under chunk size, encrypt directly
   if (totalSize <= CHUNK_SIZE) {
-    const { encryptedData } = await encryptData(fileData, fileKey);
+    const encryptedData = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      fileKey,
+      fileData
+    );
     const combined = new Uint8Array(iv.length + encryptedData.byteLength);
     combined.set(iv, 0);
     combined.set(new Uint8Array(encryptedData), iv.length);
@@ -394,6 +398,13 @@ self.onmessage = async function (e) {
         // Payload: { encryptedData, cipherFileKeyBase64, masterKeyBytes }
         const { encryptedData, cipherFileKeyBase64, masterKeyBytes } = payload;
 
+        console.log('🔐 Worker DECRYPT_FILE called:', {
+          encryptedDataSize: encryptedData.byteLength,
+          cipherFileKeyBase64Length: cipherFileKeyBase64.length,
+          masterKeyBytesLength: masterKeyBytes.byteLength,
+          id
+        });
+
         // Import master key
         const masterKey = await importMasterKey(masterKeyBytes);
 
@@ -442,6 +453,7 @@ self.onmessage = async function (e) {
         break;
       }
 
+      
       default:
         throw new Error(`Unknown message type: ${type}`);
     }

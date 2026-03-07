@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { authService } from '../../services';
 import { unlockMasterKeyWithRecovery, encryptMasterKey, deriveKEK, generateRandomBytes, arrayBufferToBase64 } from '../../utils/crypto';
 
 const ForgotPasswordPage = () => {
+  const { t } = useTranslation('common');
   const [step, setStep] = useState('email'); // email | otp | recovery | success
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +25,7 @@ const ForgotPasswordPage = () => {
       await authService.vaultResetRequest(email.trim());
       setStep('otp');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send reset code.');
+      setError(err.response?.data?.message || t('errors.generic', 'Failed to send reset code.'));
     } finally {
       setLoading(false);
     }
@@ -66,9 +68,9 @@ const ForgotPasswordPage = () => {
     } catch (err) {
       console.error('Vault reset failed:', err);
       if (err.name === 'OperationError') {
-        setError('Invalid recovery key. Please check and try again.');
+        setError(t('errors.invalidRecoveryKey', 'Invalid recovery key. Please check and try again.'));
       } else {
-        setError(err.response?.data?.message || 'Reset failed. Please try again.');
+        setError(err.response?.data?.message || t('errors.generic', 'Reset failed. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -82,7 +84,7 @@ const ForgotPasswordPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="AMMENN Logo" className="w-16 h-16" />
+          <img src="/logo3.png" alt="AMMENN Logo" className="w-16 h-16" />
         </div>
 
         {error && (
@@ -95,23 +97,23 @@ const ForgotPasswordPage = () => {
         {step === 'email' && (
           <>
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-white mb-2">Forgot password?</h1>
-              <p className="text-gray-400 text-sm">Enter your email and we'll send a verification code.</p>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('auth.forgotYourPassword', 'Forgot password?')}</h1>
+              <p className="text-gray-400 text-sm">{t('auth.weSendVerificationCode', 'Enter your email and we\'ll send a verification code.')}</p>
             </div>
             <form onSubmit={handleRequestOtp} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1.5">Email</label>
-                <input type="email" placeholder="Enter your email" value={email}
+                <label className="block text-sm font-medium text-gray-400 mb-1.5">{t('auth.email', 'Email')}</label>
+                <input type="email" placeholder={t('auth.enterYourEmail', 'Enter your email')} value={email}
                   onChange={(e) => setEmail(e.target.value)} className={inputClass} required autoFocus />
               </div>
               <button type="submit" disabled={loading} className={btnClass}>
-                {loading ? 'Sending...' : 'Send verification code'}
+                {loading ? t('auth.sending', 'Sending...') : t('auth.sendVerificationCode', 'Send verification code')}
               </button>
               <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-gray-300 mt-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to login
+                {t('auth.backToLogin', 'Back to login')}
               </Link>
             </form>
           </>
@@ -121,7 +123,7 @@ const ForgotPasswordPage = () => {
         {step === 'otp' && (
           <>
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-white mb-2">Enter verification code</h1>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('auth.enterVerificationCode', 'Enter verification code')}</h1>
               <p className="text-gray-400 text-sm">
                 We sent a 6-digit code to <span className="text-white font-medium">{email}</span>
               </p>
@@ -134,7 +136,7 @@ const ForgotPasswordPage = () => {
                   required autoFocus />
               </div>
               <button type="submit" disabled={loading || otp.length !== 6} className={btnClass}>
-                {loading ? 'Verifying...' : 'Verify code'}
+                {loading ? t('auth.verifying', 'Verifying...') : t('auth.verifyCode', 'Verify code')}
               </button>
               <button type="button" onClick={() => { setStep('email'); setError(''); }}
                 className="w-full text-sm text-gray-400 hover:text-gray-300">
@@ -148,7 +150,7 @@ const ForgotPasswordPage = () => {
         {step === 'recovery' && (
           <>
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-white mb-2">Reset your password</h1>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('auth.resetPassword', 'Reset your password')}</h1>
               <p className="text-gray-400 text-sm">
                 Enter your recovery key and choose a new password.
               </p>
@@ -172,7 +174,7 @@ const ForgotPasswordPage = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} required />
               </div>
               <button type="submit" disabled={loading} className={btnClass}>
-                {loading ? 'Resetting...' : 'Reset password'}
+                {loading ? t('auth.resetting', 'Resetting...') : t('auth.resetPassword', 'Reset password')}
               </button>
             </form>
           </>
@@ -191,7 +193,7 @@ const ForgotPasswordPage = () => {
             <h1 className="text-3xl font-bold text-white mb-2">Password reset!</h1>
             <p className="text-gray-400 mb-6">Your vault password has been updated. You can now log in with your new password.</p>
             <Link to="/login" className={btnClass + ' inline-block text-center'}>
-              Go to login
+              {t('auth.goToLogin', 'Go to login')}
             </Link>
           </div>
         )}

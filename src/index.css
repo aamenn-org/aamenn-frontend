@@ -6,7 +6,7 @@
 @layer base {
   body {
     @apply bg-white text-gray-900 antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Changa', system-ui, -apple-system, sans-serif;
   }
 
   /* Dark mode base styles - applied when html has dark class */
@@ -48,4 +48,97 @@ html.dark ::-webkit-scrollbar-thumb {
 
 html.dark ::-webkit-scrollbar-thumb:hover {
   @apply bg-zinc-500;
+}
+
+/* Custom Font Classes */
+.changa-light {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 200;
+  font-style: normal;
+}
+
+.changa-regular {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.changa-medium {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-style: normal;
+}
+
+.changa-semibold {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.changa-bold {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.changa-extrabold {
+  font-family: "Changa", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 800;
+  font-style: normal;
+}
+
+.aref-ruqaa-regular {
+  font-family: "Aref Ruqaa", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.aref-ruqaa-bold {
+  font-family: "Aref Ruqaa", serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.electrolize-regular {
+  font-family: "Electrolize", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* RTL Fixes for Image Positioning */
+[dir="rtl"] .transform-component {
+  direction: ltr;
+}
+
+[dir="rtl"] .transform-component-wrapper {
+  direction: ltr;
+}
+
+[dir="rtl"] .photo-viewer-container {
+  direction: ltr;
+}
+
+[dir="rtl"] img {
+  margin: 0 auto;
+  display: block;
+}
+
+[dir="rtl"] .react-transform-element {
+  direction: ltr;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

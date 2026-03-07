@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "photos": "الصور",
+    "files": "الملفات",
+    "albums": "الألبومات",
+    "favorites": "المفضلة",
+    "trash": "المحذوفات"
+  },
+  "cancel": "إلغاء",
+  "uploadFiles": "رفع الملفات",
+  "upload": {
+    "dragDrop": "اسحب وأفلت ملفاتك هنا، أو انقر للاستعراض",
+    "supported": "مدعوم: الصور، الفيديو، PDF، DOCX، TXT",
+    "encrypting": "جاري التشفير والرفع...",
+    "uploading": "جاري الرفع...",
+    "uploadFiles": "رفع {{count}} ملف",
+    "complete": "مكتمل",
+    "uploadingFiles": "رفع {{count}} ملفات..."
+  },
+  "delete": "حذف",
+  "share": "مشاركة",
+  "addToAlbum": "إضافة إلى الألبوم",
+  "selected": "{{count}} محدد",
+  "storage": {
+    "title": "التخزين",
+    "limitReached": "تم تجاوز حد التخزين. احذف الملفات لرفع المزيد."
+  },
+  "gridSize": {
+    "small": "صغير",
+    "medium": "متوسط",
+    "large": "كبير"
+  },
+  "fileInfo": "معلومات الملف",
+  "moreOptions": "المزيد من الخيارات",
+  "filename": "اسم الملف",
+  "renameFile": "إعادة تسمية الملف",
+  "resolution": "الدقة",
+  "size": "الحجم",
+  "type": "النوع",
+  "format": "الصيغة",
+  "duration": "المدة",
+  "unknown": "غير معروف",
+  "download": "تحميل",
+  "downloading": "جاري التحميل...",
+  "restore": "استعادة",
+  "deleteForever": "حذف نهائي",
+  "emptyTrash": "إفراغ المحذوفات",
+  "video": {
+    "rewind": "إرجاع 10 ثوانٍ",
+    "forward": "تقديم 10 ثوانٍ",
+    "fullscreen": "ملء الشاشة (F)"
+  },
+  "favorites": {
+    "empty": {
+      "title": "لا توجد مفضلات بعد",
+      "description": "اضغط على أيقونة القلب على أي صورة لإضافتها إلى المفضلات."
+    }
+  },
+  "trash": {
+    "empty": {
+      "title": "المحذوفات فارغة",
+      "description": "ستظهر الملفات المحذوفة هنا وستتم إزالتها تلقائياً بعد {{days}} يوم."
+    }
+  },
+  "empty": {
+    "photos": "لا توجد صور بعد"
+  },
+  "vault": {
+    "locked": "الخزنة مقفلة",
+    "unlockDescription": "أدخل كلمة مرور الخزنة لفتح ملفاتك المشفرة",
+    "createPassword": "إنشاء كلمة مرور",
+    "setupDescription": "إعداد التشفير لملفاتك",
+    "passwordMinLength": "كلمة مرور الخزنة يجب أن تكون على الأقل 8 أحرف",
+    "passwordMismatch": "كلمات المرور غير متطابقة",
+    "passwordPlaceholder": "إنشاء كلمة مرور قوية",
+    "passwordMinLengthHint": "يجب أن تكون على الأقل 8 أحرف",
+    "confirmPasswordPlaceholder": "تأكيد كلمة المرور",
+    "settingUp": "جاري الإعداد..."
+  }
+}

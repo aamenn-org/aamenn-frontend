@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { generateRegistrationKeys, generateRecoveryParams } from '../../utils/crypto';
 import { userService } from '../../services';
 import RecoveryKeyDownloadPrompt from '../RecoveryKeyDownloadPrompt';
@@ -11,6 +12,7 @@ import RecoveryKeyDownloadPrompt from '../RecoveryKeyDownloadPrompt';
  * @param {function} onSetup - Callback with master key when setup is complete
  */
 const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
+  const { t } = useTranslation('photos');
   // Check if master key is already available (from AuthContext)
   const hasMasterKey = () => {
     try {
@@ -32,12 +34,12 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
 
     // Validate password
     if (password.length < 8) {
-      setError('Vault Password must be at least 8 characters');
+      setError(t('vault.passwordMinLength', 'Vault Password must be at least 8 characters'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('vault.passwordMismatch', 'Passwords do not match'));
       return;
     }
 
@@ -85,9 +87,9 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
         recoveryPhrase={recoveryPhrase}
         onDismiss={() => {
           setRecoveryPhrase(null);
-          // Only call onSetup if we haven't already set up the master key
+          // Call onSetup with master key and recovery phrase
           if (pendingMasterKey && !hasMasterKey()) {
-            onSetup(pendingMasterKey);
+            onSetup(pendingMasterKey, recoveryPhrase);
             setPendingMasterKey(null);
           }
           // Don't call onClose() - let the parent handle the redirect after successful setup
@@ -107,8 +109,8 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-lg font-semibold text-white">Create Password</h3>
-            <p className="text-sm text-gray-400">Set up encryption for your files</p>
+            <h3 className="text-lg font-semibold text-white">{t('vault.createPassword', 'Create Password')}</h3>
+            <p className="text-sm text-gray-400">{t('vault.setupDescription', 'Set up encryption for your files')}</p>
           </div>
         </div>
 
@@ -119,13 +121,13 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Create a strong password"
+              placeholder={t('vault.passwordPlaceholder', 'Create a strong password')}
               className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
               required
               minLength={8}
             />
-            <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
+            <p className="text-xs text-gray-500 mt-1">{t('vault.passwordMinLengthHint', 'Must be at least 8 characters')}</p>
           </div>
 
           <div>
@@ -134,7 +136,7 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm your password"
+              placeholder={t('vault.confirmPasswordPlaceholder', 'Confirm your password')}
               className="w-full px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
               minLength={8}
@@ -153,7 +155,7 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
               disabled={loading || !password || !confirmPassword}
               className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
             >
-              {loading ? 'Setting up...' : 'Create Password'}
+              {loading ? t('vault.settingUp', 'Setting up...') : t('vault.createPassword', 'Create Password')}
             </button>
           </div>
         </form>

@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const UploadModal = ({ isOpen, onClose, onUpload }) => {
+  const { t } = useTranslation('photos');
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -67,7 +69,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
       <div className="relative bg-white dark:bg-zinc-800 rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload Files</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{t('uploadFiles', 'Upload Files')}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
@@ -119,10 +121,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             </svg>
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
-            Drag and drop your files here, or click to browse
+            {t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Supported: Images, Videos, PDF, DOCX, TXT
+            {t('upload.supported', 'Supported: Images, Videos, PDF, DOCX, TXT')}
           </p>
           <input
             ref={fileInputRef}
@@ -186,7 +188,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {uploading && (
           <div className="mt-4">
             <div className="flex items-center justify-between text-sm mb-1">
-              <span className="text-gray-600 dark:text-gray-300">Encrypting and uploading...</span>
+              <span className="text-gray-600 dark:text-gray-300">{t('upload.encrypting', 'Encrypting and uploading...')}</span>
               <span className="text-gray-900 dark:text-white font-medium">{progress}%</span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-zinc-700 h-2">
@@ -205,7 +207,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             disabled={uploading}
             className="px-4 py-2 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
           >
-            Cancel
+            {t('cancel', 'Cancel')}
           </button>
           <button
             onClick={handleUpload}
@@ -213,8 +215,8 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             className="px-4 py-2 bg-blue-500 text-white font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {uploading
-              ? 'Uploading...'
-              : `Upload ${files.length} file${files.length !== 1 ? 's' : ''}`}
+              ? t('upload.uploading', 'Uploading...')
+              : t('upload.uploadFiles', 'Upload {{count}} file', { count: files.length })}
           </button>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { unlockMasterKey } from '../../utils/crypto';
 import { userService } from '../../services';
 
 const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
+  const { t } = useTranslation('photos');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -80,10 +82,10 @@ const UnlockModal = ({ isOpen, onClose, onUnlocked }) => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
-                Vault Locked
+                {t('vault.locked', 'Vault Locked')}
               </h3>
               <p className="text-sm text-gray-400">
-                Enter your Vault Password to unlock your encrypted files
+                {t('vault.unlockDescription', 'Enter your Vault Password to unlock your encrypted files')}
               </p>
             </div>
           </div>

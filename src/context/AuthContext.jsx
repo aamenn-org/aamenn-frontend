@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { authService, userService } from '../services';
+import { authService, userService, fileService, thumbnailCache } from '../services';
 import { generateRegistrationKeys, unlockMasterKey, generateRecoveryParams } from '../utils/crypto';
 import { triggerWarmup, resetPrewarmer } from '../services/upload-prewarmer';
+import { getCryptoWorkerPool } from '../workers';
 
 const AuthContext = createContext(null);
 
@@ -125,6 +126,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [masterKeyAvailable, setMasterKeyAvailable] = useState(false);
   const [userRole, setUserRole] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
 
   // Master key stored in memory (ref) for quick access
   // Also persisted in localStorage (3-hour timeout) for session resilience
@@ -152,7 +154,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Check if user is already authenticated on mount
+    let cancelled = false; // Guard against StrictMode double-invocation race conditions
+
     const checkAuth = async () => {
       const token = authService.getAccessToken();
 
@@ -168,18 +171,43 @@ export const AuthProvider = ({ children }) => {
         // Fetch full user profile from backend
         try {
           const userData = await userService.getCurrentUser();
+          if (cancelled) return;
           setUser(userData);
         } catch (err) {
+          if (cancelled) return;
           console.error('Failed to fetch user profile:', err);
-          // Fallback to stored email if API fails
+
+          // Check if user was deleted — ApiError uses .code (HTTP status) and .type
+          const isUserGone =
+            err?.code === 404 || err?.code === 409 ||
+            err?.type === 'NOT_FOUND_ERROR' || err?.type === 'CONFLICT_ERROR' ||
+            err?.response?.status === 404 || err?.response?.status === 409;
+
+          if (isUserGone) {
+            console.log('User account no longer exists, clearing session and redirecting to login');
+            // Clear all storage first so the login page starts clean
+            authService.logout();
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem(USER_ROLE_KEY);
+            clearStoredMasterKey();
+            clearEncryptionParams();
+            // Hard redirect — bypasses any React state/routing issues
+            window.location.href = '/login';
+            return;
+          }
+
+          // Fallback to stored email only for transient network errors
           const storedEmail = localStorage.getItem('userEmail');
           if (storedEmail) {
             setUser({ email: storedEmail });
           }
         }
 
+        if (cancelled) return;
+
         // Try to restore master key from localStorage (if not expired)
         const storedKey = await retrieveMasterKey();
+        if (cancelled) return;
         if (storedKey) {
           masterKeyRef.current = storedKey;
           await cacheMasterKeyBytes(storedKey); // Pre-export bytes for performance
@@ -190,10 +218,56 @@ export const AuthProvider = ({ children }) => {
           triggerWarmup();
         }
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     };
+
     checkAuth();
+    return () => { cancelled = true; };
   }, []);
+
+  /**
+   * Effect to load/decrypt avatar whenever avatarFileId or masterKeyBytes changes
+   * Reuses the 3-layer cache (Memory -> IndexedDB -> Network) for instant loading
+   */
+  useEffect(() => {
+    const loadAvatar = async () => {
+      if (!user?.avatarFileId) {
+        setAvatarUrl(null);
+        return;
+      }
+
+      if (!masterKeyAvailable) return;
+      const mk = getMasterKey();
+      if (!mk) return;
+
+      try {
+        // 1. Get file metadata (required for URL and Key)
+        const fileData = await fileService.getFile(user.avatarFileId);
+        
+        // 2. Use 3-layer cache system (handles L1 memory, L2 IndexedDB, L3 Decryption)
+        // treating avatar as a high-priority thumbnail
+        const cachedUrl = await thumbnailCache.getThumbnailWithPriority(
+          user.avatarFileId,
+          fileData.downloadUrl,
+          mk,
+          fileData.cipherFileKey,
+          {
+            priority: 'high',
+            masterKeyBytes: getMasterKeyBytes()
+          }
+        );
+        
+        setAvatarUrl(cachedUrl);
+      } catch (err) {
+        console.error('AuthContext: Failed to load avatar:', err);
+      }
+    };
+
+    loadAvatar();
+    
+    // Note: We don't revokeObjectURL here because thumbnailCache manages 
+    // its own blob URL lifetimes in its internal LRU cache
+  }, [user?.avatarFileId, masterKeyAvailable]);
 
   /**
    * Login user and unlock master key
@@ -259,6 +333,12 @@ export const AuthProvider = ({ children }) => {
 
         setUser({ email, role: role || USER_ROLES.USER });
         setIsAuthenticated(true);
+
+        // Fetch full profile in background to get avatarFileId etc.
+        userService.getCurrentUser().then(fullUser => {
+          setUser(fullUser);
+        }).catch(() => {});
+
         console.log('AuthContext: Returning success');
         return { success: true, data: response, role: role || USER_ROLES.USER };
       }
@@ -282,18 +362,10 @@ export const AuthProvider = ({ children }) => {
    */
   const register = async (email, password, displayName, rememberMe = true) => {
     try {
-      console.log('AuthContext: Starting registration');
-      // Generate encryption keys on client side
-      console.log('AuthContext: Generating registration keys');
       const { encryptedMasterKey, kekSalt, kdfParams, masterKey } =
         await generateRegistrationKeys(password);
-      console.log('AuthContext: Keys generated successfully');
 
-      // Generate recovery key params (Ente-style: masterKey encrypted with recovery key)
-      console.log('AuthContext: Generating recovery key');
       const recoveryData = await generateRecoveryParams(masterKey);
-      console.log('AuthContext: Recovery key generated:', recoveryData.recoveryPhrase);
-      console.log('AuthContext: Full recovery data:', recoveryData);
 
       // Send to server (server cannot decrypt master key)
       const response = await authService.register({
@@ -308,43 +380,27 @@ export const AuthProvider = ({ children }) => {
         recoveryKdfParams: recoveryData.recoveryKdfParams,
         encryptedRecoveryKey: recoveryData.encryptedRecoveryKey,
       });
-      console.log('AuthContext: Register response:', response);
-
       // Backend returns data directly (not wrapped in success/data)
       const { accessToken, refreshToken } = response;
 
       if (accessToken && refreshToken) {
-        console.log('AuthContext: Registration successful, storing tokens');
         authService.storeTokens({ accessToken, refreshToken, rememberMe });
-
-        // Store email for user display
         localStorage.setItem('userEmail', email);
 
-        // Store master key in memory and sessionStorage
         masterKeyRef.current = masterKey;
-        await cacheMasterKeyBytes(masterKey); // Pre-export bytes for performance
+        await cacheMasterKeyBytes(masterKey);
         setMasterKeyAvailable(true);
-        storeMasterKey(masterKey); // Persist in sessionStorage for 3 hours
-
-        // Pre-warm workers for fast uploads (non-blocking)
+        storeMasterKey(masterKey);
         triggerWarmup();
 
+        // Do NOT set isAuthenticated here — SignUpPage shows recovery dialog first,
+        // then navigates via window.location.href which triggers a full page reload
+        // and the auth check will pick up the stored tokens automatically.
         setUser({ email, hasSecuritySetup: true });
-        setIsAuthenticated(true);
-        console.log('AuthContext: Returning success');
-        console.log('AuthContext: About to return recoveryPhrase:', recoveryData.recoveryPhrase);
-        
-        // DEBUG: Alert to verify recovery key is being returned
-        if (recoveryData.recoveryPhrase) {
-          console.log('✅ Recovery phrase exists:', recoveryData.recoveryPhrase);
-        } else {
-          console.error('❌ Recovery phrase is missing!');
-        }
-        
+
         return { success: true, data: response, recoveryPhrase: recoveryData.recoveryPhrase };
       }
 
-      console.log('AuthContext: No tokens received');
       return { success: false, error: 'Registration failed' };
     } catch (error) {
       console.error('AuthContext: Register error:', error);
@@ -374,6 +430,11 @@ export const AuthProvider = ({ children }) => {
           hasSecuritySetup: !requiresVaultSetup 
         });
         setIsAuthenticated(true);
+
+        // Fetch full profile in background
+        userService.getCurrentUser().then(fullUser => {
+          setUser(fullUser);
+        }).catch(() => {});
 
         return {
           success: true,
@@ -480,6 +541,8 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     setUser,
+    avatarUrl,
+    setAvatarUrl,
     loading,
     isAuthenticated,
     login,

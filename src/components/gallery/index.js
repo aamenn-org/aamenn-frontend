@@ -8,6 +8,7 @@ export { default as AlbumsSection } from './AlbumsSection';
 export { default as AlbumDetailView } from './AlbumDetailView';
 export { default as AddToAlbumModal } from './AddToAlbumModal';
 export { default as FavoritesSection } from './FavoritesSection';
+export { default as TrashSection } from './TrashSection';
 export { default as UploadModal } from './UploadModal';
 export { default as SyncingIndicator } from './SyncingIndicator';
 export { default as PhotoViewer } from './PhotoViewer';

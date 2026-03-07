@@ -1,6 +1,82 @@
 import { encode } from 'blurhash';
 
 /**
+ * File type constants for clean classification
+ */
+export const FILE_TYPES = {
+  IMAGE: 'image',
+  VIDEO: 'video',
+  DOCUMENT: 'document',
+  OTHER: 'other'
+};
+
+/**
+ * Get file type classification
+ * @param mimeType - The file's MIME type
+ * @returns FILE_TYPES constant
+ */
+export function getFileType(mimeType) {
+  if (isImageSupported(mimeType)) return FILE_TYPES.IMAGE;
+  if (isVideoSupported(mimeType)) return FILE_TYPES.VIDEO;
+  if (isDocumentPreviewable(mimeType)) return FILE_TYPES.DOCUMENT;
+  return FILE_TYPES.OTHER;
+}
+
+/**
+ * File handler configuration for each type
+ */
+export const FILE_HANDLERS = {
+  [FILE_TYPES.IMAGE]: {
+    generateThumbnails: generateThumbnails,
+    hasThumbnails: true,
+    usesPreviewModal: false,
+    iconClass: 'fa-image',
+    iconColor: 'text-green-500'
+  },
+  [FILE_TYPES.VIDEO]: {
+    generateThumbnails: generateVideoThumbnails,
+    hasThumbnails: true,
+    usesPreviewModal: false,
+    iconClass: 'fa-video',
+    iconColor: 'text-purple-500'
+  },
+  [FILE_TYPES.DOCUMENT]: {
+    generateThumbnails: null,
+    hasThumbnails: false,
+    usesPreviewModal: true,
+    iconClass: getDocumentIconClass,
+    iconColor: getDocumentIconColor
+  },
+  [FILE_TYPES.OTHER]: {
+    generateThumbnails: null,
+    hasThumbnails: false,
+    usesPreviewModal: false,
+    iconClass: 'fa-file',
+    iconColor: 'text-gray-400'
+  }
+};
+
+/**
+ * Get document icon class based on MIME type
+ */
+function getDocumentIconClass(mimeType) {
+  if (isPDF(mimeType)) return 'fa-file-pdf';
+  if (isDOCX(mimeType)) return 'fa-file-word';
+  if (isTextFile(mimeType)) return 'fa-file-lines';
+  return 'fa-file';
+}
+
+/**
+ * Get document icon color based on MIME type
+ */
+function getDocumentIconColor(mimeType) {
+  if (isPDF(mimeType)) return 'text-red-400';
+  if (isDOCX(mimeType)) return 'text-blue-400';
+  if (isTextFile(mimeType)) return 'text-gray-300';
+  return 'text-gray-400';
+}
+
+/**
  * Thumbnail sizes configuration
  * Medium and Large share same dimensions but differ in JPEG quality
  */

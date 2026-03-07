@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import PhotoCard from './PhotoCard';
 
 // Tailwind grid classes for each size
@@ -88,6 +89,11 @@ const LazyPhotoCard = ({
   );
 };
 
+/**
+ * Virtualized photo grid component for efficient rendering
+ * Handles large numbers of photos with lazy loading
+ */
+
 const VirtualizedPhotoGrid = ({
   files,
   selectedFiles,
@@ -100,6 +106,7 @@ const VirtualizedPhotoGrid = ({
   emptyMessage = 'No photos yet',
   gridSize = 'medium',
 }) => {
+  const { t } = useTranslation('photos');
   const loadMoreRef = useRef(null);
   const gridClasses = GRID_CLASSES[gridSize] || GRID_CLASSES.medium;
 
@@ -155,7 +162,7 @@ const VirtualizedPhotoGrid = ({
             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
           />
         </svg>
-        <p className="text-lg">{emptyMessage}</p>
+        <p className="text-lg">{emptyMessage || t('empty.photos', 'No photos yet')}</p>
       </div>
     );
   }

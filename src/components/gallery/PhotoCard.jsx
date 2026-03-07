@@ -3,7 +3,7 @@ import BlurhashCanvas from './BlurhashCanvas';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { fileService } from '../../services';
-import { isVideo, formatVideoDuration, isPDF, isDOCX, isTextFile, isDocumentPreviewable } from '../../utils/thumbnail';
+import { getFileType, FILE_HANDLERS, isVideo, formatVideoDuration } from '../../utils/thumbnail';
 import { decryptFilename } from '../../utils/crypto';
 
 const PhotoCard = ({
@@ -30,10 +30,12 @@ const PhotoCard = ({
   // Track if we've already preloaded medium for this file
   const mediumPreloadedRef = useRef(false);
 
-  // Check file types
+  // Check file types using clean file type system
   const fileMime = file.mimeType || mimeType;
+  const fileType = getFileType(fileMime);
+  const handler = FILE_HANDLERS[fileType];
   const isVideoFile = isVideo(fileMime);
-  const isDocFile = isDocumentPreviewable(fileMime);
+  const isDocFile = fileType === 'document';
 
   // Decrypt filename for document files
   useEffect(() => {
@@ -53,30 +55,6 @@ const PhotoCard = ({
     decrypt();
   }, [isDocFile, file?.fileNameEncrypted, getMasterKey]);
 
-  // Get Font Awesome icon class for document types
-  const getDocIconClass = () => {
-    if (isPDF(fileMime)) return 'fa-file-pdf';
-    if (isDOCX(fileMime)) return 'fa-file-word';
-    if (isTextFile(fileMime)) return 'fa-file-lines';
-    return 'fa-file';
-  };
-
-  // Get icon color for document types
-  const getDocIconColor = () => {
-    if (isPDF(fileMime)) return 'text-red-400';
-    if (isDOCX(fileMime)) return 'text-blue-400';
-    if (isTextFile(fileMime)) return 'text-gray-300';
-    return 'text-gray-400';
-  };
-
-  // Get label for document types
-  const getDocLabel = () => {
-    if (isPDF(fileMime)) return 'PDF';
-    if (isDOCX(fileMime)) return 'DOCX';
-    if (isTextFile(fileMime)) return 'TXT';
-    return 'FILE';
-  };
-
   // Update local state when file prop changes
   useEffect(() => {
     setIsFavorite(file.isFavorite || false);
@@ -86,12 +64,8 @@ const PhotoCard = ({
   useEffect(() => {
     const fileId = file.fileId;
 
-    if (
-      !fileId ||
-      !file.thumbSmallUrl ||
-      !file.cipherThumbSmallKey ||
-      !hasMasterKey()
-    ) {
+    // Early return for files that don't support thumbnails
+    if (!handler.hasThumbnails || !file.thumbSmallUrl || !hasMasterKey() || !file.cipherFileKey) {
       return;
     }
 
@@ -114,25 +88,26 @@ const PhotoCard = ({
         // Get pre-exported key bytes to avoid repeated exportKey calls
         const masterKeyBytes = getMasterKeyBytes();
 
-        // Use priority-based loading:
-        // - HIGH priority for visible thumbnails (load first)
-        // - Cancellable when scrolled away
-        const url = await thumbnailCache.getThumbnailWithPriority(
-          fileId,
-          file.thumbSmallUrl,
-          file.cipherThumbSmallKey,
-          masterKey,
-          {
-            priority: isVisible ? 'high' : 'normal',
-            signal: abortController.signal,
-            blurhash: file.blurhash,
-            masterKeyBytes, // Pass pre-exported bytes to avoid exportKey per thumbnail
-          }
-        );
+        // Use priority-based loading with file type handler
+        if (handler.hasThumbnails && file.thumbSmallUrl) {
+          const url = await thumbnailCache.getThumbnailWithPriority(
+            fileId,
+            file.thumbSmallUrl,
+            masterKey,
+            file.cipherFileKey,
+            {
+              priority: isVisible ? 'high' : 'normal',
+              signal: abortController.signal,
+              masterKeyBytes,
+            }
+          );
 
-        // Only update state if not aborted
-        if (!abortController.signal.aborted) {
-          setThumbnailUrl(url);
+          if (!abortController.signal.aborted) {
+            setThumbnailUrl(url);
+          }
+        } else {
+          // No thumbnail available (documents, other files) - show file type icon
+          setThumbnailUrl(null);
         }
       } catch (error) {
         // Ignore abort errors - they're expected when scrolling
@@ -160,18 +135,18 @@ const PhotoCard = ({
     file.fileId,
     file.id,
     file.thumbSmallUrl,
-    file.cipherThumbSmallKey,
-    file.blurhash,
     hasMasterKey,
     getMasterKey,
     isVisible,
+    fileType,
+    handler,
   ]);
 
   // Preload medium thumbnail on hover for instant viewer opening
   // This eliminates blurhash delay when user clicks to view
   useEffect(() => {
     if (!isHovered || mediumPreloadedRef.current) return;
-    if (!file?.thumbMediumUrl || !file?.cipherThumbMediumKey) return;
+    if (!file?.thumbMediumUrl) return;
     if (!hasMasterKey()) return;
 
     // Check if already in L1 cache
@@ -190,8 +165,7 @@ const PhotoCard = ({
         await thumbnailCache.getMediumThumbnail(
           file.fileId,
           file.thumbMediumUrl,
-          file.cipherThumbMediumKey,
-          masterKey
+          masterKey // Use master key directly instead of cipherThumbMediumKey
         );
         
         mediumPreloadedRef.current = true;
@@ -209,7 +183,6 @@ const PhotoCard = ({
     isHovered,
     file?.fileId,
     file?.thumbMediumUrl,
-    file?.cipherThumbMediumKey,
     hasMasterKey,
     getMasterKey,
   ]);
@@ -250,8 +223,8 @@ const PhotoCard = ({
     );
   };
 
-  const hasBlurhash = file.blurhash && file.blurhash.length > 0;
-  const showBlurhash = hasBlurhash && !imageLoaded && !imageError;
+  const hasBlurhash = false; // Blurhash removed in simplification
+  const showBlurhash = false; // Blurhash removed in simplification
 
   return (
     <div
@@ -272,9 +245,21 @@ const PhotoCard = ({
       {/* Document file card - show Font Awesome icon */}
       {isDocFile ? (
         <div className="w-full h-full bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
-          <i className={`fa-solid ${getDocIconClass()} text-4xl ${getDocIconColor()}`}></i>
+          <i className={`fa-solid ${
+            typeof handler.iconClass === 'function' 
+              ? handler.iconClass(fileMime) 
+              : handler.iconClass
+          } text-4xl ${
+            typeof handler.iconColor === 'function'
+              ? handler.iconColor(fileMime)
+              : handler.iconColor
+          }`}></i>
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            {getDocLabel()}
+            {fileType === 'document' ? (
+              fileMime.includes('pdf') ? 'PDF' :
+              fileMime.includes('word') ? 'DOCX' :
+              fileMime.includes('text') ? 'TXT' : 'DOC'
+            ) : 'FILE'}
           </span>
           {decryptedFileName && (
             <span className="text-xs text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
@@ -284,18 +269,6 @@ const PhotoCard = ({
         </div>
       ) : (
         <>
-          {/* Blurhash placeholder */}
-          {showBlurhash && (
-            <div className="absolute inset-0 z-0 bg-gray-200 dark:bg-zinc-700">
-              <BlurhashCanvas
-                hash={file.blurhash}
-                width={32}
-                height={32}
-                className="w-full h-full"
-              />
-            </div>
-          )}
-
           {/* Decrypted thumbnail image */}
           {thumbnailUrl && !imageError ? (
             <img
@@ -306,6 +279,7 @@ const PhotoCard = ({
                 position: 'absolute',
                 top: '-1px',
                 left: '-1px',
+                right: '-1px',
                 width: 'calc(100% + 2px)',
                 height: 'calc(100% + 2px)',
                 objectFit: 'cover',
@@ -321,15 +295,15 @@ const PhotoCard = ({
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
             />
-          ) : !hasBlurhash && !decrypting ? (
-            /* Fallback placeholder when no blurhash or thumbnail */
+          ) : !decrypting ? (
+            /* Fallback placeholder when no thumbnail */
             <div className="w-full h-full bg-gray-200 dark:bg-zinc-700 flex flex-col items-center justify-center">
               {getFileIcon()}
             </div>
           ) : null}
 
           {/* Background color layer - only shows when no image loaded yet */}
-          {!imageLoaded && !hasBlurhash && (
+          {!imageLoaded && (
             <div className="absolute inset-0 bg-gray-200 dark:bg-zinc-700 z-0" />
           )}
 
@@ -351,7 +325,7 @@ const PhotoCard = ({
 
               {/* Duration badge in bottom right */}
               {file.duration && (
-                <div className="absolute bottom-2 right-2 z-15 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs font-medium pointer-events-none">
+                <div className="absolute bottom-2 end-2 z-15 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs font-medium pointer-events-none">
                   {formatVideoDuration(file.duration)}
                 </div>
               )}
@@ -388,7 +362,7 @@ const PhotoCard = ({
       {/* Selection Checkbox */}
       <div
         className={`
-          absolute top-2 left-2 w-6 h-6 border-2 z-30
+          absolute top-2 start-2 w-6 h-6 border-2 z-30
           flex items-center justify-center
           transition-all duration-200
           ${
@@ -424,7 +398,7 @@ const PhotoCard = ({
       {/* Favorite Button */}
       <button
         className={`
-          absolute top-2 right-2 w-7 h-7  z-30
+          absolute top-2 end-2 w-7 h-7  z-30
           flex items-center justify-center
           transition-all duration-200
           ${

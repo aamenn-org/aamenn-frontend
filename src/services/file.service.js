@@ -183,9 +183,7 @@ export const fileService = {
    * @param {string} metadata.sha1Hash - SHA1 hash of encrypted content
    * @param {string} metadata.thumbSmall - Base64 encoded encrypted small thumbnail
    * @param {string} metadata.thumbMedium - Base64 encoded encrypted medium thumbnail
-   * @param {string} metadata.cipherThumbSmallKey - Encrypted thumbnail small key
-   * @param {string} metadata.cipherThumbMediumKey - Encrypted thumbnail medium key
-   * @param {string} metadata.blurhash - Blurhash string for placeholder
+   * @param {string} metadata.thumbLarge - Base64 encoded encrypted large thumbnail
    * @param {number} metadata.width - Original image/video width
    * @param {number} metadata.height - Original image/video height
    * @param {number} metadata.duration - Video duration in seconds (optional)
@@ -198,11 +196,18 @@ export const fileService = {
     formData.append('cipherFileKey', metadata.cipherFileKey);
     formData.append('mimeType', metadata.mimeType);
     formData.append('sha1Hash', metadata.sha1Hash);
-    formData.append('thumbSmall', metadata.thumbSmall);
-    formData.append('thumbMedium', metadata.thumbMedium);
-    formData.append('cipherThumbSmallKey', metadata.cipherThumbSmallKey);
-    formData.append('cipherThumbMediumKey', metadata.cipherThumbMediumKey);
-    formData.append('blurhash', metadata.blurhash || '');
+    
+    // Add thumbnails only if they exist (media files)
+    if (metadata.thumbSmall) {
+      formData.append('thumbSmall', metadata.thumbSmall);
+    }
+    if (metadata.thumbMedium) {
+      formData.append('thumbMedium', metadata.thumbMedium);
+    }
+    if (metadata.thumbLarge) {
+      formData.append('thumbLarge', metadata.thumbLarge);
+    }
+    
     formData.append('width', String(metadata.width || 0));
     formData.append('height', String(metadata.height || 0));
     if (metadata.duration !== undefined && metadata.duration !== null) {
@@ -227,11 +232,75 @@ export const fileService = {
   },
 
   /**
+   * Move a file to trash (soft-delete)
+   * @param {string} fileId - File UUID
+   */
+  async moveToTrash(fileId) {
+    const response = await api.delete(`/files/${fileId}`);
+    return response.data;
+  },
+
+  /**
+   * Move multiple files to trash (bulk)
+   * @param {string[]} fileIds - Array of file UUIDs
+   */
+  async moveToTrashBulk(fileIds) {
+    const response = await api.post('/files/trash', { fileIds });
+    return response.data;
+  },
+
+  /**
+   * List files in trash
+   * @param {Object} params - Query parameters
+   * @param {number} params.page - Page number (default: 1)
+   * @param {number} params.limit - Items per page (default: 50)
+   */
+  async listTrash(params = {}) {
+    const response = await api.get('/files/trash', { params });
+    return response.data;
+  },
+
+  /**
+   * Restore a file from trash
+   * @param {string} fileId - File UUID
+   */
+  async restoreFile(fileId) {
+    const response = await api.post(`/files/${fileId}/restore`);
+    return response.data;
+  },
+
+  /**
+   * Restore multiple files from trash (bulk)
+   * @param {string[]} fileIds - Array of file UUIDs
+   */
+  async restoreFilesBulk(fileIds) {
+    const response = await api.post('/files/restore', { fileIds });
+    return response.data;
+  },
+
+  /**
    * Permanently delete a file
    * @param {string} fileId - File UUID
    */
-  async deleteFile(fileId) {
-    const response = await api.delete(`/files/${fileId}`);
+  async deleteFilePermanently(fileId) {
+    const response = await api.delete(`/files/${fileId}/permanent`);
+    return response.data;
+  },
+
+  /**
+   * Permanently delete multiple files (bulk)
+   * @param {string[]} fileIds - Array of file UUIDs
+   */
+  async deleteFilesPermanentlyBulk(fileIds) {
+    const response = await api.post('/files/purge', { fileIds });
+    return response.data;
+  },
+
+  /**
+   * Empty trash - permanently delete all trashed files
+   */
+  async emptyTrash() {
+    const response = await api.post('/files/trash/empty');
     return response.data;
   },
 

@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { userService } from '../../services';
 
+import { useTranslation } from 'react-i18next';
+
 // Debounce delay to prevent excessive API calls during bulk uploads
 const STORAGE_REFRESH_DEBOUNCE_MS = 2000;
 
 const StorageBar = ({ refreshTrigger, inline = false }) => {
+  const { t } = useTranslation('photos');
   const [storageData, setStorageData] = useState(null);
   const [loading, setLoading] = useState(true);
   const debounceTimerRef = useRef(null);
@@ -110,7 +113,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
             />
           </svg>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Storage
+            {t('storage.title', 'Storage')}
           </span>
         </div>
         <span className={`text-sm font-medium ${getTextColor()}`}>
@@ -136,7 +139,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
               clipRule="evenodd"
             />
           </svg>
-          Storage limit reached. Delete files to upload more.
+          {t('storage.limitReached', 'Storage limit reached. Delete files to upload more.')}
         </p>
       )}
     </div>

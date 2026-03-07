@@ -16,6 +16,7 @@ import {
   Settings,
 } from './pages';
 import { AdminDashboard } from './pages/Admin';
+import { ShareViewer } from './pages/ShareViewer';
 import config from './config';
 
 // Protected Route Component
@@ -87,6 +88,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/share/:slug" element={<ShareViewer />} />
       <Route
         path="/login"
         element={

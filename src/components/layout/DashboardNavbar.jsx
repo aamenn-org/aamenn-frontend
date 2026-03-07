@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth, useTheme } from '../../context';
 
 const DashboardNavbar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, avatarUrl } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
+  const { t } = useTranslation('common');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
@@ -33,7 +35,7 @@ const DashboardNavbar = () => {
           {/* Logo */}
           <Link to="/photos" className="flex items-center space-x-2">
             <div className="w-7 h-7 flex items-center justify-center">
-              <img src="/logo.png" alt="" />
+              <img src="/logo3.png" alt="" />
             </div>
             <span className="text-lg font-bold">AAMENN</span>
           </Link>
@@ -44,10 +46,21 @@ const DashboardNavbar = () => {
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center space-x-2 hover:bg-white/10 rounded-lg p-1.5 transition-colors"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium">
-                  {user?.email?.charAt(0).toUpperCase() || 'U'}
-                </span>
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center overflow-hidden">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={() => {
+                      // Silently fallback if URL is invalid
+                    }}
+                  />
+                ) : (
+                  <span className="text-sm font-medium">
+                    {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                )}
               </div>
               <svg
                 className={`w-4 h-4 transition-transform ${
@@ -98,7 +111,7 @@ const DashboardNavbar = () => {
                         <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                       </svg>
                     )}
-                    <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                    <span>{isDarkMode ? t('lightMode', 'Light Mode') : t('darkMode', 'Dark Mode')}</span>
                   </div>
                   {/* Toggle Switch */}
                   <div
@@ -107,8 +120,8 @@ const DashboardNavbar = () => {
                     }`}
                   >
                     <div
-                      className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
-                        isDarkMode ? 'translate-x-5' : 'translate-x-0.5'
+                      className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${
+                        isDarkMode ? 'ltr:left-5 rtl:right-5' : 'ltr:left-0.5 rtl:right-0.5'
                       }`}
                     />
                   </div>
@@ -143,7 +156,7 @@ const DashboardNavbar = () => {
                       d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  Settings
+                  {t('settings', 'Settings')}
                 </button>
 
                 <div className="border-t border-gray-100 dark:border-zinc-700" />
@@ -165,7 +178,7 @@ const DashboardNavbar = () => {
                       d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                     />
                   </svg>
-                  Logout
+                  {t('logout', 'Logout')}
                 </button>
               </div>
             )}

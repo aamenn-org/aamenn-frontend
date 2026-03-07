@@ -4,11 +4,12 @@ import { useAuth } from '../../context';
 import { useVaultState } from '../../hooks/useVaultState';
 import { fileService } from '../../services';
 import { useUpload } from '../../hooks/useUpload';
-import { isDocumentPreviewable } from '../../utils/thumbnail';
+import { getFileType, FILE_HANDLERS } from '../../utils/thumbnail';
 import { DashboardNavbar } from '../../components/layout';
 import { StorageBar } from '../../components/ui';
 import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
+import { ShareModal } from '../../components/modals';
 import {
   GalleryHeader,
   GalleryTabs,
@@ -17,6 +18,7 @@ import {
   AlbumDetailView,
   AddToAlbumModal,
   FavoritesSection,
+  TrashSection,
   UploadModal,
   SyncingIndicator,
   PhotoViewer,
@@ -58,6 +60,10 @@ const Dashboard = () => {
   // Recovery key download state
   const [showRecoveryKeyPrompt, setShowRecoveryKeyPrompt] = useState(false);
   const [recoveryKeyPhrase, setRecoveryKeyPhrase] = useState('');
+
+  // Share modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareItems, setShareItems] = useState([]);
 
   // Grid size preference (stored in localStorage)
   const [gridSize, setGridSize] = useState(() => {
@@ -207,9 +213,17 @@ const Dashboard = () => {
     }
   }, [searchParams]);
 
-  // Filter files into photos/videos and documents
-  const photoFiles = files.filter((f) => !isDocumentPreviewable(f.mimeType));
-  const documentFiles = files.filter((f) => isDocumentPreviewable(f.mimeType));
+  // Filter files using clean file type system
+  const photoFiles = files.filter((f) => {
+    const fileType = getFileType(f.mimeType);
+    const handler = FILE_HANDLERS[fileType];
+    return !handler.usesPreviewModal;
+  });
+  const documentFiles = files.filter((f) => {
+    const fileType = getFileType(f.mimeType);
+    const handler = FILE_HANDLERS[fileType];
+    return handler.usesPreviewModal;
+  });
 
   // Handle file selection
   const handleSelectFile = (file) => {
@@ -224,23 +238,19 @@ const Dashboard = () => {
 
   // Handle file view - route to appropriate viewer
   const handleViewFile = (file) => {
-    // Check if master key is available
-    if (!hasMasterKey()) {
-      // Store the file user wanted to view and show unlock modal
-      setPendingFileView(file);
-      setShowUnlockModal(true);
-      return;
-    }
-
+    const fileId = file.fileId;
     const mimeType = file.mimeType;
-    const isDoc = isDocumentPreviewable(mimeType);
-    const targetList = isDoc ? documentFiles : photoFiles;
+    const fileType = getFileType(mimeType);
+    const handler = FILE_HANDLERS[fileType];
+    
+    const targetList = handler.usesPreviewModal ? documentFiles : photoFiles;
     const index = targetList.findIndex(
       (f) => f.fileId === file.fileId
     );
+
     if (index !== -1) {
       setCurrentFileIndex(index);
-      if (isDoc) {
+      if (handler.usesPreviewModal) {
         setDocumentViewerOpen(true);
       } else {
         setViewerOpen(true);
@@ -249,12 +259,18 @@ const Dashboard = () => {
   };
 
   // Handle master key unlock
-  const handleMasterKeyUnlocked = (masterKey) => {
+  const handleMasterKeyUnlocked = (masterKey, recoveryPhrase = null) => {
     setMasterKey(masterKey);
 
     // Update user state to reflect vault setup completion
     if (user) {
       setUser({ ...user, hasSecuritySetup: true });
+    }
+
+    // Show recovery key dialog if provided (new registration)
+    if (recoveryPhrase) {
+      setRecoveryKeyPhrase(recoveryPhrase);
+      setShowRecoveryKeyPrompt(true);
     }
 
     // If we're coming from vault setup, redirect to clean URL to prevent loop
@@ -268,14 +284,16 @@ const Dashboard = () => {
       const file = pendingFileView;
       setPendingFileView(null);
       const mimeType = file.mimeType;
-      const isDoc = isDocumentPreviewable(mimeType);
-      const targetList = isDoc ? documentFiles : photoFiles;
+      const fileType = getFileType(mimeType);
+      const handler = FILE_HANDLERS[fileType];
+      
+      const targetList = handler.usesPreviewModal ? documentFiles : photoFiles;
       const index = targetList.findIndex(
         (f) => f.fileId === file.fileId
       );
       if (index !== -1) {
         setCurrentFileIndex(index);
-        if (isDoc) {
+        if (handler.usesPreviewModal) {
           setDocumentViewerOpen(true);
         } else {
           setViewerOpen(true);
@@ -308,36 +326,73 @@ const Dashboard = () => {
     }
   };
 
-  // Handle delete - permanent deletion (for bulk selection)
+  // Handle share - create share links for selected files
+  // Handle share single file from PhotoViewer
+  const handleShareSingle = (file) => {
+    const itemToShare = {
+      fileId: file.fileId || file.id,
+      cipherFileKey: file.cipherFileKey,
+      fileNameEncrypted: file.fileNameEncrypted,
+    };
+    
+    console.log('handleShareSingle called:', itemToShare);
+    setShareItems([itemToShare]);
+    setShowShareModal(true);
+  };
+
+  // Handle share bulk from header
+  const handleShare = () => {
+    console.log('handleShare called', { selectedFiles, files: files.length });
+    
+    if (selectedFiles.length === 0) {
+      console.log('No selected files, returning');
+      return;
+    }
+
+    const itemsToShare = files
+      .filter((file) => selectedFiles.includes(file.fileId || file.id))
+      .map((file) => {
+        console.log('Processing file for share:', file);
+        return {
+          fileId: file.fileId || file.id,
+          cipherFileKey: file.cipherFileKey,
+          fileNameEncrypted: file.fileNameEncrypted,
+        };
+      });
+
+    console.log('Items to share:', itemsToShare);
+    setShareItems(itemsToShare);
+    setShowShareModal(true);
+  };
+
+  // Handle delete - move to trash (for bulk selection)
   const handleDeleteSelected = async () => {
     if (selectedFiles.length === 0) return;
 
     const confirmMessage =
       selectedFiles.length === 1
-        ? 'Are you sure you want to permanently delete this file? This action cannot be undone.'
-        : `Are you sure you want to permanently delete ${selectedFiles.length} files? This action cannot be undone.`;
+        ? 'Move this file to trash?'
+        : `Move ${selectedFiles.length} files to trash?`;
 
     if (!window.confirm(confirmMessage)) return;
 
     try {
-      for (const fileId of selectedFiles) {
-        await fileService.deleteFile(fileId);
-      }
+      await fileService.moveToTrashBulk(selectedFiles);
       setSelectedFiles([]);
       await fetchFiles();
     } catch (error) {
-      console.error('Failed to delete files:', error);
+      console.error('Failed to move files to trash:', error);
     }
   };
 
-  // Handle delete single file from PhotoViewer
+  // Handle delete single file from PhotoViewer - move to trash
   const handleDeleteSingle = async (fileId) => {
     try {
-      await fileService.deleteFile(fileId);
+      await fileService.moveToTrash(fileId);
       setViewerOpen(false);
       await fetchFiles();
     } catch (error) {
-      console.error('Failed to delete file:', error);
+      console.error('Failed to move file to trash:', error);
     }
   };
 
@@ -410,7 +465,7 @@ const Dashboard = () => {
       <DashboardNavbar />
 
       <main className="flex-1 pt-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
           {/* Header - only show when not viewing album detail */}
           {!selectedAlbum && (
             <GalleryHeader
@@ -418,13 +473,14 @@ const Dashboard = () => {
               onUpload={() => setShowUploadModal(true)}
               onDelete={handleDeleteSelected}
               onAddToAlbum={handleAddToAlbumBulk}
+              onShare={handleShare}
               storageBar={<StorageBar refreshTrigger={files.length} inline />}
             />
           )}
 
           {/* Tabs and Grid Size Control - only show when not viewing album detail */}
           {!selectedAlbum && (
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 md:mb-6">
               <GalleryTabs activeTab={activeTab} onTabChange={setActiveTab} />
               {(activeTab === 'photos' || activeTab === 'files') && (
                 <GridSizeControl
@@ -584,6 +640,10 @@ const Dashboard = () => {
           {!selectedAlbum && activeTab === 'favorites' && (
             <FavoritesSection onViewFile={handleViewFile} />
           )}
+
+          {!selectedAlbum && activeTab === 'trash' && (
+            <TrashSection onViewFile={handleViewFile} gridSize={gridSize} />
+          )}
         </div>
       </main>
 
@@ -620,6 +680,7 @@ const Dashboard = () => {
           totalFiles={photoFiles.length}
           onAddToAlbum={handleAddToAlbumSingle}
           onDelete={handleDeleteSingle}
+          onShare={handleShareSingle}
         />
       )}
 
@@ -684,6 +745,17 @@ const Dashboard = () => {
       />
 
       
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => {
+          setShowShareModal(false);
+          setShareItems([]);
+        }}
+        items={shareItems}
+        type="file"
+      />
+
       {/* Recovery Key Download Prompt */}
       {showRecoveryKeyPrompt && (
         <RecoveryKeyDownloadPrompt

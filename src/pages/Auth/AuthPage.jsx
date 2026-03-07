@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Navbar } from '../../components/layout';
 import { Input, Button } from '../../components/ui';
 import { useAuth } from '../../context';
@@ -78,6 +79,7 @@ const CheckIcon = () => (
 const AuthPage = () => {
   const navigate = useNavigate();
   const { login, register } = useAuth();
+  const { t } = useTranslation('common');
 
   const [isLogin, setIsLogin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -133,7 +135,7 @@ const AuthPage = () => {
       }
     } catch (err) {
       console.error('AuthPage: Unexpected error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError(t('errors.unexpectedError', 'An unexpected error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }

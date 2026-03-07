@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context';
 import GoogleSignInButton from '../../components/GoogleSignInButton';
+import useImageRotation from '../../hooks/useImageRotation';
+import AuthBackground from '../../components/auth/AuthBackground';
 
 const EyeIcon = () => (
   <svg
@@ -70,6 +73,7 @@ const AppleIcon = () => (
 
 const LoginPage = () => {
   const { login } = useAuth();
+  const { t } = useTranslation('common');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -77,80 +81,8 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  const slides = [
-    {
-      title: 'Capturing Moments,',
-      subtitle: 'Creating Memories',
-      icon: (
-        <svg
-          className="w-24 h-24 text-white/80"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-          />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-        </svg>
-      ),
-    },
-    {
-      title: 'End-to-End',
-      subtitle: 'Encrypted Storage',
-      icon: (
-        <svg
-          className="w-24 h-24 text-white/80"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-          />
-        </svg>
-      ),
-    },
-    {
-      title: 'Your Privacy,',
-      subtitle: 'Our Priority',
-      icon: (
-        <svg
-          className="w-24 h-24 text-white/80"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-          />
-        </svg>
-      ),
-    },
-  ];
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [slides.length]);
+  
+  const { currentImage } = useImageRotation(4000);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -171,7 +103,7 @@ const LoginPage = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError(t('errors.unexpectedError', 'An unexpected error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -179,100 +111,25 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex bg-black">
-      {/* Left Section - Image/Illustration */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden">
-        {/* Logo */}
-        <div className="absolute top-8 left-8 z-10">
-          <div className="text-white text-2xl font-bold">AMMENN</div>
-        </div>
-
-        {/* Background Image/Illustration */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative w-full h-full flex flex-col items-center justify-center px-12">
-            {/* Animated Icon */}
-            <div className="mb-8 transition-all duration-500 transform">
-              {slides[currentSlide].icon}
-            </div>
-
-            {/* Encrypted Data Visualization */}
-            <div className="mb-12 relative">
-              <div className="grid grid-cols-3 gap-3">
-                {[...Array(9)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center border border-white/20 animate-pulse"
-                    style={{ animationDelay: `${i * 0.1}s` }}
-                  >
-                    <span className="text-white/60 text-xs font-mono">
-                      {Math.random().toString(36).substring(2, 5).toUpperCase()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {/* Lock overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 bg-blue-500/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg">
-                  <svg
-                    className="w-10 h-10 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Text Content */}
-        <div className="absolute bottom-20 left-0 right-0 text-center px-12 z-10">
-          <div className="transition-all duration-500">
-            <h2 className="text-4xl font-bold text-white mb-2">
-              {slides[currentSlide].title}
-            </h2>
-            <h2 className="text-4xl font-bold text-white mb-4">
-              {slides[currentSlide].subtitle}
-            </h2>
-          </div>
-          {/* Pagination dots */}
-          <div className="flex justify-center gap-2 mt-8">
-            {slides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentSlide(index)}
-                className={`h-1 rounded transition-all duration-300 ${
-                  index === currentSlide ? 'w-8 bg-white' : 'w-8 bg-white/40'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+      <AuthBackground currentImage={currentImage} />
 
       {/* Right Section - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <img src="/logo.png" alt="AMMENN Logo" className="w-20 h-20" />
+            <img src="/logo3.png" alt="AMMENN Logo" className="w-20 h-20" />
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-3">Welcome back</h1>
+            <h1 className="text-4xl font-bold text-white mb-3">{t('auth.welcomeBack', 'Welcome back')}</h1>
             <p className="text-gray-400">
-              Don't have an account?{' '}
+              {t('auth.dontHaveAccount', "Don't have an account?")}{' '}
               <Link
                 to="/register"
                 className="text-blue-400 hover:text-blue-300 font-medium"
               >
-                Sign up
+                {t('auth.signUp', 'Sign up')}
               </Link>
             </p>
           </div>
@@ -288,7 +145,7 @@ const LoginPage = () => {
             <div>
               <input
                 type="email"
-                placeholder="Email"
+                placeholder={t('auth.email', 'Email')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 bg-[#0a0a0a] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
@@ -300,7 +157,7 @@ const LoginPage = () => {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Enter your password"
+                placeholder={t('auth.enterPassword', 'Enter your password')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-[#0a0a0a] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors pr-12"
@@ -326,14 +183,14 @@ const LoginPage = () => {
                   className="w-4 h-4 rounded border-gray-800 bg-[#0a0a0a] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                 />
                 <label htmlFor="remember" className="text-sm text-gray-400">
-                  Remember me
+                  {t('auth.rememberMe', 'Remember me')}
                 </label>
               </div>
               <Link
                 to="/forgot-password"
                 className="text-sm text-blue-400 hover:text-blue-300"
               >
-                Forgot password?
+                {t('auth.forgotPassword', 'Forgot password?')}
               </Link>
             </div>
 
@@ -343,7 +200,7 @@ const LoginPage = () => {
               disabled={loading}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Logging in...' : 'Log in'}
+              {loading ? t('auth.loggingIn', 'Logging in...') : t('auth.login', 'Log in')}
             </button>
           </form>
 
@@ -353,7 +210,7 @@ const LoginPage = () => {
               <div className="w-full border-t border-gray-800"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-black text-gray-400">Or continue with</span>
+              <span className="px-2 bg-black text-gray-400">{t('auth.orContinueWith', 'Or continue with')}</span>
             </div>
           </div>
 

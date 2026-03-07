@@ -56,18 +56,24 @@ class CryptoWorkerPool {
       const workerPromise = new Promise((resolve, reject) => {
         let worker;
 
-        try {
-          worker = new Worker(new URL('./crypto.worker.js', import.meta.url), {
-            type: 'module',
-          });
-        } catch (err) {
-          console.error(
-            `[CryptoWorkerPool] Failed to create worker ${workerIndex}:`,
-            err
-          );
-          reject(err);
-          return;
+        async function _createWorker(index) {
+          try {
+            worker = new Worker(
+              new URL('./crypto.worker.js', import.meta.url) + `?v=${Date.now()}`,
+              { type: 'module' }
+            );
+          } catch (err) {
+            console.error(
+              `[CryptoWorkerPool] Failed to create worker ${workerIndex}:`,
+              err
+            );
+            reject(err);
+            return;
+          }
         }
+
+        // Create the worker
+        _createWorker(workerIndex);
 
         const timeout = setTimeout(() => {
           console.error(
@@ -151,6 +157,12 @@ class CryptoWorkerPool {
     }
 
     if (type === 'ERROR') {
+      console.error('❌ Worker ERROR:', {
+        taskId: id,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        taskType: task.type
+      });
       task.reject(new Error(error.message));
       this.pendingTasks.delete(id);
       this._markWorkerFree(workerIndex);
@@ -396,6 +408,7 @@ class CryptoWorkerPool {
     return result.decryptedData;
   }
 
+  
   /**
    * Warm up the worker pool by initializing workers and running a test task
    * This ensures workers are fully ready before the first real upload

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { fileService } from '../../services';
 import PhotoGrid from './PhotoGrid';
 
 const FavoritesSection = ({ onViewFile, onFavoriteToggle }) => {
+  const { t } = useTranslation('photos');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -75,10 +77,10 @@ const FavoritesSection = ({ onViewFile, onFavoriteToggle }) => {
           </svg>
         </div>
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-          No favorites yet
+          {t('favorites.empty.title', 'No favorites yet')}
         </h3>
         <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-          Click the heart icon on any photo to add it to your favorites.
+          {t('favorites.empty.description', 'Click the heart icon on any photo to add it to your favorites.')}
         </p>
       </div>
     );
