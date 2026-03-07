@@ -58,16 +58,16 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
+    <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <div className={`p-3 ${colorClasses[color]}`}>
-          <Icon size={24} />
+        <div className={`p-2 lg:p-3 ${colorClasses[color]}`}>
+          <Icon size={20} className="lg:w-6 lg:h-6" />
         </div>
       </div>
-      <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
+      <div className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-1">
         {value}
       </div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">{title}</div>
+      <div className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">{title}</div>
       {subtitle && (
         <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
           {subtitle}
@@ -134,12 +134,12 @@ const Storage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+      <h2 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
         Storage & Files
       </h2>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         <StatCard
           title="Total Files"
           value={stats?.totalFiles?.toLocaleString() || 0}
@@ -170,12 +170,12 @@ const Storage = () => {
       </div>
 
       {/* Storage Usage */}
-      <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+        <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Storage Usage
         </h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between text-xs lg:text-sm">
             <span className="text-gray-600 dark:text-gray-400">
               {formatBytes(stats?.totalStorageBytes || 0)} used
             </span>
@@ -198,41 +198,41 @@ const Storage = () => {
       </div>
 
       {/* Upload Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Upload Stats */}
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+          <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Upload Activity
           </h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-gray-400" />
-                <span className="text-gray-600 dark:text-gray-400">Today</span>
+              <div className="flex items-center gap-2 lg:gap-3">
+                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">Today</span>
               </div>
-              <span className="font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                 {stats?.uploadsToday?.toLocaleString() || 0} uploads
               </span>
             </div>
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-gray-400" />
-                <span className="text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2 lg:gap-3">
+                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Week
                 </span>
               </div>
-              <span className="font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                 {stats?.uploadsThisWeek?.toLocaleString() || 0} uploads
               </span>
             </div>
             <div className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-gray-400" />
-                <span className="text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2 lg:gap-3">
+                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Month
                 </span>
               </div>
-              <span className="font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                 {stats?.uploadsThisMonth?.toLocaleString() || 0} uploads
               </span>
             </div>
@@ -240,18 +240,18 @@ const Storage = () => {
         </div>
 
         {/* File Views Stats */}
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+          <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white mb-4">
             File View Statistics
           </h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <Download size={18} className="text-blue-500" />
-                <span className="text-gray-600 dark:text-gray-400">Today</span>
+              <div className="flex items-center gap-2 lg:gap-3">
+                <Download size={16} className="text-blue-500 lg:w-[18px] lg:h-[18px]" />
+                <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">Today</span>
               </div>
               <div className="text-right">
-                <span className="font-semibold text-gray-900 dark:text-white">
+                <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                   {formatBytes(stats?.bandwidthToday || 0)}
                 </span>
                 <span className="text-xs text-gray-400 ml-2">
@@ -260,14 +260,14 @@ const Storage = () => {
               </div>
             </div>
             <div className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <Download size={18} className="text-purple-500" />
-                <span className="text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2 lg:gap-3">
+                <Download size={16} className="text-purple-500 lg:w-[18px] lg:h-[18px]" />
+                <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Month
                 </span>
               </div>
               <div className="text-right">
-                <span className="font-semibold text-gray-900 dark:text-white">
+                <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                   {formatBytes(stats?.bandwidthMonth || 0)}
                 </span>
                 <span className="text-xs text-gray-400 ml-2">
@@ -280,26 +280,26 @@ const Storage = () => {
       </div>
 
       {/* Files by Type */}
-      <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+        <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Files by Type
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
           {stats?.filesByMimeType?.slice(0, 6).map((item) => {
             const Icon = getMimeIcon(item.mimeType);
             return (
               <div
                 key={item.mimeType}
-                className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700/50"
+                className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700/50 rounded"
               >
-                <div className="flex items-center gap-3">
-                  <Icon size={18} className="text-gray-400" />
-                  <span className="text-gray-600 dark:text-gray-400 text-sm">
+                <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+                  <Icon size={16} className="text-gray-400 flex-shrink-0 lg:w-[18px] lg:h-[18px]" />
+                  <span className="text-gray-600 dark:text-gray-400 text-xs lg:text-sm truncate">
                     {item.mimeType || 'unknown'}
                   </span>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">
+                <div className="text-right flex-shrink-0 ml-2">
+                  <div className="font-semibold text-gray-900 dark:text-white text-xs lg:text-sm">
                     {item.count.toLocaleString()}
                   </div>
                   <div className="text-xs text-gray-400">

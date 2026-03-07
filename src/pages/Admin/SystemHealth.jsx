@@ -60,7 +60,11 @@ const StatusBadge = ({ status }) => {
  * Progress Ring Component
  */
 const ProgressRing = ({ value, size = 120, strokeWidth = 12, color }) => {
-  const radius = (size - strokeWidth) / 2;
+  // Responsive size adjustments
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  const actualSize = isMobile ? Math.min(size, 100) : size;
+  const actualStrokeWidth = isMobile ? Math.max(strokeWidth - 2, 8) : strokeWidth;
+  const radius = (actualSize - actualStrokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (value / 100) * circumference;
 
@@ -72,26 +76,26 @@ const ProgressRing = ({ value, size = 120, strokeWidth = 12, color }) => {
   };
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90">
+    <div className="relative" style={{ width: actualSize, height: actualSize }}>
+      <svg width={actualSize} height={actualSize} className="transform -rotate-90">
         {/* Background circle */}
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={actualSize / 2}
+          cy={actualSize / 2}
           r={radius}
           fill="none"
           stroke="currentColor"
-          strokeWidth={strokeWidth}
+          strokeWidth={actualStrokeWidth}
           className="text-gray-200 dark:text-gray-700"
         />
         {/* Progress circle */}
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={actualSize / 2}
+          cy={actualSize / 2}
           r={radius}
           fill="none"
           stroke={color || getColor()}
-          strokeWidth={strokeWidth}
+          strokeWidth={actualStrokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
@@ -99,7 +103,7 @@ const ProgressRing = ({ value, size = 120, strokeWidth = 12, color }) => {
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-2xl font-bold text-gray-900 dark:text-white">
+        <span className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
           {value.toFixed(0)}%
         </span>
       </div>
@@ -132,12 +136,12 @@ const AlertCard = ({ alert }) => {
   const { icon: Icon, bg, text } = config[alert.type] || config.info;
 
   return (
-    <div className={`p-4 border ${bg}`}>
-      <div className={`flex items-start gap-3 ${text}`}>
-        <Icon size={20} className="flex-shrink-0 mt-0.5" />
+    <div className={`p-3 lg:p-4 border ${bg} rounded`}>
+      <div className={`flex items-start gap-2 lg:gap-3 ${text}`}>
+        <Icon size={18} className="flex-shrink-0 mt-0.5 lg:w-5 lg:h-5" />
         <div>
-          <p className="font-medium">{alert.message}</p>
-          <p className="text-sm opacity-70 mt-1">
+          <p className="text-sm lg:text-base font-medium">{alert.message}</p>
+          <p className="text-xs lg:text-sm opacity-70 mt-1">
             {new Date(alert.timestamp).toLocaleString()}
           </p>
         </div>
@@ -206,14 +210,14 @@ const SystemHealth = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h2 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
           System Health
         </h2>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors disabled:opacity-50 text-sm lg:text-base"
         >
           <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
           Refresh
@@ -221,19 +225,19 @@ const SystemHealth = () => {
       </div>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
         {/* Storage */}
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-                <HardDrive size={24} />
+            <div className="flex items-center gap-2 lg:gap-3">
+              <div className="p-2 lg:p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+                <HardDrive size={20} className="lg:w-6 lg:h-6" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                   Storage
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">
                   {formatBytes(health?.storageUsed || 0)} /{' '}
                   {formatBytes(health?.storageLimit || 0)}
                 </p>
@@ -241,11 +245,11 @@ const SystemHealth = () => {
             </div>
           </div>
           <div className="flex justify-center">
-            <ProgressRing value={health?.storageUsagePercent || 0} />
+            <ProgressRing value={health?.storageUsagePercent || 0} size={100} strokeWidth={10} />
           </div>
           {health?.storageWarning && (
-            <div className="mt-4 p-2 bg-orange-50 dark:bg-orange-900/20 text-center">
-              <span className="text-orange-600 dark:text-orange-400 text-sm font-medium">
+            <div className="mt-4 p-2 bg-orange-50 dark:bg-orange-900/20 text-center rounded">
+              <span className="text-orange-600 dark:text-orange-400 text-xs lg:text-sm font-medium">
                 ⚠️ Storage above 80%
               </span>
             </div>
@@ -253,16 +257,16 @@ const SystemHealth = () => {
         </div>
 
         {/* Database */}
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-              <Database size={24} />
+        <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+          <div className="flex items-center gap-2 lg:gap-3 mb-6">
+            <div className="p-2 lg:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <Database size={20} className="lg:w-6 lg:h-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">
+              <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                 Database
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">
                 PostgreSQL
               </p>
             </div>
@@ -273,22 +277,22 @@ const SystemHealth = () => {
         </div>
 
         {/* Active Users */}
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400">
-              <Users size={24} />
+        <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+          <div className="flex items-center gap-2 lg:gap-3 mb-6">
+            <div className="p-2 lg:p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400">
+              <Users size={20} className="lg:w-6 lg:h-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">
+              <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
                 Active Users
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">
                 Last 24 hours
               </p>
             </div>
           </div>
           <div className="text-center">
-            <span className="text-4xl font-bold text-gray-900 dark:text-white">
+            <span className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white">
               {health?.activeUsersLast24h || 0}
             </span>
           </div>
@@ -296,14 +300,14 @@ const SystemHealth = () => {
       </div>
 
       {/* Alerts Section */}
-      <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
+        <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white mb-4">
           System Alerts
         </h3>
         {alerts.length === 0 ? (
-          <div className="flex items-center gap-3 text-green-600 dark:text-green-400 p-4 bg-green-50 dark:bg-green-900/20">
-            <CheckCircle size={20} />
-            <span>All systems operational - no active alerts</span>
+          <div className="flex items-center gap-2 lg:gap-3 text-green-600 dark:text-green-400 p-3 lg:p-4 bg-green-50 dark:bg-green-900/20 rounded">
+            <CheckCircle size={18} className="flex-shrink-0 lg:w-5 lg:h-5" />
+            <span className="text-sm lg:text-base">All systems operational - no active alerts</span>
           </div>
         ) : (
           <div className="space-y-3">

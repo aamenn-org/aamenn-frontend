@@ -37,16 +37,16 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-3 ${colorClasses[color]}`}>
-          <Icon size={24} />
+    <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-2 lg:mb-4">
+        <div className={`p-1.5 lg:p-3 ${colorClasses[color]}`}>
+          <Icon size={16} className="lg:w-6 lg:h-6" />
         </div>
       </div>
-      <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
+      <div className="text-xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-1">
         {value}
       </div>
-      <div className="text-sm text-gray-500 dark:text-gray-400">{title}</div>
+      <div className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">{title}</div>
       {subtitle && (
         <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
           {subtitle}
@@ -62,12 +62,14 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
 const TopUsersTable = ({ users }) => {
   return (
     <div className="bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+      <div className="px-4 lg:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white">
           Top Users by Storage
         </h3>
       </div>
-      <div className="overflow-x-auto">
+      
+      {/* Desktop Table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
@@ -123,6 +125,52 @@ const TopUsersTable = ({ users }) => {
           </tbody>
         </table>
       </div>
+      
+      {/* Mobile Card Layout */}
+      <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
+        {users.map((user, index) => (
+          <div key={user.id} className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">#{index + 1}</span>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {user.displayName || user.email}
+                  </div>
+                </div>
+                {user.displayName && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate ml-6">
+                    {user.email}
+                  </div>
+                )}
+              </div>
+              <span
+                className={`ml-2 px-2 py-1 text-xs rounded-full whitespace-nowrap ${
+                  user.isActive
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                }`}
+              >
+                {user.isActive ? 'Active' : 'Disabled'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                <div className="text-xs text-gray-500 dark:text-gray-400">Files</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {user.fileCount.toLocaleString()}
+                </div>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                <div className="text-xs text-gray-500 dark:text-gray-400">Storage</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatBytes(user.storageBytes)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -173,7 +221,7 @@ const Overview = () => {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-6">
         <StatCard
           title="Total Users"
           value={stats?.totalUsers?.toLocaleString() || 0}
@@ -212,40 +260,40 @@ const Overview = () => {
       </div>
 
       {/* Bandwidth Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-              <Download size={24} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-6">
+        <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-3 lg:mb-4">
+            <div className="p-1.5 lg:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <Download size={16} className="lg:w-6 lg:h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h3 className="text-sm lg:text-lg font-semibold text-gray-900 dark:text-white">
                 File Views Today
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">
                 {stats?.downloadsToday?.toLocaleString() || 0} file requests
               </p>
             </div>
           </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
+          <div className="text-xl lg:text-3xl font-bold text-gray-900 dark:text-white">
             {formatBytes(stats?.bandwidthToday || 0)}
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-              <Download size={24} />
+        <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-3 lg:mb-4">
+            <div className="p-1.5 lg:p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+              <Download size={16} className="lg:w-6 lg:h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h3 className="text-sm lg:text-lg font-semibold text-gray-900 dark:text-white">
                 File Views This Month
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">
                 {stats?.downloadsMonth?.toLocaleString() || 0} file requests
               </p>
             </div>
           </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
+          <div className="text-xl lg:text-3xl font-bold text-gray-900 dark:text-white">
             {formatBytes(stats?.bandwidthMonth || 0)}
           </div>
         </div>

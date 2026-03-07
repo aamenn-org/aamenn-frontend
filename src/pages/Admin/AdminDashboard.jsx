@@ -23,7 +23,7 @@ import SystemHealth from './SystemHealth';
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
 
   // Fetch alerts on mount
@@ -64,25 +64,31 @@ const AdminDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex">
+    <div className="min-h-screen h-full bg-gray-100 dark:bg-gray-900 flex">
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
         className={`${
-          sidebarOpen ? 'w-64' : 'w-20'
-        } bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 flex flex-col`}
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg transition-transform duration-300 flex flex-col`}
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
-          {sidebarOpen && (
-            <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-              Aamenn Admin
-            </span>
-          )}
+          <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            Aamenn Admin
+          </span>
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={() => setSidebarOpen(false)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden"
           >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            <X size={20} />
           </button>
         </div>
 
@@ -102,35 +108,41 @@ const AdminDashboard = () => {
               }
             >
               <item.icon size={20} />
-              {sidebarOpen && <span className="ml-3">{item.label}</span>}
+              <span className="ml-3">{item.label}</span>
             </NavLink>
           ))}
         </nav>
 
         {/* User & Logout */}
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-          {sidebarOpen && (
-            <div className="text-sm text-gray-500 dark:text-gray-400 mb-2 truncate">
-              {user?.email}
-            </div>
-          )}
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-2 truncate">
+            {user?.email}
+          </div>
           <button
             onClick={handleLogout}
-            className="flex items-center w-full px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="flex items-center w-full px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors rounded"
           >
             <LogOut size={20} />
-            {sidebarOpen && <span className="ml-3">Logout</span>}
+            <span className="ml-3">Logout</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col lg:ml-0">
         {/* Top Bar */}
-        <header className="h-16 bg-white dark:bg-gray-800 shadow-sm flex items-center justify-between px-6">
-          <h1 className="text-xl font-semibold text-gray-800 dark:text-white">
-            Admin Dashboard
-          </h1>
+        <header className="h-16 bg-white dark:bg-gray-800 shadow-sm flex items-center justify-between px-4 lg:px-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded lg:hidden"
+            >
+              <Menu size={20} />
+            </button>
+            <h1 className="text-lg lg:text-xl font-semibold text-gray-800 dark:text-white">
+              Admin Dashboard
+            </h1>
+          </div>
           <div className="flex items-center gap-4">
             {/* Alerts indicator */}
             {criticalAlerts.length > 0 && (
@@ -146,20 +158,22 @@ const AdminDashboard = () => {
 
         {/* Alert Banner */}
         {criticalAlerts.length > 0 && (
-          <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 px-6 py-3">
+          <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 px-4 lg:px-6 py-3">
             <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
-              <AlertTriangle size={18} />
-              <span className="font-medium">
-                {criticalAlerts.length} active alert
-                {criticalAlerts.length > 1 ? 's' : ''}
-              </span>
-              <span className="text-sm">- {criticalAlerts[0]?.message}</span>
+              <AlertTriangle size={18} className="flex-shrink-0" />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                <span className="font-medium">
+                  {criticalAlerts.length} active alert
+                  {criticalAlerts.length > 1 ? 's' : ''}
+                </span>
+                <span className="text-sm truncate">- {criticalAlerts[0]?.message}</span>
+              </div>
             </div>
           </div>
         )}
 
         {/* Page Content */}
-        <div className="flex-1 p-6 overflow-auto">
+        <div className="flex-1 p-4 lg:p-6 overflow-auto">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="users" element={<UsersPage />} />

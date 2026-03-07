@@ -125,61 +125,47 @@ const UsersPage = () => {
     }
   };
 
-  const SortableHeader = ({ field, children }) => (
-    <th
-      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-      onClick={() => handleSort(field)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        <ArrowUpDown
-          size={14}
-          className={sortBy === field ? 'text-blue-500' : ''}
-        />
-      </div>
-    </th>
-  );
-
+  
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
           Users
         </h2>
 
         {/* Search */}
         <div className="relative">
           <Search
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            size={16}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
             type="text"
             placeholder="Search by email or name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full sm:w-64 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="pl-8 pr-3 py-2 w-full sm:w-64 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
 
       {/* Success */}
       {successMessage && (
-        <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-4 rounded">
+        <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-2.5 lg:p-4 rounded text-xs lg:text-sm">
           {successMessage}
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-2.5 lg:p-4 rounded text-xs lg:text-sm">
           {error}
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      {/* Desktop Table - Hidden on Mobile */}
+      <div className="hidden lg:block bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -187,10 +173,30 @@ const UsersPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   User
                 </th>
-                <SortableHeader field="files">Files</SortableHeader>
-                <SortableHeader field="storage">Storage</SortableHeader>
-                <SortableHeader field="createdAt">Joined</SortableHeader>
-                <SortableHeader field="lastLoginAt">Last Login</SortableHeader>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('files')}>
+                  <div className="flex items-center gap-1">
+                    Files
+                    <ArrowUpDown size={12} className={sortBy === 'files' ? 'text-blue-500' : ''} />
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('storage')}>
+                  <div className="flex items-center gap-1">
+                    Storage
+                    <ArrowUpDown size={12} className={sortBy === 'storage' ? 'text-blue-500' : ''} />
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('createdAt')}>
+                  <div className="flex items-center gap-1">
+                    Joined
+                    <ArrowUpDown size={12} className={sortBy === 'createdAt' ? 'text-blue-500' : ''} />
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('lastLoginAt')}>
+                  <div className="flex items-center gap-1">
+                    Last Login
+                    <ArrowUpDown size={12} className={sortBy === 'lastLoginAt' ? 'text-blue-500' : ''} />
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
@@ -259,11 +265,9 @@ const UsersPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() =>
-                          handleToggleStatus(user.id, user.isActive)
-                        }
+                        onClick={() => handleToggleStatus(user.id, user.isActive)}
                         disabled={actionLoading === user.id}
-                        className={`p-2 transition-colors ${
+                        className={`p-2 transition-colors rounded ${
                           user.isActive
                             ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
                             : 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
@@ -279,7 +283,6 @@ const UsersPage = () => {
                         )}
                       </button>
                     </td>
-                    {/* Delete button */}
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
                         onClick={() => setDeleteConfirm({
@@ -288,7 +291,7 @@ const UsersPage = () => {
                           fileCount: user.fileCount,
                           storageBytes: user.storageBytes,
                         })}
-                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors rounded"
                         title="Delete user permanently"
                       >
                         <Trash2 size={18} />
@@ -311,11 +314,9 @@ const UsersPage = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() =>
-                  setPagination((prev) => ({ ...prev, page: prev.page - 1 }))
-                }
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
                 disabled={pagination.page === 1}
-                className="p-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -323,11 +324,148 @@ const UsersPage = () => {
                 Page {pagination.page} of {pagination.totalPages}
               </span>
               <button
-                onClick={() =>
-                  setPagination((prev) => ({ ...prev, page: prev.page + 1 }))
-                }
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
                 disabled={pagination.page === pagination.totalPages}
-                className="p-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Card Layout */}
+      <div className="lg:hidden space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 p-8 text-center text-gray-500 dark:text-gray-400 rounded-lg">
+            No users found
+          </div>
+        ) : (
+          users.map((user) => (
+            <div
+              key={user.id}
+              className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm"
+            >
+              {/* User Info */}
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {user.displayName || user.email}
+                  </div>
+                  {user.displayName && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {user.email}
+                    </div>
+                  )}
+                </div>
+                <span
+                  className={`ml-2 px-2 py-1 text-xs rounded-full whitespace-nowrap ${
+                    user.isActive
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                  }`}
+                >
+                  {user.isActive ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Files</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {user.fileCount.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Storage</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatBytes(user.storageBytes)}
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Joined</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatDate(user.createdAt)}
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Last Login</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatDate(user.lastLoginAt)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => handleToggleStatus(user.id, user.isActive)}
+                  disabled={actionLoading === user.id}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded transition-colors ${
+                    user.isActive
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30'
+                      : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30'
+                  } disabled:opacity-50`}
+                >
+                  {actionLoading === user.id ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                  ) : user.isActive ? (
+                    <>
+                      <UserX size={16} />
+                      <span>Disable</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck size={16} />
+                      <span>Enable</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm({
+                    id: user.id,
+                    email: user.email,
+                    fileCount: user.fileCount,
+                    storageBytes: user.storageBytes,
+                  })}
+                  className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded transition-colors"
+                >
+                  <Trash2 size={16} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+
+        {/* Mobile Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
+            <div className="text-xs text-center text-gray-500 dark:text-gray-400 mb-3">
+              Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+              {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} users
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
+                disabled={pagination.page === 1}
+                className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[100px] text-center">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
+                disabled={pagination.page === pagination.totalPages}
+                className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronRight size={18} />
               </button>
@@ -338,15 +476,15 @@ const UsersPage = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 lg:p-6 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
                 <Trash2 size={20} className="text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Delete User</h3>
+              <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white">Delete User</h3>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            <p className="text-xs lg:text-sm text-gray-600 dark:text-gray-400 mb-2">
               Are you sure you want to permanently delete:
             </p>
             <div className="bg-gray-50 dark:bg-gray-700 rounded p-3 mb-4 text-sm">
