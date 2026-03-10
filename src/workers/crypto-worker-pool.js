@@ -143,9 +143,11 @@ class CryptoWorkerPool {
 
     const task = this.pendingTasks.get(id);
     if (!task) {
-      console.warn(
-        `[CryptoWorkerPool] Received message for unknown task ${id}`
-      );
+      // Task was cancelled while the worker was actively executing it.
+      // We MUST still free the worker or the pool deadlocks permanently.
+      if (type.endsWith('_RESULT') || type === 'ERROR') {
+        this._markWorkerFree(workerIndex);
+      }
       return;
     }
 

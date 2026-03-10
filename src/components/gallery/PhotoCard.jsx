@@ -41,8 +41,15 @@ const PhotoCard = ({
 
   // AbortController for cancelling thumbnail load
   const abortControllerRef = useRef(null);
+  // Track current visibility without re-triggering the load effect
+  const isVisibleRef = useRef(isVisible);
   // Track if we've already preloaded medium for this file
   const mediumPreloadedRef = useRef(false);
+
+  // Keep isVisibleRef in sync without causing re-renders or effect re-runs
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
 
   // Check file types using clean file type system
   const fileMime = file.mimeType || mimeType;
@@ -110,7 +117,7 @@ const PhotoCard = ({
             masterKey,
             file.cipherFileKey,
             {
-              priority: isVisible ? 'high' : 'normal',
+              priority: isVisibleRef.current ? 'high' : 'normal',
               signal: abortController.signal,
               masterKeyBytes,
             }
@@ -151,9 +158,10 @@ const PhotoCard = ({
     file.thumbSmallUrl,
     hasMasterKey,
     getMasterKey,
-    isVisible,
     fileType,
     handler,
+    // isVisible intentionally excluded: visibility changes must NOT abort
+    // in-flight loads — only used via isVisibleRef for priority
   ]);
 
   // Preload medium thumbnail on hover for instant viewer opening
