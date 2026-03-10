@@ -7,12 +7,14 @@ import enSettings from './locales/en/settings.json';
 import enDashboard from './locales/en/dashboard.json';
 import enAlbums from './locales/en/albums.json';
 import enPhotos from './locales/en/photos.json';
+import enTerms from './locales/en/terms.json';
 
 import arCommon from './locales/ar/common.json';
 import arSettings from './locales/ar/settings.json';
 import arDashboard from './locales/ar/dashboard.json';
 import arAlbums from './locales/ar/albums.json';
 import arPhotos from './locales/ar/photos.json';
+import arTerms from './locales/ar/terms.json';
 
 // Supported languages configuration
 export const SUPPORTED_LANGUAGES = {
@@ -58,6 +60,7 @@ const resources = {
     dashboard: enDashboard,
     albums: enAlbums,
     photos: enPhotos,
+    terms: enTerms,
   },
   ar: {
     common: arCommon,
@@ -65,6 +68,7 @@ const resources = {
     dashboard: arDashboard,
     albums: arAlbums,
     photos: arPhotos,
+    terms: arTerms,
   },
 };
 
@@ -74,7 +78,7 @@ i18n.use(initReactI18next).init({
   lng: getInitialLanguage(),
   fallbackLng: DEFAULT_LANGUAGE,
   defaultNS: 'common',
-  ns: ['common', 'settings', 'dashboard', 'albums', 'photos'],
+  ns: ['common', 'settings', 'dashboard', 'albums', 'photos', 'terms'],
 
   interpolation: {
     escapeValue: false, // React already escapes by default

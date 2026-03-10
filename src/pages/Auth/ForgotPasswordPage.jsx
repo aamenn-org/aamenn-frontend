@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authService } from '../../services';
 import { unlockMasterKeyWithRecovery, encryptMasterKey, deriveKEK, generateRandomBytes, arrayBufferToBase64 } from '../../utils/crypto';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faArrowLeft, 
+  faCheck 
+} from '@fortawesome/free-solid-svg-icons';
 
 const ForgotPasswordPage = () => {
   const { t } = useTranslation('common');
@@ -110,9 +115,7 @@ const ForgotPasswordPage = () => {
                 {loading ? t('auth.sending', 'Sending...') : t('auth.sendVerificationCode', 'Send verification code')}
               </button>
               <Link to="/login" className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-gray-300 mt-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4" />
                 {t('auth.backToLogin', 'Back to login')}
               </Link>
             </form>
@@ -185,9 +188,7 @@ const ForgotPasswordPage = () => {
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+                <FontAwesomeIcon icon={faCheck} className="w-8 h-8 text-green-400" />
               </div>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Password reset!</h1>

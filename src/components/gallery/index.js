@@ -18,3 +18,7 @@ export { default as BlurhashCanvas } from './BlurhashCanvas';
 export { default as GridSizeControl } from './GridSizeControl';
 export { default as UploadProgressPanel } from './UploadProgressPanel';
 export { default as RenameModal } from './RenameModal';
+export { default as ContactsSection } from './ContactsSection';
+export { default as FolderCard } from './FolderCard';
+export { default as Breadcrumbs } from './Breadcrumbs';
+export { default as FolderPickerModal } from './FolderPickerModal';

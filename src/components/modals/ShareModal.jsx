@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { shareService } from '../../services';
-import { generateShareKey, decryptFilename } from '../../utils/crypto';
+import { generateShareKey, generateFolderShareKeys, decryptFilename } from '../../utils/crypto';
 import { useAuth } from '../../context';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faShare, 
+  faCheck, 
+  faCopy 
+} from '@fortawesome/free-solid-svg-icons';
 
-const ShareModal = ({ isOpen, onClose, items, type }) => {
-  console.log('ShareModal render', { isOpen, items, type });
-  
+const ShareModal = ({ isOpen, onClose, items }) => {
   const { getMasterKey, masterKeyAvailable } = useAuth();
   const [loading, setLoading] = useState(false);
   const [shareLinks, setShareLinks] = useState([]);
@@ -13,21 +17,10 @@ const ShareModal = ({ isOpen, onClose, items, type }) => {
   const [expirationUnit, setExpirationUnit] = useState('hours');
   const [step, setStep] = useState('configure'); // 'configure' | 'success'
 
-  if (!isOpen) {
-    console.log('ShareModal not open, returning null');
-    return null;
-  }
+  if (!isOpen) return null;
 
   const handleCreate = async () => {
-    // Get master key using the function
     const masterKey = getMasterKey();
-    
-    // Debug master key state
-    console.log('Master key state:', { 
-      masterKeyAvailable, 
-      masterKey: !!masterKey,
-      masterKeyType: masterKey?.constructor?.name 
-    });
 
     // Validate master key is available
     if (!masterKeyAvailable || !masterKey) {
@@ -50,6 +43,7 @@ const ShareModal = ({ isOpen, onClose, items, type }) => {
           minutes: 60,
           hours: 3600,
           days: 86400,
+          weeks: 604800,
         };
         expiresInSeconds = value * multipliers[expirationUnit];
       }
@@ -60,97 +54,65 @@ const ShareModal = ({ isOpen, onClose, items, type }) => {
         return;
       }
 
-      // Process each item with better error handling
+      // Process each item
       const shareItems = [];
-      const shareKeyRawArray = []; // Store shareKeyRaw during the loop
+      const shareKeyRawArray = [];
       for (const item of items) {
         try {
-          // Validate item has required fields
-          if (!item.cipherFileKey && !item.titleEncrypted) {
-            console.error('Item missing encryption keys:', item);
-            continue;
-          }
+          const isFolder = !!item.folderId;
+          const isFile = !!item.fileId;
 
-          // Generate share key
-          const { shareKey, shareKeyRaw } = await generateShareKey(
-            item.cipherFileKey,
-            masterKey
-          );
+          if (isFolder) {
+            // FOLDER: generate one share key, re-encrypt all file keys + folder name
+            const folderFiles = item.files || [];
+            const result = await generateFolderShareKeys(folderFiles, masterKey, item.nameEncrypted);
 
-          console.log(`🔑 SHARE KEY GENERATION for item index ${items.indexOf(item)}:`, {
-            shareKeyLength: shareKey?.length,
-            shareKeyRawLength: shareKeyRaw?.length,
-            shareKeyRaw: shareKeyRaw?.substring(0, 20) + '...',
-            shareKey: shareKey?.substring(0, 20) + '...'
-          });
-
-          // Generate slug from filename
-          let slugBase = 'shared-item';
-          if (item.fileNameEncrypted) {
+            // Derive slug from decrypted folder name
+            let slugBase = 'shared-folder';
             try {
-              const decrypted = await decryptFilename(item.fileNameEncrypted, masterKey);
-              slugBase = decrypted
-                .toLowerCase()
-                .replace(/\.[^/.]+$/, '') // Remove extension
-                .replace(/[^a-z0-9]+/g, '-')
-                .substring(0, 50);
-            } catch (err) {
-              console.error('Failed to decrypt filename:', err);
-            }
-          } else if (item.titleEncrypted) {
-            try {
-              // For albums, decrypt title
-              const decrypted = await decryptFilename(item.titleEncrypted, masterKey);
-              slugBase = decrypted
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .substring(0, 50);
-            } catch (err) {
-              console.error('Failed to decrypt album title:', err);
-            }
-          }
+              const decrypted = await decryptFilename(item.nameEncrypted, masterKey);
+              slugBase = decrypted.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50);
+            } catch { /* use default */ }
 
-          const shareItem = {
-            type: type || (item.fileNameEncrypted ? 'file' : 'album'),
-            id: item.fileId || item.albumId,
-            slugBase,
-            shareKey,
-            expiresInSeconds,
-          };
-          
-          // Store shareKeyRaw separately for URL construction (not sent to backend)
-          const itemWithShareKeyRaw = {
-            ...shareItem,
-            shareKeyRaw, // Keep for URL construction
-          };
-          
-          console.log('📦 CREATED SHARE ITEM:', {
-            type: shareItem.type,
-            id: shareItem.id,
-            idType: typeof shareItem.id,
-            slugBase: shareItem.slugBase,
-            slugBaseLength: shareItem.slugBase?.length,
-            shareKeyLength: shareItem.shareKey?.length,
-            shareKeyRawLength: itemWithShareKeyRaw.shareKeyRaw?.length,
-            expiresInSeconds: shareItem.expiresInSeconds
-          });
-          
-          console.log('📝 BEFORE PUSHING TO shareItems:', {
-            shareItemsLength: shareItems.length,
-            shareKeyRaw: itemWithShareKeyRaw.shareKeyRaw?.substring(0, 20) + '...'
-          });
-          
-          shareItems.push(shareItem);
-          shareKeyRawArray.push(shareKeyRaw); // Store shareKeyRaw in separate array
-          
-          console.log('📝 AFTER PUSHING TO shareItems:', {
-            shareItemsLength: shareItems.length,
-            shareKeyRawArrayLength: shareKeyRawArray.length,
-            lastShareKeyRaw: shareKeyRaw?.substring(0, 20) + '...'
-          });
+            shareItems.push({
+              type: 'folder',
+              id: item.folderId,
+              slugBase,
+              shareKey: result.shareKey,
+              fileKeys: result.fileKeys,
+              expiresInSeconds,
+            });
+            shareKeyRawArray.push(result.shareKeyRaw);
+          } else {
+            // FILE or ALBUM
+            if (!item.cipherFileKey && !item.titleEncrypted) continue;
+
+            const generated = await generateShareKey(item.cipherFileKey, masterKey);
+
+            let slugBase = 'shared-item';
+            if (item.fileNameEncrypted) {
+              try {
+                const decrypted = await decryptFilename(item.fileNameEncrypted, masterKey);
+                slugBase = decrypted.toLowerCase().replace(/\.[^/.]+$/, '').replace(/[^a-z0-9]+/g, '-').substring(0, 50);
+              } catch { /* use default */ }
+            } else if (item.titleEncrypted) {
+              try {
+                const decrypted = await decryptFilename(item.titleEncrypted, masterKey);
+                slugBase = decrypted.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 50);
+              } catch { /* use default */ }
+            }
+
+            shareItems.push({
+              type: isFile ? 'file' : 'album',
+              id: item.fileId || item.albumId,
+              slugBase,
+              shareKey: generated.shareKey,
+              expiresInSeconds,
+            });
+            shareKeyRawArray.push(generated.shareKeyRaw);
+          }
         } catch (err) {
-          console.error('Failed to process item:', item, err);
-          // Continue with other items instead of failing completely
+          console.error('Failed to process item:', err);
         }
       }
 
@@ -159,43 +121,12 @@ const ShareModal = ({ isOpen, onClose, items, type }) => {
         return;
       }
 
-      console.log('� shareKeyRawArray after loop:', {
-        length: shareKeyRawArray.length,
-        keys: shareKeyRawArray.map((key, index) => ({
-          index,
-          hasKey: !!key,
-          keyLength: key?.length,
-          key: key?.substring(0, 20) + '...'
-        }))
-      });
-
-      // Debug the data being sent
-      console.log('Sending to backend:', shareItems);
-
-      // Create shares on backend
       const response = await shareService.createShares(shareItems);
-      console.log('Backend response:', response);
-      
-      // Construct proper URLs with shareKeyRaw
-      const sharesWithUrls = response.shares.map((share, index) => {
-        const shareKeyRaw = shareKeyRawArray[index];
-        console.log(`Constructing URL for share ${index}:`, {
-          shareSlug: share.slug,
-          shareKeyRaw,
-          shareKeyRawLength: shareKeyRaw?.length
-        });
-        const frontendBaseUrl = window.location.origin;
-        const url = `${frontendBaseUrl}/share/${share.slug}#k=${encodeURIComponent(shareKeyRaw)}`;
-        
-        console.log(`Constructed URL: ${url}`);
-        
-        return {
-          ...share,
-          url,
-        };
-      });
-      
-      console.log('Shares with proper URLs:', sharesWithUrls);
+      const frontendBaseUrl = window.location.origin;
+      const sharesWithUrls = response.shares.map((share, index) => ({
+        ...share,
+        url: `${frontendBaseUrl}/share/${share.slug}#k=${encodeURIComponent(shareKeyRawArray[index])}`,
+      }));
       setShareLinks(sharesWithUrls);
       setStep('success');
     } catch (error) {
@@ -227,9 +158,7 @@ return (
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-              </svg>
+              <FontAwesomeIcon icon={faShare} className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create Share Link</h2>
@@ -298,9 +227,7 @@ return (
           {/* Success Header */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <FontAwesomeIcon icon={faCheck} className="w-5 h-5 text-green-600" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Share Link Created</h2>
@@ -327,9 +254,7 @@ return (
                     onClick={() => handleCopy(share.url)}
                     className="ml-2 p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
+                    <FontAwesomeIcon icon={faCopy} className="w-4 h-4" />
                   </button>
                 </div>
               </div>

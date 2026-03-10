@@ -4,77 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Navbar } from '../../components/layout';
 import { Input, Button } from '../../components/ui';
 import { useAuth } from '../../context';
-
-// Icons
-const MailIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-    />
-  </svg>
-);
-
-const LockIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-    />
-  </svg>
-);
-
-const EyeIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-    />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg
-    className="w-4 h-4"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M5 13l4 4L19 7"
-    />
-  </svg>
-);
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEnvelope, faLock, faEye, faCheck } from '@fortawesome/free-solid-svg-icons';
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -205,7 +136,7 @@ const AuthPage = () => {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                icon={<MailIcon />}
+                icon={<FontAwesomeIcon icon={faEnvelope} className="w-5 h-5" />}
                 required
               />
 
@@ -215,7 +146,7 @@ const AuthPage = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                icon={<LockIcon />}
+                icon={<FontAwesomeIcon icon={faLock} className="w-5 h-5" />}
                 required
               />
 
@@ -227,14 +158,14 @@ const AuthPage = () => {
                     placeholder="••••••••"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    icon={<EyeIcon />}
+                    icon={<FontAwesomeIcon icon={faEye} className="w-5 h-5" />}
                     required
                   />
 
                   {/* Security Notice */}
                   <div className="flex items-start space-x-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                     <div className="flex-shrink-0 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center mt-0.5">
-                      <CheckIcon />
+                      <FontAwesomeIcon icon={faCheck} className="w-3 h-3 text-white" />
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-300">
                       Your password is the key used to encrypt your photos
@@ -298,19 +229,7 @@ const AuthPage = () => {
 
                 {/* Lock icon */}
                 <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/50 rounded-2xl flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-primary-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faLock} className="w-8 h-8 text-primary-500" />
                 </div>
 
                 {/* Encrypted text */}
@@ -333,49 +252,19 @@ const AuthPage = () => {
             <div className="flex items-center justify-center space-x-6">
               <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
                 <div className="w-5 h-5 bg-primary-100 dark:bg-primary-900/50 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-3 h-3 text-primary-600 dark:text-primary-400"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faCheck} className="w-3 h-3 text-primary-600 dark:text-primary-400" />
                 </div>
                 <span className="text-sm">No ads</span>
               </div>
               <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
                 <div className="w-5 h-5 bg-primary-100 dark:bg-primary-900/50 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-3 h-3 text-primary-600 dark:text-primary-400"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faCheck} className="w-3 h-3 text-primary-600 dark:text-primary-400" />
                 </div>
                 <span className="text-sm">No tracking</span>
               </div>
               <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
                 <div className="w-5 h-5 bg-primary-100 dark:bg-primary-900/50 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-3 h-3 text-primary-600 dark:text-primary-400"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faCheck} className="w-3 h-3 text-primary-600 dark:text-primary-400" />
                 </div>
                 <span className="text-sm">Open source</span>
               </div>

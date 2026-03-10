@@ -13,4 +13,14 @@ export default defineConfig({
       },
     },
   },
+  server: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+    },
+  },
 });

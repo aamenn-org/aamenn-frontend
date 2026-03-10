@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
+import { setDragState } from '../../utils/dragState';
 import BlurhashCanvas from './BlurhashCanvas';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { fileService } from '../../services';
 import { getFileType, FILE_HANDLERS, isVideo, formatVideoDuration } from '../../utils/thumbnail';
 import { decryptFilename } from '../../utils/crypto';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faVideo, 
+  faFile, 
+  faFilePdf,
+  faFileWord,
+  faFileLines,
+  faPlay, 
+  faSpinner, 
+  faSquareCheck, 
+  faHeart 
+} from '@fortawesome/free-solid-svg-icons';
 
 const PhotoCard = ({
   file,
@@ -13,7 +26,8 @@ const PhotoCard = ({
   onView,
   onFavoriteToggle,
   mimeType,
-  isVisible = true, // New prop: whether this card is currently visible
+  isVisible = true,
+  selectedFileIds = [], // IDs of all currently selected files
 }) => {
   const { getMasterKey, getMasterKeyBytes, hasMasterKey } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
@@ -191,35 +205,32 @@ const PhotoCard = ({
   const getFileIcon = () => {
     if (mimeType?.startsWith('video/')) {
       return (
-        <svg
-          className="w-10 h-10 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-          />
-        </svg>
+        <FontAwesomeIcon icon={faVideo} className="w-10 h-10 text-gray-400" />
       );
     }
+    
+    // Use specific icons for document types
+    if (fileType === 'document') {
+      const iconClass = typeof handler.iconClass === 'function' 
+        ? handler.iconClass(mimeType)
+        : handler.iconClass;
+      const iconColor = typeof handler.iconColor === 'function'
+        ? handler.iconColor(mimeType)
+        : handler.iconColor;
+      
+      let icon;
+      if (mimeType?.includes('pdf')) icon = faFilePdf;
+      else if (mimeType?.includes('word') || mimeType?.includes('docx')) icon = faFileWord;
+      else if (mimeType?.includes('text') || mimeType?.includes('txt')) icon = faFileLines;
+      else icon = faFile;
+      
+      return (
+        <FontAwesomeIcon icon={icon} className={`w-10 h-10 ${iconColor}`} />
+      );
+    }
+    
     return (
-      <svg
-        className="w-10 h-10 text-gray-400"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-        />
-      </svg>
+      <FontAwesomeIcon icon={faFile} className="w-10 h-10 text-gray-400" />
     );
   };
 
@@ -241,25 +252,43 @@ const PhotoCard = ({
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onView?.(file)}
       title="Hover to preload, click to view"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        const fileId = file.fileId || file.id;
+        // If this file is part of a selection, drag all selected; otherwise just this one
+        const ids = selectedFileIds.includes(fileId) && selectedFileIds.length > 1
+          ? selectedFileIds
+          : [fileId];
+        setDragState({ type: 'files', fileIds: ids });
+      }}
     >
-      {/* Document file card - show Font Awesome icon */}
+      {/* Document file card - show specific Font Awesome icon */}
       {isDocFile ? (
         <div className="w-full h-full bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
-          <i className={`fa-solid ${
-            typeof handler.iconClass === 'function' 
-              ? handler.iconClass(fileMime) 
-              : handler.iconClass
-          } text-4xl ${
-            typeof handler.iconColor === 'function'
-              ? handler.iconColor(fileMime)
-              : handler.iconColor
-          }`}></i>
+          <FontAwesomeIcon 
+            icon={
+              fileMime.includes('pdf') ? faFilePdf :
+              fileMime.includes('word') || fileMime.includes('docx') ? faFileWord :
+              fileMime.includes('text') || fileMime.includes('txt') ? faFileLines :
+              faFile
+            } 
+            className={`text-4xl ${
+              fileMime.includes('pdf') ? 'text-red-400' :
+              fileMime.includes('word') || fileMime.includes('docx') ? 'text-blue-400' :
+              fileMime.includes('text') || fileMime.includes('txt') ? 'text-gray-300' :
+              'text-gray-400'
+            }`} 
+          />
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             {fileType === 'document' ? (
               fileMime.includes('pdf') ? 'PDF' :
-              fileMime.includes('word') ? 'DOCX' :
-              fileMime.includes('text') ? 'TXT' : 'DOC'
-            ) : 'FILE'}
+              fileMime.includes('word') || fileMime.includes('docx') ? 'DOCX' :
+              fileMime.includes('text') || fileMime.includes('txt') ? 'TXT' :
+              'DOC'
+            ) : (
+              fileType.toUpperCase()
+            )}
           </span>
           {decryptedFileName && (
             <span className="text-xs text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
@@ -313,13 +342,7 @@ const PhotoCard = ({
               {/* Play icon in center */}
               <div className="absolute inset-0 flex items-center justify-center z-15 pointer-events-none">
                 <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
-                  <svg
-                    className="w-6 h-6 text-white ml-0.5"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+                  <FontAwesomeIcon icon={faPlay} className="w-6 h-6 text-white ml-0.5" />
                 </div>
               </div>
 
@@ -335,25 +358,7 @@ const PhotoCard = ({
           {/* Loading indicator */}
           {decrypting && !imageLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 dark:bg-zinc-700/80 z-20">
-              <svg
-                className="animate-spin w-6 h-6 text-gray-400"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faSpinner} className="animate-spin w-6 h-6 text-gray-400" />
             </div>
           )}
         </>
@@ -379,19 +384,7 @@ const PhotoCard = ({
         }}
       >
         {isSelected && (
-          <svg
-            className="w-4 h-4 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faSquareCheck} className="w-4 h-4 text-white" />
         )}
       </div>
 
@@ -431,35 +424,9 @@ const PhotoCard = ({
         }}
       >
         {favoriteLoading ? (
-          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faSpinner} className="animate-spin w-4 h-4" />
         ) : (
-          <svg
-            className="w-4 h-4"
-            fill={isFavorite ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faHeart} className="w-4 h-4" />
         )}
       </button>
 

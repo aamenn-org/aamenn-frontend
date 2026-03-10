@@ -1,65 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { useTheme, THEME_MODES } from '../../../context/ThemeContext';
 import { SUPPORTED_LANGUAGES } from '../../../i18n';
-
-// Icons for theme options
-const SunIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-    />
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-    />
-  </svg>
-);
-
-const SystemIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-    />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-    <path
-      fillRule="evenodd"
-      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faSun, 
+  faMoon, 
+  faDesktop, 
+  faCheck 
+} from '@fortawesome/free-solid-svg-icons';
 
 const AppearanceSection = () => {
   const { t, i18n } = useTranslation('settings');
@@ -67,9 +15,9 @@ const AppearanceSection = () => {
   const currentLanguage = i18n.language;
 
   const themeOptions = [
-    { id: THEME_MODES.LIGHT, icon: SunIcon, label: t('theme.light') },
-    { id: THEME_MODES.DARK, icon: MoonIcon, label: t('theme.dark') },
-    { id: THEME_MODES.SYSTEM, icon: SystemIcon, label: t('theme.system') },
+    { id: THEME_MODES.LIGHT, icon: faSun, label: t('theme.light') },
+    { id: THEME_MODES.DARK, icon: faMoon, label: t('theme.dark') },
+    { id: THEME_MODES.SYSTEM, icon: faDesktop, label: t('theme.system') },
   ];
 
   const languageOptions = Object.entries(SUPPORTED_LANGUAGES).map(
@@ -93,7 +41,6 @@ const AppearanceSection = () => {
 
         <div className="grid grid-cols-3 gap-4">
           {themeOptions.map((option) => {
-            const Icon = option.icon;
             const isSelected = themeMode === option.id;
             return (
               <button
@@ -114,7 +61,7 @@ const AppearanceSection = () => {
                       : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-gray-400'
                   }`}
                 >
-                  <Icon />
+                  <FontAwesomeIcon icon={option.icon} className="w-5 h-5" />
                 </div>
                 <span
                   className={`text-sm font-medium ${
@@ -127,7 +74,7 @@ const AppearanceSection = () => {
                 </span>
                 {isSelected && (
                   <div className="absolute top-2 right-2 text-primary-500">
-                    <CheckIcon />
+                    <FontAwesomeIcon icon={faCheck} className="w-4 h-4" />
                   </div>
                 )}
               </button>
@@ -178,7 +125,7 @@ const AppearanceSection = () => {
                 </div>
                 {isSelected && (
                   <div className="text-primary-500">
-                    <CheckIcon />
+                    <FontAwesomeIcon icon={faCheck} className="w-4 h-4" />
                   </div>
                 )}
               </button>

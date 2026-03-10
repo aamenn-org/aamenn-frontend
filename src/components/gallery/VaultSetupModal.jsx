@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { generateRegistrationKeys, generateRecoveryParams } from '../../utils/crypto';
 import { userService } from '../../services';
 import RecoveryKeyDownloadPrompt from '../RecoveryKeyDownloadPrompt';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLock } from '@fortawesome/free-solid-svg-icons';
 
 /**
  * VaultSetupModal - Modal for new Google users to create their Vault Password
@@ -104,9 +106,7 @@ const VaultSetupModal = ({ isOpen, onClose, onSetup }) => {
       <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
         <div className="flex items-center mb-4">
           <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            <FontAwesomeIcon icon={faLock} className="w-5 h-5 text-blue-400" />
           </div>
           <div className="ml-3">
             <h3 className="text-lg font-semibold text-white">{t('vault.createPassword', 'Create Password')}</h3>

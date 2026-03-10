@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { adminService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  HardDrive,
-  Image,
-  TrendingUp,
-  Calendar,
-  FileImage,
-  FileVideo,
-  Download,
-} from 'lucide-react';
+  faHardDrive,
+  faImage,
+  faChartLine,
+  faCalendar,
+  faFile,
+  faVideo,
+  faDownload,
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * Format bytes to human readable
@@ -81,8 +82,8 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
  * Get icon for mime type
  */
 const getMimeIcon = (mimeType) => {
-  if (mimeType?.startsWith('video/')) return FileVideo;
-  return FileImage;
+  if (mimeType?.startsWith('video/')) return faVideo;
+  return faFile;
 };
 
 const Storage = () => {
@@ -144,27 +145,27 @@ const Storage = () => {
           title="Total Files"
           value={stats?.totalFiles?.toLocaleString() || 0}
           subtitle={`+${stats?.uploadsToday || 0} today`}
-          icon={Image}
+          icon={faImage}
           color="blue"
         />
         <StatCard
           title="Total Storage"
           value={formatBytes(stats?.totalStorageBytes || 0)}
           subtitle={`of ${formatBytes(STORAGE_LIMIT)}`}
-          icon={HardDrive}
+          icon={faHardDrive}
           color="purple"
         />
         <StatCard
           title="Avg File Size"
           value={formatBytes(stats?.avgFileSize || 0)}
-          icon={FileImage}
+          icon={faFile}
           color="green"
         />
         <StatCard
           title="Daily Growth"
           value={formatBytes(stats?.storageGrowthDaily || 0)}
           subtitle="per day (30d avg)"
-          icon={TrendingUp}
+          icon={faChartLine}
           color="orange"
         />
       </div>
@@ -207,7 +208,7 @@ const Storage = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 lg:gap-3">
-                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <FontAwesomeIcon icon={faCalendar} className="w-4 h-4 text-gray-400 lg:w-[18px] lg:h-[18px]" />
                 <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">Today</span>
               </div>
               <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
@@ -216,7 +217,7 @@ const Storage = () => {
             </div>
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 lg:gap-3">
-                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <FontAwesomeIcon icon={faCalendar} className="w-4 h-4 text-gray-400 lg:w-[18px] lg:h-[18px]" />
                 <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Week
                 </span>
@@ -227,7 +228,7 @@ const Storage = () => {
             </div>
             <div className="flex items-center justify-between py-3">
               <div className="flex items-center gap-2 lg:gap-3">
-                <Calendar size={16} className="text-gray-400 lg:w-[18px] lg:h-[18px]" />
+                <FontAwesomeIcon icon={faCalendar} className="w-4 h-4 text-gray-400 lg:w-[18px] lg:h-[18px]" />
                 <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Month
                 </span>
@@ -247,7 +248,7 @@ const Storage = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 lg:gap-3">
-                <Download size={16} className="text-blue-500 lg:w-[18px] lg:h-[18px]" />
+                <FontAwesomeIcon icon={faDownload} className="w-4 h-4 text-blue-500 lg:w-[18px] lg:h-[18px]" />
                 <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">Today</span>
               </div>
               <div className="text-right">
@@ -261,7 +262,7 @@ const Storage = () => {
             </div>
             <div className="flex items-center justify-between py-3">
               <div className="flex items-center gap-2 lg:gap-3">
-                <Download size={16} className="text-purple-500 lg:w-[18px] lg:h-[18px]" />
+                <FontAwesomeIcon icon={faDownload} className="w-4 h-4 text-purple-500 lg:w-[18px] lg:h-[18px]" />
                 <span className="text-sm lg:text-base text-gray-600 dark:text-gray-400">
                   This Month
                 </span>

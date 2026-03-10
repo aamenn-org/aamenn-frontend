@@ -17,6 +17,7 @@ import {
 } from './pages';
 import { AdminDashboard } from './pages/Admin';
 import { ShareViewer } from './pages/ShareViewer';
+import TermsOfService from './pages/TermsOfService';
 import config from './config';
 
 // Protected Route Component
@@ -89,6 +90,7 @@ function AppRoutes() {
     <Routes>
       {/* Public Routes */}
       <Route path="/share/:slug" element={<ShareViewer />} />
+      <Route path="/terms" element={<TermsOfService />} />
       <Route
         path="/login"
         element={
@@ -124,9 +126,57 @@ function AppRoutes() {
         }
       />
 
-      {/* User Protected Routes */}
+      {/* User Protected Routes - each tab has its own URL */}
       <Route
         path="/photos"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/files"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/folders"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/folders/:folderId"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/favorites"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trash"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contacts"
         element={
           <ProtectedRoute>
             <Dashboard />

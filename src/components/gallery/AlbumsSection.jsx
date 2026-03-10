@@ -3,6 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { albumService } from '../../services';
 import { useAuth } from '../../context';
 import { encryptFilename, decryptFilename } from '../../utils/crypto';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faFolderOpen, 
+  faPlus,
+  faTrash,
+  faEye
+} from '@fortawesome/free-solid-svg-icons';
 
 const AlbumsSection = ({ onAlbumSelect }) => {
   const { t } = useTranslation(['albums', 'common']);
@@ -110,19 +117,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
           disabled={!hasMasterKey()}
           className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <svg
-            className="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faPlus} className="w-4 h-4 mr-2" />
           {t('createAlbum', 'New Album')}
         </button>
       </div>
@@ -131,19 +126,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
       {albums.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-            <svg
-              className="w-12 h-12 text-gray-300 dark:text-gray-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             {t('empty.title', 'No albums yet')}
@@ -162,19 +145,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
             >
               {/* Album Cover */}
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                <svg
-                  className="w-12 h-12 text-white/80 mb-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-white/80 mb-2" />
                 <span className="text-white font-medium text-center text-sm truncate w-full">
                   {album.title}
                 </span>
@@ -191,19 +162,7 @@ const AlbumsSection = ({ onAlbumSelect }) => {
                 }}
                 className="absolute top-2 right-2 w-8 h-8 bg-black/50 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <svg
-                  className="w-4 h-4 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faEye} className="w-4 h-4 text-white" />
               </button>
             </div>
           ))}

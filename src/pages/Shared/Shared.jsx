@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { DashboardNavbar } from '../../components/layout';
 import { shareService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faShareNodes } from '@fortawesome/free-solid-svg-icons';
 
 const Shared = () => {
   const [shares, setShares] = useState([]);
@@ -78,19 +80,7 @@ const Shared = () => {
           ) : shares.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                <svg
-                  className="w-12 h-12 text-gray-300"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1}
-                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faShareNodes} className="w-12 h-12 text-gray-300" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 No share links yet

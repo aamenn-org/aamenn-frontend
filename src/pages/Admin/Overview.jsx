@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { adminService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  Users,
-  Image,
-  HardDrive,
-  TrendingUp,
-  UserPlus,
-  Clock,
-  Download,
-} from 'lucide-react';
+  faUsers,
+  faImage,
+  faHardDrive,
+  faChartLine,
+  faUserPlus,
+  faClock,
+  faDownload,
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * Format bytes to human readable
@@ -226,35 +227,35 @@ const Overview = () => {
           title="Total Users"
           value={stats?.totalUsers?.toLocaleString() || 0}
           subtitle={`+${stats?.newUsersToday || 0} today`}
-          icon={Users}
+          icon={faUsers}
           color="blue"
         />
         <StatCard
           title="Active Users (24h)"
           value={stats?.activeUsers24h?.toLocaleString() || 0}
           subtitle={`${stats?.activeUsers7d || 0} in last 7 days`}
-          icon={Clock}
+          icon={faClock}
           color="green"
         />
         <StatCard
           title="Total Photos"
           value={stats?.totalFiles?.toLocaleString() || 0}
           subtitle={`+${stats?.uploadsToday || 0} today`}
-          icon={Image}
+          icon={faImage}
           color="purple"
         />
         <StatCard
           title="Storage Used"
           value={formatBytes(stats?.totalStorageBytes || 0)}
           subtitle={`Avg file: ${formatBytes(stats?.avgFileSize || 0)}`}
-          icon={HardDrive}
+          icon={faHardDrive}
           color="orange"
         />
         <StatCard
           title="New Users (Week)"
           value={stats?.newUsersWeek?.toLocaleString() || 0}
           subtitle={`${stats?.uploadsWeek || 0} uploads this week`}
-          icon={UserPlus}
+          icon={faUserPlus}
           color="cyan"
         />
       </div>
@@ -264,7 +265,7 @@ const Overview = () => {
         <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-3 lg:mb-4">
             <div className="p-1.5 lg:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-              <Download size={16} className="lg:w-6 lg:h-6" />
+              <FontAwesomeIcon icon={faDownload} className="w-4 h-4 lg:w-6 lg:h-6" />
             </div>
             <div>
               <h3 className="text-sm lg:text-lg font-semibold text-gray-900 dark:text-white">
@@ -282,7 +283,7 @@ const Overview = () => {
         <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-3 lg:mb-4">
             <div className="p-1.5 lg:p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-              <Download size={16} className="lg:w-6 lg:h-6" />
+              <FontAwesomeIcon icon={faDownload} className="w-4 h-4 lg:w-6 lg:h-6" />
             </div>
             <div>
               <h3 className="text-sm lg:text-lg font-semibold text-gray-900 dark:text-white">

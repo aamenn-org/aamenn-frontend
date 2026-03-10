@@ -4,10 +4,11 @@ const GalleryTabs = ({ activeTab, onTabChange }) => {
   const { t } = useTranslation('photos');
   
   const tabs = [
-    { id: 'photos', label: t('tabs.photos', 'Photos') },
+    { id: 'folders', label: t('tabs.folders', 'Folders') },
     { id: 'files', label: t('tabs.files', 'Files') },
-    { id: 'albums', label: t('tabs.albums', 'Albums') },
+    { id: 'photos', label: t('tabs.photos', 'Photos') },
     { id: 'favorites', label: t('tabs.favorites', 'Favorites') },
+    { id: 'contacts', label: t('tabs.contacts', 'Contacts') },
     { id: 'trash', label: t('tabs.trash', 'Trash') },
   ];
 

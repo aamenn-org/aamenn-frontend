@@ -455,7 +455,7 @@ export function useUpload({ onFileUploaded } = {}) {
         });
         updateUpload(id, { progress: 50 });
 
-        // Add to upload queue with contentHash for backend storage
+        // Add to upload queue with contentHash and folderId for backend storage
         uploadQueueRef.current.push({
           id,
           file,
@@ -464,7 +464,8 @@ export function useUpload({ onFileUploaded } = {}) {
           cipherFileKey,
           sha1Hash,
           thumbnailData,
-          contentHash, // Include for backend to store
+          contentHash,
+          folderId: uploadInfo.folderId || null,
         });
 
         // Trigger upload queue processing
@@ -500,6 +501,7 @@ export function useUpload({ onFileUploaded } = {}) {
         sha1Hash,
         thumbnailData,
         contentHash,
+        folderId,
       } = encryptedItem;
 
       uploadingCountRef.current++;
@@ -522,6 +524,9 @@ export function useUpload({ onFileUploaded } = {}) {
           formData.append('sha1Hash', sha1Hash);
           if (contentHash) {
             formData.append('contentHash', contentHash);
+          }
+          if (folderId) {
+            formData.append('folderId', folderId);
           }
 
           if (thumbnailData) {
@@ -633,7 +638,7 @@ export function useUpload({ onFileUploaded } = {}) {
 
   // Add files to upload
   const uploadFiles = useCallback(
-    async (files) => {
+    async (files, { folderId } = {}) => {
       if (!masterKeyAvailable) {
         throw new Error('Please unlock your vault first');
       }
@@ -653,6 +658,7 @@ export function useUpload({ onFileUploaded } = {}) {
           progress: 0,
           error: null,
           result: null,
+          folderId: folderId || null,
         };
         newUploads.set(id, uploadInfo);
         queueRef.current.push(uploadInfo);

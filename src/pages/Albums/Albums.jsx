@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { DashboardNavbar } from '../../components/layout';
 import { albumService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faFolderOpen, 
+  faPlus, 
+  faImage 
+} from '@fortawesome/free-solid-svg-icons';
 
 const AlbumCard = ({ album, onClick }) => {
   return (
@@ -19,19 +25,7 @@ const AlbumCard = ({ album, onClick }) => {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <svg
-              className="w-12 h-12 text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-gray-300" />
           </div>
         )}
 
@@ -112,19 +106,7 @@ const Albums = () => {
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"
             >
-              <svg
-                className="w-4 h-4 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faPlus} className="w-4 h-4 mr-2" />
               New Album
             </button>
           </div>
@@ -152,19 +134,7 @@ const Albums = () => {
           ) : (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                <svg
-                  className="w-12 h-12 text-gray-300"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1}
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faImage} className="w-12 h-12 text-gray-300" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 No albums yet
@@ -176,19 +146,7 @@ const Albums = () => {
                 onClick={() => setShowCreateModal(true)}
                 className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
               >
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
                 Create Album
               </button>
             </div>

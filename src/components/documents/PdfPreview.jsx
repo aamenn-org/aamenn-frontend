@@ -3,6 +3,11 @@ import { Worker, Viewer, SpecialZoomLevel } from '@react-pdf-viewer/core';
 import { zoomPlugin } from '@react-pdf-viewer/zoom';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/zoom/lib/styles/index.css';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faMagnifyingGlassMinus, 
+  faMagnifyingGlassPlus 
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * PDF Preview Component
@@ -64,19 +69,7 @@ const PdfPreview = ({ blobUrl, fileName }) => {
             className="p-2 text-gray-300 hover:text-white hover:bg-zinc-700 rounded transition-colors"
             title="Zoom out (Ctrl+-)"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faMagnifyingGlassMinus} className="w-5 h-5" />
           </button>
 
           <span className="text-sm text-gray-300 min-w-[4rem] text-center">
@@ -88,19 +81,7 @@ const PdfPreview = ({ blobUrl, fileName }) => {
             className="p-2 text-gray-300 hover:text-white hover:bg-zinc-700 rounded transition-colors"
             title="Zoom in (Ctrl++)"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faMagnifyingGlassPlus} className="w-5 h-5" />
           </button>
 
           <button
