@@ -13,24 +13,42 @@ const GalleryTabs = ({ activeTab, onTabChange }) => {
   ];
 
   return (
-    <div className="flex items-center gap-2 mb-4 md:mb-6 overflow-x-auto scrollbar-hide pb-2">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={`
-            inline-flex items-center px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-medium
-            transition-all duration-200 whitespace-nowrap flex-shrink-0
-            ${
-              activeTab === tab.id
-                ? 'bg-[#1e3a5f] text-white'
-                : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'
-            }
-          `}
+    <div >
+      {/* Mobile: Dropdown */}
+      <div className="md:hidden">
+        <select
+          value={activeTab}
+          onChange={(e) => onTabChange(e.target.value)}
+          className=" px-4 border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
         >
-          {tab.label}
-        </button>
-      ))}
+          {tabs.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Desktop: Normal Tabs */}
+      <div className="hidden md:flex items-center gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={`
+              inline-flex items-center px-4 py-2 rounded-full text-sm font-medium
+              transition-all duration-200 whitespace-nowrap
+              ${
+                activeTab === tab.id
+                  ? 'bg-[#1e3a5f] text-white'
+                  : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'
+              }
+            `}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

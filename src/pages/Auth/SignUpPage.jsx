@@ -54,10 +54,14 @@ const SignUpPage = () => {
       const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const result = await register(email.trim(), password.trim(), displayName);
       if (result.success) {
+        // Mark that onboarding should be shown after landing on dashboard
+        console.log('📝 Setting onboarding flag during registration...');
+        localStorage.setItem('aamenn_pending_onboarding', 'true');
+        console.log('📝 Onboarding flag set:', localStorage.getItem('aamenn_pending_onboarding'));
         if (result.recoveryPhrase) {
           setRecoveryPhrase(result.recoveryPhrase);
         } else {
-          window.location.href = '/photos';
+          window.location.href = '/folders';
         }
       } else {
         setError(result.error);
@@ -77,7 +81,7 @@ const SignUpPage = () => {
         recoveryPhrase={recoveryPhrase}
         onDismiss={() => {
           setRecoveryPhrase(null);
-          window.location.href = '/photos';
+          window.location.href = '/folders';
         }}
       />
     )}
@@ -229,9 +233,9 @@ const SignUpPage = () => {
           <GoogleSignInButton
             onSuccess={(result) => {
               if (result.requiresVaultSetup) {
-                window.location.href = '/photos?setupVault=true';
+                window.location.href = '/folders?setupVault=true';
               } else {
-                window.location.href = '/photos';
+                window.location.href = '/folders';
               }
             }}
             onError={(error) => setError(error)}

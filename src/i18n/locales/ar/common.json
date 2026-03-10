@@ -89,5 +89,11 @@
     "firstNameRequired": "الاسم الأول مطلوب",
     "lastNameRequired": "الاسم الأخير مطلوب",
     "termsRequired": "يجب الموافقة على الشروط والأحكام"
+  },
+  "onboarding": {
+    "skip": "تخطي",
+    "next": "التالي",
+    "previous": "السابق",
+    "finish": "ابدأ الآن"
   }
 }

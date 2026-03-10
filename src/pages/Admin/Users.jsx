@@ -40,7 +40,7 @@ const UsersPage = () => {
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 10,
     total: 0,
     totalPages: 0,
   });
@@ -513,7 +513,7 @@ const UsersPage = () => {
                 {deleteLoading ? (
                   <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Deleting...</>
                 ) : (
-                  <><Trash2 size={14} /> Delete Permanently</>
+                  <><FontAwesomeIcon icon={faTrash} size="sm" /> Delete Permanently</>
                 )}
               </button>
             </div>

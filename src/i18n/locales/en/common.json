@@ -89,5 +89,11 @@
     "firstNameRequired": "First name is required",
     "lastNameRequired": "Last name is required",
     "termsRequired": "You must agree to the Terms & Conditions"
+  },
+  "onboarding": {
+    "skip": "Skip",
+    "next": "Next",
+    "previous": "Previous",
+    "finish": "Get Started"
   }
 }

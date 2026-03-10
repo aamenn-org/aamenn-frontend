@@ -56,7 +56,7 @@ const AdminRoute = ({ children }) => {
   }
 
   if (!isAdmin()) {
-    return <Navigate to="/photos" replace />;
+    return <Navigate to="/folders" replace />;
   }
 
   return children;
@@ -79,7 +79,7 @@ const PublicRoute = ({ children }) => {
     if (isAdmin()) {
       return <Navigate to="/dashboard" replace />;
     }
-    return <Navigate to="/photos" replace />;
+    return <Navigate to="/folders" replace />;
   }
 
   return children;

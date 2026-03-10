@@ -35,7 +35,7 @@ const AuthPage = () => {
           if (result.role === 'admin') {
             navigate('/dashboard');
           } else {
-            navigate('/photos');
+            navigate('/folders');
           }
         } else {
           setError(result.error);
@@ -58,8 +58,8 @@ const AuthPage = () => {
         // The register function handles key generation internally
         const result = await register(email.trim(), password.trim());
         if (result.success) {
-          // Regular users always go to photos after registration
-          navigate('/photos');
+          // Regular users always go to folders after registration
+          navigate('/folders');
         } else {
           setError(result.error);
         }

@@ -15,10 +15,11 @@ const GalleryHeader = ({
   onAddToAlbum,
   onShare,
   storageBar,
+  hideUploadOnMobile = false,
 }) => {
   const { t } = useTranslation('photos');
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 md:mb-6">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-2 md:mb-6">
       <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
         {selectedCount > 0 && (
           <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -67,13 +68,15 @@ const GalleryHeader = ({
         )}
 
         {/* Upload Button */}
-        <button
-          onClick={onUpload}
-          className="inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-500 text-white text-xs sm:text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
-        >
-          <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-          {t('uploadFiles', 'Upload')}
-        </button>
+        {!hideUploadOnMobile && (
+          <button
+            onClick={onUpload}
+            className="inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-500 text-white text-xs sm:text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
+          >
+            <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+            {t('uploadFiles', 'Upload')}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ import { DashboardNavbar } from '../../components/layout';
 import { StorageBar } from '../../components/ui';
 import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
-import { ShareModal } from '../../components/modals';
+import { ShareModal, OnboardingModal } from '../../components/modals';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faImage, 
@@ -23,7 +23,8 @@ import {
   faTrash,
   faPen,
   faShare,
-  faXmark
+  faXmark,
+  faCloudUpload
 } from '@fortawesome/free-solid-svg-icons';
 import { encryptFilename } from '../../utils/crypto';
 import {
@@ -119,6 +120,9 @@ const Dashboard = () => {
 
   // Folder picker modal state
   const [showFolderPickerModal, setShowFolderPickerModal] = useState(false);
+
+  // Onboarding modal state
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Grid size preference (stored in localStorage)
   const [gridSize, setGridSize] = useState(() => {
@@ -338,10 +342,45 @@ const Dashboard = () => {
     // Only redirect if vault needs setup and not already on setup page
     if (needsVaultSetup) {
       // Redirect to vault setup page
-      window.location.href = '/photos?setupVault=true';
+      window.location.href = '/folders?setupVault=true';
       return;
     }
   }, [needsVaultSetup, searchParams, vaultStateLoading]);
+
+  // Show onboarding for normal signup path:
+  // Vault is already set up during registration so handleMasterKeyUnlocked never fires.
+  // SignUpPage sets aamenn_pending_onboarding before redirecting here.
+  useEffect(() => {
+    console.log('🔍 Onboarding check:', {
+      vaultStateLoading,
+      needsVaultSetup,
+      hasMasterKey: hasMasterKey(),
+      pending: localStorage.getItem('aamenn_pending_onboarding'),
+      completed: localStorage.getItem('aamenn_onboarding_completed'),
+      showRecoveryKeyPrompt
+    });
+    
+    if (vaultStateLoading || needsVaultSetup) return;
+    if (!hasMasterKey()) return;
+    
+    // Wait until recovery key flow is complete
+    if (showRecoveryKeyPrompt) return;
+    
+    const pending = localStorage.getItem('aamenn_pending_onboarding');
+    const completed = localStorage.getItem('aamenn_onboarding_completed');
+    
+    console.log('🔍 Final check:', { pending, completed });
+    
+    // Show onboarding if pending flag exists (new user signup)
+    // This overrides any previous completed flag for this session
+    if (pending) {
+      console.log('✅ Showing onboarding (pending flag)!');
+      localStorage.removeItem('aamenn_pending_onboarding');
+      // Reset completed flag since this is a fresh signup
+      localStorage.removeItem('aamenn_onboarding_completed');
+      setShowOnboarding(true);
+    }
+  }, [vaultStateLoading, needsVaultSetup, showRecoveryKeyPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch data based on active tab and current folder (re-runs when tab or folder changes)
   useEffect(() => {
@@ -424,10 +463,15 @@ const Dashboard = () => {
       setShowRecoveryKeyPrompt(true);
     }
 
-    // If we're coming from vault setup, redirect to clean URL to prevent loop
-    if (window.location.pathname === '/photos' && searchParams.has('setupVault')) {
-      window.location.href = '/photos';
-      return;
+    // Clean vault setup URL param without a full page reload
+    if (searchParams.has('setupVault')) {
+      window.history.replaceState({}, '', '/folders');
+    }
+
+    // Show onboarding for first-time vault setup (Google signup path)
+    const hasSeenOnboarding = localStorage.getItem('aamenn_onboarding_completed');
+    if (!hasSeenOnboarding) {
+      setShowOnboarding(true);
     }
 
     // If user was trying to view a file, open it now
@@ -555,7 +599,7 @@ const Dashboard = () => {
       photos: '/photos', files: '/files', folders: '/folders',
       favorites: '/favorites', trash: '/trash', contacts: '/contacts',
     };
-    navigate(routes[tab] || '/photos');
+    navigate(routes[tab] || '/folders');
   };
 
   // Drop files/folders onto a breadcrumb item (move to that folder level)
@@ -708,7 +752,7 @@ const Dashboard = () => {
 
       <main className="flex-1 pt-14">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
-          {/* Header */}
+          {/* Header - without Upload button on mobile */}
           <GalleryHeader
             selectedCount={selectedFiles.length}
             onUpload={() => setShowUploadModal(true)}
@@ -716,10 +760,37 @@ const Dashboard = () => {
             onAddToAlbum={handleMoveToFolderBulk}
             onShare={handleShare}
             storageBar={<StorageBar refreshTrigger={folderFiles.length + allFiles.length} inline />}
+            hideUploadOnMobile={true}
           />
 
-          {/* Tabs and Grid Size Control */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 md:mb-6">
+          {/* Mobile: Tabs dropdown with Upload button */}
+          <div className="flex items-center justify-between gap-2 mb-4 md:hidden">
+            <div className="flex-1">
+              <GalleryTabs activeTab={activeTab} onTabChange={handleTabChange} />
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {activeTab === 'folders' && (
+                <button
+                  onClick={() => setShowCreateFolderModal(true)}
+                  disabled={!hasMasterKey()}
+                  className="inline-flex items-center px-3 py-2 bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+                >
+                  <FontAwesomeIcon icon={faFolderPlus} className="w-3 h-3 mr-1" />
+                  New
+                </button>
+              )}
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
+              >
+                <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 mr-1" />
+                Upload
+              </button>
+            </div>
+          </div>
+
+          {/* Desktop: Normal tabs layout */}
+          <div className="hidden md:flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-0 mb-4 md:mb-6">
             <GalleryTabs activeTab={activeTab} onTabChange={handleTabChange} />
             {(activeTab === 'folders' || activeTab === 'photos' || activeTab === 'files') && (
               <div className="flex items-center gap-2">
@@ -727,12 +798,19 @@ const Dashboard = () => {
                   <button
                     onClick={() => setShowCreateFolderModal(true)}
                     disabled={!hasMasterKey()}
-                    className="inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 bg-amber-500 text-white text-xs sm:text-sm font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
                   >
-                    <FontAwesomeIcon icon={faFolderPlus} className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                    <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4 mr-2" />
                     New Folder
                   </button>
                 )}
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
+                >
+                  <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
+                  Upload Files
+                </button>
                 <GridSizeControl
                   size={gridSize}
                   onSizeChange={handleGridSizeChange}
@@ -1126,9 +1204,28 @@ const Dashboard = () => {
       {showRecoveryKeyPrompt && (
         <RecoveryKeyDownloadPrompt
           recoveryPhrase={recoveryKeyPhrase}
-          onDismiss={() => setShowRecoveryKeyPrompt(false)}
+          onDismiss={() => {
+            console.log('🔑 Recovery key dismissed, checking onboarding...');
+            setShowRecoveryKeyPrompt(false);
+            // Check if onboarding should be shown after recovery key
+            const pending = localStorage.getItem('aamenn_pending_onboarding');
+            const completed = localStorage.getItem('aamenn_onboarding_completed');
+            console.log('🔑 After recovery key check:', { pending, completed });
+            if (pending) {
+              console.log('✅ Showing onboarding after recovery key!');
+              localStorage.removeItem('aamenn_pending_onboarding');
+              localStorage.removeItem('aamenn_onboarding_completed');
+              setShowOnboarding(true);
+            }
+          }}
         />
       )}
+
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
+      />
 
       {/* Upload Progress Panel */}
       {uploadStats.total > 0 && (

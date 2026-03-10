@@ -40,7 +40,7 @@ const LoginPage = () => {
         if (result.role === 'admin') {
           window.location.href = '/dashboard';
         } else {
-          window.location.href = '/photos';
+          window.location.href = '/folders';
         }
       } else {
         setError(result.error);
@@ -163,11 +163,11 @@ const LoginPage = () => {
             onSuccess={(result) => {
               if (result.requiresVaultSetup) {
                 // New Google user - need to set up Vault Password
-                window.location.href = '/photos?setupVault=true';
+                window.location.href = '/folders?setupVault=true';
               } else if (result.role === 'admin') {
                 window.location.href = '/dashboard';
               } else {
-                window.location.href = '/photos';
+                window.location.href = '/folders';
               }
             }}
             onError={(error) => setError(error)}
