@@ -41,7 +41,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
     <div className="bg-white dark:bg-gray-800 p-3 lg:p-6 shadow-sm">
       <div className="flex items-center justify-between mb-2 lg:mb-4">
         <div className={`p-1.5 lg:p-3 ${colorClasses[color]}`}>
-          <Icon size={16} className="lg:w-6 lg:h-6" />
+          <FontAwesomeIcon icon={Icon} className="w-4 h-4 lg:w-6 lg:h-6" />
         </div>
       </div>
       <div className="text-xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-1">

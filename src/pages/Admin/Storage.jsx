@@ -62,7 +62,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color = 'blue' }) => {
     <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div className={`p-2 lg:p-3 ${colorClasses[color]}`}>
-          <Icon size={20} className="lg:w-6 lg:h-6" />
+          <FontAwesomeIcon icon={Icon} className="w-5 h-5 lg:w-6 lg:h-6" />
         </div>
       </div>
       <div className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-1">
@@ -287,14 +287,14 @@ const Storage = () => {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
           {stats?.filesByMimeType?.slice(0, 6).map((item) => {
-            const Icon = getMimeIcon(item.mimeType);
+            const icon = getMimeIcon(item.mimeType);
             return (
               <div
                 key={item.mimeType}
                 className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-700/50 rounded"
               >
                 <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                  <Icon size={16} className="text-gray-400 flex-shrink-0 lg:w-[18px] lg:h-[18px]" />
+                  <FontAwesomeIcon icon={icon} className="text-gray-400 flex-shrink-0 w-4 h-4 lg:w-[18px] lg:h-[18px]" />
                   <span className="text-gray-600 dark:text-gray-400 text-xs lg:text-sm truncate">
                     {item.mimeType || 'unknown'}
                   </span>
