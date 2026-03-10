@@ -58,17 +58,7 @@ export const ContactsSection = () => {
     }
   };
 
-  // Silent login — skips account chooser if there's an active Google session
-  const googleLoginSilent = useGoogleLogin({
-    onSuccess: handleSyncSuccess,
-    onError: () => googleLoginWithPrompt(), // fallback to account chooser
-    scope: 'https://www.googleapis.com/auth/contacts.readonly',
-    flow: 'implicit',
-    prompt: 'none',
-  });
-
-  // Fallback login — shows account chooser
-  const googleLoginWithPrompt = useGoogleLogin({
+  const googleLogin = useGoogleLogin({
     onSuccess: handleSyncSuccess,
     onError: () => setError('Google authentication failed'),
     scope: 'https://www.googleapis.com/auth/contacts.readonly',
@@ -76,7 +66,7 @@ export const ContactsSection = () => {
   });
 
   const handleGoogleLogin = () => {
-    googleLoginSilent();
+    googleLogin();
   };
 
   const handleCopy = async (text, fieldId) => {
