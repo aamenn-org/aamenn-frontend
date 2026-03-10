@@ -825,11 +825,13 @@ const Dashboard = () => {
 
               {/* Folder action toolbar — shown when 1+ folders are selected */}
               {selectedFolders.length > 0 && (
-                <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                <div className="flex items-center justify-between gap-3 mb-4 px-3 py-2 sm:px-4 sm:py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                  <span className="text-xs sm:text-sm font-medium text-blue-700 dark:text-blue-300 whitespace-nowrap">
                     {selectedFolders.length} folder{selectedFolders.length > 1 ? 's' : ''} selected
                   </span>
-                  <div className="flex items-center gap-2 ml-2">
+                  
+                  {/* Desktop: Full buttons with text */}
+                  <div className="hidden sm:flex items-center gap-2">
                     {selectedFolders.length === 1 && (
                       <button
                         onClick={async () => {
@@ -865,9 +867,48 @@ const Dashboard = () => {
                       Delete
                     </button>
                   </div>
+
+                  {/* Mobile: Icon-only buttons */}
+                  <div className="flex sm:hidden items-center gap-1">
+                    {selectedFolders.length === 1 && (
+                      <button
+                        onClick={async () => {
+                          const folder = childFolders.find((f) => f.folderId === selectedFolders[0]);
+                          if (!folder || !hasMasterKey()) return;
+                          try {
+                            const { decryptFilename } = await import('../../utils/crypto');
+                            const plainName = await decryptFilename(folder.nameEncrypted, getMasterKey());
+                            setRenamingFolder({ ...folder, decryptedName: plainName });
+                          } catch {
+                            setRenamingFolder({ ...folder, decryptedName: '' });
+                          }
+                        }}
+                        className="p-2 bg-white dark:bg-zinc-700 border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-600 transition-colors"
+                        aria-label="Rename"
+                      >
+                        <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={handleFolderShareSelected}
+                      disabled={!hasMasterKey()}
+                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                      aria-label="Share"
+                    >
+                      <FontAwesomeIcon icon={faShare} className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleFolderDeleteSelected}
+                      className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                      aria-label="Delete"
+                    >
+                      <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => setSelectedFolders([])}
-                    className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-auto sm:ml-0"
                   >
                     <FontAwesomeIcon icon={faXmark} className="w-4 h-4" />
                   </button>
