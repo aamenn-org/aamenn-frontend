@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { adminService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  Activity,
-  Database,
-  HardDrive,
-  Users,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-} from 'lucide-react';
+  faChartLine,
+  faDatabase,
+  faHardDrive,
+  faUsers,
+  faTriangleExclamation,
+  faCircleCheck,
+  faCircleXmark,
+  faRotate,
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * Format bytes to human readable
@@ -28,17 +29,17 @@ const formatBytes = (bytes) => {
 const StatusBadge = ({ status }) => {
   const config = {
     healthy: {
-      icon: CheckCircle,
+      icon: faCircleCheck,
       color: 'text-green-500 bg-green-50 dark:bg-green-900/20',
       label: 'Healthy',
     },
     degraded: {
-      icon: AlertTriangle,
+      icon: faTriangleExclamation,
       color: 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
       label: 'Degraded',
     },
     error: {
-      icon: XCircle,
+      icon: faCircleXmark,
       color: 'text-red-500 bg-red-50 dark:bg-red-900/20',
       label: 'Error',
     },
@@ -50,7 +51,7 @@ const StatusBadge = ({ status }) => {
     <div
       className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${color}`}
     >
-      <Icon size={16} />
+      <FontAwesomeIcon icon={Icon} className="w-4 h-4" />
       <span className="font-medium">{label}</span>
     </div>
   );
@@ -117,17 +118,17 @@ const ProgressRing = ({ value, size = 120, strokeWidth = 12, color }) => {
 const AlertCard = ({ alert }) => {
   const config = {
     error: {
-      icon: XCircle,
+      icon: faCircleXmark,
       bg: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
       text: 'text-red-700 dark:text-red-400',
     },
     warning: {
-      icon: AlertTriangle,
+      icon: faTriangleExclamation,
       bg: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
       text: 'text-orange-700 dark:text-orange-400',
     },
     info: {
-      icon: Activity,
+      icon: faChartLine,
       bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
       text: 'text-blue-700 dark:text-blue-400',
     },
@@ -138,7 +139,7 @@ const AlertCard = ({ alert }) => {
   return (
     <div className={`p-3 lg:p-4 border ${bg} rounded`}>
       <div className={`flex items-start gap-2 lg:gap-3 ${text}`}>
-        <Icon size={18} className="flex-shrink-0 mt-0.5 lg:w-5 lg:h-5" />
+        <FontAwesomeIcon icon={Icon} className="w-[18px] h-[18px] flex-shrink-0 mt-0.5 lg:w-5 lg:h-5" />
         <div>
           <p className="text-sm lg:text-base font-medium">{alert.message}</p>
           <p className="text-xs lg:text-sm opacity-70 mt-1">
@@ -219,7 +220,7 @@ const SystemHealth = () => {
           disabled={refreshing}
           className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors disabled:opacity-50 text-sm lg:text-base"
         >
-          <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+          <FontAwesomeIcon icon={faRotate} className={`w-[18px] h-[18px] ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
@@ -231,7 +232,7 @@ const SystemHealth = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 lg:gap-3">
               <div className="p-2 lg:p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-                <HardDrive size={20} className="lg:w-6 lg:h-6" />
+                <FontAwesomeIcon icon={faHardDrive} className="w-5 h-5 lg:w-6 lg:h-6" />
               </div>
               <div>
                 <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
@@ -260,7 +261,7 @@ const SystemHealth = () => {
         <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
           <div className="flex items-center gap-2 lg:gap-3 mb-6">
             <div className="p-2 lg:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-              <Database size={20} className="lg:w-6 lg:h-6" />
+              <FontAwesomeIcon icon={faDatabase} className="w-5 h-5 lg:w-6 lg:h-6" />
             </div>
             <div>
               <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
@@ -280,7 +281,7 @@ const SystemHealth = () => {
         <div className="bg-white dark:bg-gray-800 p-4 lg:p-6 shadow-sm">
           <div className="flex items-center gap-2 lg:gap-3 mb-6">
             <div className="p-2 lg:p-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400">
-              <Users size={20} className="lg:w-6 lg:h-6" />
+              <FontAwesomeIcon icon={faUsers} className="w-5 h-5 lg:w-6 lg:h-6" />
             </div>
             <div>
               <h3 className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">
@@ -306,7 +307,7 @@ const SystemHealth = () => {
         </h3>
         {alerts.length === 0 ? (
           <div className="flex items-center gap-2 lg:gap-3 text-green-600 dark:text-green-400 p-3 lg:p-4 bg-green-50 dark:bg-green-900/20 rounded">
-            <CheckCircle size={18} className="flex-shrink-0 lg:w-5 lg:h-5" />
+            <FontAwesomeIcon icon={faCircleCheck} className="w-[18px] h-[18px] flex-shrink-0 lg:w-5 lg:h-5" />
             <span className="text-sm lg:text-base">All systems operational - no active alerts</span>
           </div>
         ) : (

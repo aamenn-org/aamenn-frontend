@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  UserX,
-  UserCheck,
-  ArrowUpDown,
-  Trash2,
-} from 'lucide-react';
+  faSearch,
+  faChevronLeft,
+  faChevronRight,
+  faUserSlash,
+  faCheck,
+  faUpDown,
+  faTrash,
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * Format bytes to human readable
@@ -136,9 +137,9 @@ const UsersPage = () => {
 
         {/* Search */}
         <div className="relative">
-          <Search
-            size={16}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+          <FontAwesomeIcon
+            icon={faSearch}
+            className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
             type="text"
@@ -176,25 +177,25 @@ const UsersPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('files')}>
                   <div className="flex items-center gap-1">
                     Files
-                    <ArrowUpDown size={12} className={sortBy === 'files' ? 'text-blue-500' : ''} />
+                    <FontAwesomeIcon icon={faUpDown} className={`w-3 h-3 ${sortBy === 'files' ? 'text-blue-500' : ''}`} />
                   </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('storage')}>
                   <div className="flex items-center gap-1">
                     Storage
-                    <ArrowUpDown size={12} className={sortBy === 'storage' ? 'text-blue-500' : ''} />
+                    <FontAwesomeIcon icon={faUpDown} className={`w-3 h-3 ${sortBy === 'storage' ? 'text-blue-500' : ''}`} />
                   </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('createdAt')}>
                   <div className="flex items-center gap-1">
                     Joined
-                    <ArrowUpDown size={12} className={sortBy === 'createdAt' ? 'text-blue-500' : ''} />
+                    <FontAwesomeIcon icon={faUpDown} className={`w-3 h-3 ${sortBy === 'createdAt' ? 'text-blue-500' : ''}`} />
                   </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => handleSort('lastLoginAt')}>
                   <div className="flex items-center gap-1">
                     Last Login
-                    <ArrowUpDown size={12} className={sortBy === 'lastLoginAt' ? 'text-blue-500' : ''} />
+                    <FontAwesomeIcon icon={faUpDown} className={`w-3 h-3 ${sortBy === 'lastLoginAt' ? 'text-blue-500' : ''}`} />
                   </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -277,9 +278,9 @@ const UsersPage = () => {
                         {actionLoading === user.id ? (
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
                         ) : user.isActive ? (
-                          <UserX size={18} />
+                          <FontAwesomeIcon icon={faUserSlash} className="w-[18px] h-[18px]" />
                         ) : (
-                          <UserCheck size={18} />
+                          <FontAwesomeIcon icon={faCheck} className="w-[18px] h-[18px]" />
                         )}
                       </button>
                     </td>
@@ -294,7 +295,7 @@ const UsersPage = () => {
                         className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors rounded"
                         title="Delete user permanently"
                       >
-                        <Trash2 size={18} />
+                        <FontAwesomeIcon icon={faTrash} className="w-[18px] h-[18px]" />
                       </button>
                     </td>
                   </tr>
@@ -318,7 +319,7 @@ const UsersPage = () => {
                 disabled={pagination.page === 1}
                 className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={18} />
+                <FontAwesomeIcon icon={faChevronLeft} className="w-[18px] h-[18px]" />
               </button>
               <span className="text-sm text-gray-600 dark:text-gray-400">
                 Page {pagination.page} of {pagination.totalPages}
@@ -328,7 +329,7 @@ const UsersPage = () => {
                 disabled={pagination.page === pagination.totalPages}
                 className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronRight size={18} />
+                <FontAwesomeIcon icon={faChevronRight} className="w-[18px] h-[18px]" />
               </button>
             </div>
           </div>
@@ -417,12 +418,12 @@ const UsersPage = () => {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
                   ) : user.isActive ? (
                     <>
-                      <UserX size={16} />
+                      <FontAwesomeIcon icon={faUserSlash} className="w-4 h-4" />
                       <span>Disable</span>
                     </>
                   ) : (
                     <>
-                      <UserCheck size={16} />
+                      <FontAwesomeIcon icon={faCheck} className="w-4 h-4" />
                       <span>Enable</span>
                     </>
                   )}
@@ -436,7 +437,7 @@ const UsersPage = () => {
                   })}
                   className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded transition-colors"
                 >
-                  <Trash2 size={16} />
+                  <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
                   <span>Delete</span>
                 </button>
               </div>
@@ -457,7 +458,7 @@ const UsersPage = () => {
                 disabled={pagination.page === 1}
                 className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={18} />
+                <FontAwesomeIcon icon={faChevronLeft} className="w-[18px] h-[18px]" />
               </button>
               <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[100px] text-center">
                 Page {pagination.page} of {pagination.totalPages}
@@ -467,7 +468,7 @@ const UsersPage = () => {
                 disabled={pagination.page === pagination.totalPages}
                 className="p-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronRight size={18} />
+                <FontAwesomeIcon icon={faChevronRight} className="w-[18px] h-[18px]" />
               </button>
             </div>
           </div>
@@ -480,7 +481,7 @@ const UsersPage = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 lg:p-6 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                <Trash2 size={20} className="text-red-600 dark:text-red-400" />
+                <FontAwesomeIcon icon={faTrash} className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <h3 className="text-base lg:text-lg font-semibold text-gray-900 dark:text-white">Delete User</h3>
             </div>

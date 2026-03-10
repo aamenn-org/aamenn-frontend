@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { userService } from '../../../services';
 import { useAuth } from '../../../context';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faDatabase, faCheck, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 
 // Format bytes to human readable format
 const formatBytes = (bytes, decimals = 2) => {
@@ -135,19 +137,7 @@ const StorageSection = () => {
           <div className="p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
-                <svg
-                  className="w-5 h-5 text-primary-600 dark:text-primary-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faDatabase} className="w-5 h-5 text-primary-600 dark:text-primary-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -163,19 +153,7 @@ const StorageSection = () => {
           <div className="p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <svg
-                  className="w-5 h-5 text-green-600 dark:text-green-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faDatabase} className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -193,19 +171,7 @@ const StorageSection = () => {
         {percentage >= 80 && (
           <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-900/30 rounded-lg">
             <div className="flex gap-3">
-              <svg
-                className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faTriangleExclamation} className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
                   Storage Almost Full
@@ -262,19 +228,7 @@ const StorageSection = () => {
 
           {retentionSuccess && (
             <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-sm">
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faCheck} className="w-5 h-5" />
               Trash retention updated successfully
             </div>
           )}

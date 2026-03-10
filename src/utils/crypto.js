@@ -498,17 +498,93 @@ export async function decryptRecoveryKey(encryptedRecoveryKeyBase64, masterKey) 
   return _bytesToHexPhrase(new Uint8Array(recoveryKeyBytes));
 }
 
-// ==================== SHARING HELPERS ====================
+// ==================== CONTACT ENCRYPTION ====================
 
 /**
- * Generate a share key for public sharing.
- * This re-encrypts the file key with a new random key that can be shared publicly.
- * 
- * @param {string} cipherFileKeyBase64 - Encrypted file key (encrypted with master key)
+ * Encrypt contact field with master key
+ * @param {string} plaintext - Contact field value (name, phone, email, etc.)
  * @param {CryptoKey} masterKey - User's master key
- * @returns {Promise<{shareKey: string, shareKeyRaw: string}>} - Share key (base64) and raw key for URL fragment
+ * @returns {Promise<string>} - Encrypted value as base64
+ */
+export async function encryptContactField(plaintext, masterKey) {
+  if (!plaintext) return null;
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  
+  const plaintextBytes = new TextEncoder().encode(plaintext);
+  return _aesGcmEncrypt(masterKey, plaintextBytes);
+}
+
+/**
+ * Decrypt contact field with master key
+ * @param {string} encryptedBase64 - Encrypted contact field
+ * @param {CryptoKey} masterKey - User's master key
+ * @returns {Promise<string>} - Decrypted plaintext
+ */
+export async function decryptContactField(encryptedBase64, masterKey) {
+  if (!encryptedBase64) return null;
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  
+  try {
+    const decryptedBytes = await _aesGcmDecrypt(masterKey, encryptedBase64);
+    return new TextDecoder().decode(decryptedBytes);
+  } catch (error) {
+    console.error('[Crypto] Failed to decrypt contact field:', error);
+    return '[Decryption Failed]';
+  }
+}
+
+/**
+ * Encrypt entire contact object
+ * @param {Object} contact - Contact object with plaintext fields
+ * @param {CryptoKey} masterKey - User's master key
+ * @returns {Promise<Object>} - Contact object with encrypted fields
+ */
+export async function encryptContact(contact, masterKey) {
+  const encrypted = {};
+  
+  const fields = ['name', 'nickname', 'phone', 'email', 'address', 'organization', 'occupation', 'birthday', 'bio', 'urls', 'photoUrl'];
+  
+  for (const field of fields) {
+    if (contact[field]) {
+      encrypted[field + 'Encrypted'] = await encryptContactField(contact[field], masterKey);
+    }
+  }
+  
+  return encrypted;
+}
+
+/**
+ * Decrypt entire contact object
+ * @param {Object} contact - Contact object with encrypted fields
+ * @param {CryptoKey} masterKey - User's master key
+ * @returns {Promise<Object>} - Contact object with decrypted fields
+ */
+export async function decryptContact(contact, masterKey) {
+  const decrypted = { ...contact };
+  
+  const fields = ['name', 'nickname', 'phone', 'email', 'address', 'organization', 'occupation', 'birthday', 'bio', 'urls', 'photoUrl'];
+  
+  for (const field of fields) {
+    const encField = field + 'Encrypted';
+    if (contact[encField]) {
+      decrypted[field] = await decryptContactField(contact[encField], masterKey);
+    }
+  }
+  
+  return decrypted;
+}
+
+// ==================== SHARE KEY FUNCTIONS ====================
+
+/**
+ * Generate a share key for sharing files with others
+ * @param {string} cipherFileKeyBase64 - Encrypted file key from server
+ * @param {CryptoKey} masterKey - User's master key
+ * @returns {Promise<{shareKey: string, shareKeyRaw: string}>}
  */
 export async function generateShareKey(cipherFileKeyBase64, masterKey) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  
   // Decrypt the file key with master key
   const fileKeyBytes = await _aesGcmDecrypt(masterKey, cipherFileKeyBase64);
   
@@ -532,13 +608,14 @@ export async function generateShareKey(cipherFileKeyBase64, masterKey) {
 }
 
 /**
- * Decrypt a file key using a share key (for public viewers).
- * 
+ * Decrypt a file key using a share key (for public viewers)
  * @param {string} shareKeyRawBase64 - Raw share key from URL fragment
  * @param {string} encryptedFileKeyBase64 - Encrypted file key from server
  * @returns {Promise<CryptoKey>} - Decrypted file key
  */
 export async function decryptFileKeyWithShareKey(shareKeyRawBase64, encryptedFileKeyBase64) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  
   // Import raw share key (32 bytes = 256 bits)
   const shareKeyRawBytes = base64ToArrayBuffer(shareKeyRawBase64);
   const shareKey = await crypto.subtle.importKey(
@@ -561,4 +638,63 @@ export async function decryptFileKeyWithShareKey(shareKeyRawBase64, encryptedFil
     ['decrypt']
   );
 }
+
+/**
+ * Generate share keys for an entire folder.
+ * Creates ONE random share key and re-encrypts each file's key + the folder name with it.
+ *
+ * @param {Array<{fileId: string, cipherFileKey: string}>} files - Files in the folder
+ * @param {CryptoKey} masterKey - User's master key
+ * @param {string} folderNameEncrypted - Encrypted folder name (base64)
+ * @returns {Promise<{shareKeyRaw: string, shareKey: string, fileKeys: Record<string, string>}>}
+ */
+export async function generateFolderShareKeys(files, masterKey, folderNameEncrypted) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+
+  // Generate ONE random share key for the entire folder
+  const shareKeyRawBytes = generateRandomBytes(32);
+  const shareKeyForEncryption = await crypto.subtle.importKey(
+    'raw', shareKeyRawBytes, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+  );
+
+  // Re-encrypt the folder name with the share key
+  // Decrypt folder name with master key → plaintext bytes → re-encrypt with share key
+  const folderNameBytes = await _aesGcmDecrypt(masterKey, folderNameEncrypted);
+  const shareKey = await _aesGcmEncrypt(shareKeyForEncryption, folderNameBytes);
+
+  // Re-encrypt each file's key with the folder share key
+  const fileKeys = {};
+  for (const file of files) {
+    if (!file.cipherFileKey) continue;
+    // Decrypt file key with master key → raw file key bytes
+    const fileKeyBytes = await _aesGcmDecrypt(masterKey, file.cipherFileKey);
+    // Re-encrypt with folder share key
+    fileKeys[file.fileId] = await _aesGcmEncrypt(shareKeyForEncryption, fileKeyBytes);
+  }
+
+  return {
+    shareKeyRaw: arrayBufferToBase64(shareKeyRawBytes), // goes in URL fragment
+    shareKey, // folder name encrypted with share key, stored on server
+    fileKeys, // { fileId: fileKey encrypted with share key }, stored on server
+  };
+}
+
+/**
+ * Decrypt text (e.g. folder name) using a share key raw from URL fragment.
+ * @param {string} shareKeyRawBase64 - Raw share key from URL fragment
+ * @param {string} encryptedTextBase64 - Encrypted text from server (shareKey field)
+ * @returns {Promise<string>} - Decrypted text string
+ */
+export async function decryptTextWithShareKey(shareKeyRawBase64, encryptedTextBase64) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+
+  const shareKeyRawBytes = base64ToArrayBuffer(shareKeyRawBase64);
+  const shareKey = await crypto.subtle.importKey(
+    'raw', shareKeyRawBytes, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+  );
+
+  const decryptedBytes = await _aesGcmDecrypt(shareKey, encryptedTextBase64);
+  return new TextDecoder().decode(decryptedBytes);
+}
+
 

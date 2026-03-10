@@ -3,6 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import VirtualizedPhotoGrid from './VirtualizedPhotoGrid';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faTrash, 
+  faArrowRotateLeft, 
+  faTrashCan 
+} from '@fortawesome/free-solid-svg-icons';
 
 const TrashSection = ({ onViewFile, gridSize }) => {
   const { user } = useAuth();
@@ -168,19 +174,7 @@ const TrashSection = ({ onViewFile, gridSize }) => {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-          <svg
-            className="w-12 h-12 text-gray-300 dark:text-gray-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1}
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faTrash} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
         </div>
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
           {t('trash.empty.title', 'Trash is empty')}
@@ -211,38 +205,14 @@ const TrashSection = ({ onViewFile, gridSize }) => {
                 onClick={handleRestore}
                 className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors rounded-lg"
               >
-                <svg
-                  className="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faArrowRotateLeft} className="w-4 h-4 mr-2" />
                 {t('restore', 'Restore')}
               </button>
               <button
                 onClick={handleDeletePermanently}
                 className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors rounded-lg"
               >
-                <svg
-                  className="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faTrashCan} className="w-4 h-4 mr-2" />
                 {t('deleteForever', 'Delete Forever')}
               </button>
             </>

@@ -1,5 +1,11 @@
 import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faXmark, 
+  faCloudUpload, 
+  faTrash 
+} from '@fortawesome/free-solid-svg-icons';
 
 const UploadModal = ({ isOpen, onClose, onUpload }) => {
   const { t } = useTranslation('photos');
@@ -74,19 +80,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
           >
-            <svg
-              className="w-5 h-5 text-gray-500 dark:text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faXmark} className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -106,19 +100,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
           onClick={() => fileInputRef.current?.click()}
         >
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-6 h-6 text-blue-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faCloudUpload} className="w-6 h-6 text-blue-500" />
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
             {t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
@@ -165,19 +147,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
                   onClick={() => removeFile(index)}
                   className="p-1 hover:bg-gray-200 dark:hover:bg-zinc-600"
                 >
-                  <svg
-                    className="w-4 h-4 text-gray-500 dark:text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faTrash} className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
             ))}

@@ -7,6 +7,31 @@ import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
 import RenameModal from './RenameModal';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faTriangleExclamation, 
+  faPlay, 
+  faMagnifyingGlassPlus, 
+  faMagnifyingGlassMinus, 
+  faPause, 
+  faBackward, 
+  faForward, 
+  faVolumeXmark, 
+  faVolumeHigh, 
+  faMaximize, 
+  faMinimize, 
+  faInfoCircle, 
+  faEllipsisVertical,
+  faDownload,
+  faShare,
+  faTrash,
+  faPen,
+  faCopy,
+  faXmark,
+  faChevronLeft,
+  faChevronRight,
+  faPlus
+} from '@fortawesome/free-solid-svg-icons';
 
 /**
  * MediaViewer (PhotoViewer) with INSTANT loading like Ente.io:
@@ -960,23 +985,7 @@ const PhotoViewer = ({
         {/* Error State */}
         {error && !displayUrl ? (
           <div className="flex flex-col items-center justify-center text-gray-400">
-            <svg
-              className="w-16 h-16 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d={
-                  isVideoFile
-                    ? 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z'
-                    : 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'
-                }
-              />
-            </svg>
+            <FontAwesomeIcon icon={faTriangleExclamation} className="w-16 h-16 mb-4" />
             <p>{error}</p>
           </div>
         ) : isVideoFile ? (
@@ -1022,13 +1031,7 @@ const PhotoViewer = ({
                 {!isPlaying && !isBuffering && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="w-20 h-20 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm transition-transform hover:scale-110">
-                      <svg
-                        className="w-10 h-10 text-white ml-1"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
+                      <FontAwesomeIcon icon={faPlay} className="w-10 h-10 text-white ml-1" />
                     </div>
                   </div>
                 )}
@@ -1082,19 +1085,7 @@ const PhotoViewer = ({
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom In"
                         >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                            />
-                          </svg>
+                          <FontAwesomeIcon icon={faMagnifyingGlassPlus} className="w-4 h-4" />
                         </button>
                         <span className="px-2 text-white text-sm font-medium min-w-[3rem] text-center">
                           {Math.round(zoomScale * 100)}%
@@ -1104,19 +1095,7 @@ const PhotoViewer = ({
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom Out"
                         >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M20 12H4"
-                            />
-                          </svg>
+                          <FontAwesomeIcon icon={faMagnifyingGlassMinus} className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -1196,21 +1175,9 @@ const PhotoViewer = ({
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
                 >
                   {isPlaying ? (
-                    <svg
-                      className="w-6 h-6 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                    </svg>
+                    <FontAwesomeIcon icon={faPause} className="w-6 h-6 text-white" />
                   ) : (
-                    <svg
-                      className="w-6 h-6 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
+                    <FontAwesomeIcon icon={faPlay} className="w-6 h-6 text-white" />
                   )}
                 </button>
 
@@ -1220,13 +1187,7 @@ const PhotoViewer = ({
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
                   title={t('video.rewind', 'Rewind 10s')}
                 >
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
-                  </svg>
+                  <FontAwesomeIcon icon={faBackward} className="w-5 h-5 text-white" />
                 </button>
 
                 {/* Skip forward */}
@@ -1235,13 +1196,7 @@ const PhotoViewer = ({
                   className="p-2 rounded-full hover:bg-white/20 transition-colors"
                   title={t('video.forward', 'Forward 10s')}
                 >
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
-                  </svg>
+                  <FontAwesomeIcon icon={faForward} className="w-5 h-5 text-white" />
                 </button>
 
                 {/* Volume */}
@@ -1251,21 +1206,9 @@ const PhotoViewer = ({
                     className="p-2 rounded-full hover:bg-white/20 transition-colors"
                   >
                     {isMuted || volume === 0 ? (
-                      <svg
-                        className="w-5 h-5 text-white"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                      </svg>
+                      <FontAwesomeIcon icon={faVolumeXmark} className="w-5 h-5 text-white" />
                     ) : (
-                      <svg
-                        className="w-5 h-5 text-white"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                      </svg>
+                      <FontAwesomeIcon icon={faVolumeHigh} className="w-5 h-5 text-white" />
                     )}
                   </button>
                   <input
@@ -1294,21 +1237,9 @@ const PhotoViewer = ({
                   title={t('video.fullscreen', 'Fullscreen (F)')}
                 >
                   {isFullscreen ? (
-                    <svg
-                      className="w-5 h-5 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
-                    </svg>
+                    <FontAwesomeIcon icon={faMinimize} className="w-5 h-5 text-white" />
                   ) : (
-                    <svg
-                      className="w-5 h-5 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
-                    </svg>
+                    <FontAwesomeIcon icon={faMaximize} className="w-5 h-5 text-white" />
                   )}
                 </button>
               </div>
@@ -1331,19 +1262,7 @@ const PhotoViewer = ({
           }`}
           title={t('fileInfo', 'File info')}
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faInfoCircle} className="w-5 h-5" />
         </button>
 
         {/* 3-dot menu */}
@@ -1355,9 +1274,7 @@ const PhotoViewer = ({
             }`}
             title={t('moreOptions', 'More options')}
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-            </svg>
+            <FontAwesomeIcon icon={faEllipsisVertical} className="w-5 h-5" />
           </button>
 
           {/* Dropdown menu */}
@@ -1371,19 +1288,7 @@ const PhotoViewer = ({
                 }}
                 className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
               >
-                <svg
-                  className="w-5 h-5 mr-3 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-3 text-gray-400" />
                 {t('addToAlbum', 'Add to Album')}
               </button>
 
@@ -1399,19 +1304,7 @@ const PhotoViewer = ({
                 {downloading ? (
                   <div className="animate-spin h-5 w-5 mr-3 border-2 border-white border-t-transparent rounded-full"></div>
                 ) : (
-                  <svg
-                    className="w-5 h-5 mr-3 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faDownload} className="w-5 h-5 mr-3 text-gray-400" />
                 )}
                 {downloading ? t('downloading', 'Downloading...') : t('download', 'Download')}
               </button>
@@ -1424,19 +1317,7 @@ const PhotoViewer = ({
                 }}
                 className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
               >
-                <svg
-                  className="w-5 h-5 mr-3 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faShare} className="w-5 h-5 mr-3 text-gray-400" />
                 {t('share', 'Share')}
               </button>
 
@@ -1448,19 +1329,7 @@ const PhotoViewer = ({
                 onClick={handleDeleteFile}
                 className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
               >
-                <svg
-                  className="w-5 h-5 mr-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faTrash} className="w-5 h-5 mr-3 text-red-400" />
                 {t('delete', 'Delete')}
               </button>
             </div>
@@ -1472,19 +1341,7 @@ const PhotoViewer = ({
           onClick={onClose}
           className="p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors"
         >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faXmark} className="w-6 h-6" />
         </button>
       </div>
 
@@ -1506,19 +1363,7 @@ const PhotoViewer = ({
             showLeftArrow ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          <svg
-            className="w-8 h-8"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faChevronLeft} className="w-8 h-8" />
         </button>
       )}
 
@@ -1530,19 +1375,7 @@ const PhotoViewer = ({
             showRightArrow ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          <svg
-            className="w-8 h-8"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faChevronRight} className="w-8 h-8" />
         </button>
       )}
 
@@ -1560,19 +1393,7 @@ const PhotoViewer = ({
               onClick={() => setShowInfoPanel(false)}
               className="p-2 hover:bg-zinc-800 rounded-full text-gray-400 hover:text-white transition-colors"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
             </button>
           </div>
 
@@ -1599,19 +1420,7 @@ const PhotoViewer = ({
                   className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('renameFile', 'Rename file')}
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                  </svg>
+                  <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
                 </button>
               </div>
               <div className="text-white text-sm break-all">

@@ -3,7 +3,9 @@
     "photos": "Photos",
     "files": "Files",
     "albums": "Albums",
+    "folders": "Folders",
     "favorites": "Favorites",
+    "contacts": "Contacts",
     "trash": "Trash"
   },
   "cancel": "Cancel",

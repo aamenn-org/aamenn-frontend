@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { albumService } from '../../services';
 import { useAuth } from '../../context';
 import { encryptFilename, decryptFilename } from '../../utils/crypto';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faXmark, 
+  faFolderOpen, 
+  faFolderPlus, 
+  faCheck, 
+  faPlus 
+} from '@fortawesome/free-solid-svg-icons';
 
 const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
   const { getMasterKey, hasMasterKey } = useAuth();
@@ -110,19 +118,7 @@ const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faXmark} className="w-6 h-6" />
           </button>
         </div>
 
@@ -140,19 +136,7 @@ const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
             </div>
           ) : albums.length === 0 && !showCreateNew ? (
             <div className="text-center py-8">
-              <svg
-                className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1}
-                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                />
-              </svg>
+              <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
               <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">No albums yet</p>
               <button
                 onClick={() => setShowCreateNew(true)}
@@ -174,19 +158,7 @@ const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
                   }`}
                 >
                   <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mr-3">
-                    <svg
-                      className="w-5 h-5 text-white"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                      />
-                    </svg>
+                    <FontAwesomeIcon icon={faFolderPlus} className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex-1 text-left">
                     <span className="font-medium text-gray-900 dark:text-white">
@@ -197,17 +169,7 @@ const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
                     </span>
                   </div>
                   {selectedAlbumId === album.albumId && (
-                    <svg
-                      className="w-5 h-5 text-blue-500"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                    <FontAwesomeIcon icon={faCheck} className="w-5 h-5 text-blue-500" />
                   )}
                 </button>
               ))}
@@ -249,19 +211,7 @@ const AddToAlbumModal = ({ isOpen, onClose, fileIds = [], onSuccess }) => {
                   className="w-full flex items-center p-3 border-2 border-dashed border-gray-300 dark:border-zinc-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
                 >
                   <div className="w-10 h-10 bg-gray-100 dark:bg-zinc-700 flex items-center justify-center mr-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
+                    <FontAwesomeIcon icon={faPlus} className="w-5 h-5 text-gray-400" />
                   </div>
                   <span className="font-medium text-gray-600 dark:text-gray-300">
                     Create New Album

@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { userService } from '../../services';
-
 import { useTranslation } from 'react-i18next';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faDatabase, 
+  faTriangleExclamation 
+} from '@fortawesome/free-solid-svg-icons';
 
 // Debounce delay to prevent excessive API calls during bulk uploads
 const STORAGE_REFRESH_DEBOUNCE_MS = 2000;
@@ -99,19 +103,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
     <div className="bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <svg
-            className="w-4 h-4 text-gray-500 dark:text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faDatabase} className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('storage.title', 'Storage')}
           </span>
@@ -132,13 +124,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
       {/* Warning message if exceeded */}
       {exceeded && (
         <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
+          <FontAwesomeIcon icon={faTriangleExclamation} className="w-3 h-3" />
           {t('storage.limitReached', 'Storage limit reached. Delete files to upload more.')}
         </p>
       )}

@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context';
 import { adminService } from '../../services';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  LayoutDashboard,
-  Users,
-  HardDrive,
-  Activity,
-  AlertTriangle,
-  LogOut,
-  Menu,
-  X,
-  Bell,
-} from 'lucide-react';
+  faChartLine,
+  faUsers,
+  faHardDrive,
+  faChartArea,
+  faTriangleExclamation,
+  faRightFromBracket,
+  faBars,
+  faXmark,
+  faBell,
+} from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
 import Overview from './Overview';
@@ -51,12 +52,12 @@ const AdminDashboard = () => {
     {
       path: '/dashboard',
       label: 'Overview',
-      icon: LayoutDashboard,
+      icon: faChartLine,
       exact: true,
     },
-    { path: '/dashboard/users', label: 'Users', icon: Users },
-    { path: '/dashboard/storage', label: 'Storage', icon: HardDrive },
-    { path: '/dashboard/health', label: 'System Health', icon: Activity },
+    { path: '/dashboard/users', label: 'Users', icon: faUsers },
+    { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
+    { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
   ];
 
   const criticalAlerts = alerts.filter(
@@ -88,7 +89,7 @@ const AdminDashboard = () => {
             onClick={() => setSidebarOpen(false)}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden"
           >
-            <X size={20} />
+            <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
           </button>
         </div>
 
@@ -107,7 +108,7 @@ const AdminDashboard = () => {
                 }`
               }
             >
-              <item.icon size={20} />
+              <FontAwesomeIcon icon={item.icon} className="w-5 h-5" />
               <span className="ml-3">{item.label}</span>
             </NavLink>
           ))}
@@ -122,7 +123,7 @@ const AdminDashboard = () => {
             onClick={handleLogout}
             className="flex items-center w-full px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors rounded"
           >
-            <LogOut size={20} />
+            <FontAwesomeIcon icon={faRightFromBracket} className="w-5 h-5" />
             <span className="ml-3">Logout</span>
           </button>
         </div>
@@ -137,7 +138,7 @@ const AdminDashboard = () => {
               onClick={() => setSidebarOpen(true)}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded lg:hidden"
             >
-              <Menu size={20} />
+              <FontAwesomeIcon icon={faBars} className="w-5 h-5" />
             </button>
             <h1 className="text-lg lg:text-xl font-semibold text-gray-800 dark:text-white">
               Admin Dashboard
@@ -147,7 +148,7 @@ const AdminDashboard = () => {
             {/* Alerts indicator */}
             {criticalAlerts.length > 0 && (
               <div className="relative">
-                <Bell className="text-orange-500" size={24} />
+                <FontAwesomeIcon icon={faBell} className="text-orange-500 w-6 h-6" />
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
                   {criticalAlerts.length}
                 </span>
@@ -160,7 +161,7 @@ const AdminDashboard = () => {
         {criticalAlerts.length > 0 && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 px-4 lg:px-6 py-3">
             <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
-              <AlertTriangle size={18} className="flex-shrink-0" />
+              <FontAwesomeIcon icon={faTriangleExclamation} className="w-[18px] h-[18px] flex-shrink-0" />
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                 <span className="font-medium">
                   {criticalAlerts.length} active alert

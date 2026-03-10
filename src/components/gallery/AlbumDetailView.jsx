@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { albumService } from '../../services';
 import PhotoGrid from './PhotoGrid';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faArrowLeft, 
+  faTrash, 
+  faImage 
+} from '@fortawesome/free-solid-svg-icons';
 
 const AlbumDetailView = ({ album, onBack, onViewFile, onFavoriteToggle }) => {
   const [files, setFiles] = useState([]);
@@ -92,19 +98,7 @@ const AlbumDetailView = ({ album, onBack, onViewFile, onFavoriteToggle }) => {
             onClick={onBack}
             className="mr-4 p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg transition-colors"
           >
-            <svg
-              className="w-5 h-5 text-gray-600 dark:text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faArrowLeft} className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -127,19 +121,7 @@ const AlbumDetailView = ({ album, onBack, onViewFile, onFavoriteToggle }) => {
                 onClick={handleRemoveFromAlbum}
                 className="inline-flex items-center px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
               >
-                <svg
-                  className="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <FontAwesomeIcon icon={faTrash} className="w-4 h-4 mr-2" />
                 Remove from Album
               </button>
             </>
@@ -160,19 +142,7 @@ const AlbumDetailView = ({ album, onBack, onViewFile, onFavoriteToggle }) => {
       ) : files.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-            <svg
-              className="w-12 h-12 text-gray-300 dark:text-gray-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faImage} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             No photos in this album

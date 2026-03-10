@@ -1,0 +1,95 @@
+{
+  "title": "Terms of Service",
+  "lastUpdated": "Last updated: March 2026",
+  "intro": "Welcome to Aameen, a privacy-focused cloud storage service. By creating an account or using Aameen, you agree to the following terms.",
+  "sections": {
+    "about": {
+      "title": "1. About Aameen",
+      "content": [
+        "Aameen is a secure cloud storage service that allows users to store, organize, and share files online.",
+        "Our platform uses end-to-end encryption, which means files are encrypted on your device before they are uploaded.",
+        "Only you can access your files."
+      ]
+    },
+    "account": {
+      "title": "2. Your Account",
+      "intro": "To use Aameen, you must create an account.",
+      "responsibilities": "You are responsible for:",
+      "items": [
+        "Keeping your account credentials secure",
+        "Protecting your recovery key",
+        "All activity that occurs under your account"
+      ],
+      "outro": "You must provide accurate information when creating an account."
+    },
+    "encryption": {
+      "title": "3. Important: Encryption & Recovery Key",
+      "intro": "Aameen uses a zero-knowledge encryption system.",
+      "means": "This means:",
+      "items": [
+        "Your files are encrypted on your device before upload",
+        "The encryption keys are controlled by you",
+        "Aameen cannot access or decrypt your files"
+      ],
+      "recovery": "During account setup, you may receive a Recovery Key.",
+      "warning": "⚠️ Important:",
+      "warningText": [
+        "If you lose your password and your recovery key, your encrypted files cannot be recovered.",
+        "Aameen does not have the ability to restore or unlock your encrypted data."
+      ]
+    },
+    "data": {
+      "title": "4. Your Data",
+      "ownership": "You retain full ownership of all files and content you upload.",
+      "grant": "By using Aameen, you grant us permission only to:",
+      "items": [
+        "Store your encrypted files",
+        "Process them to provide the service"
+      ],
+      "privacy": "Aameen does not view, analyze, or access your files."
+    },
+    "acceptable": {
+      "title": "5. Acceptable Use",
+      "intro": "You agree not to use Aameen for:",
+      "items": [
+        "Illegal content",
+        "Copyright violations",
+        "Malware or harmful software",
+        "Activities that abuse or disrupt the service"
+      ],
+      "outro": "We may suspend or terminate accounts that violate these rules."
+    },
+    "storage": {
+      "title": "6. Storage Limits",
+      "content": [
+        "Accounts may have storage limits depending on the service plan.",
+        "If your storage limit is reached, you may not be able to upload additional files until space is available."
+      ]
+    },
+    "deletion": {
+      "title": "7. Account Deletion",
+      "intro": "You may delete your account at any time.",
+      "when": "When an account is deleted:",
+      "items": [
+        "All files and data associated with the account are permanently removed",
+        "This action cannot be reversed"
+      ]
+    },
+    "availability": {
+      "title": "8. Service Availability",
+      "content": "We aim to provide a reliable and secure service, but Aameen is provided \"as is\". We cannot guarantee that the service will always be available or uninterrupted."
+    },
+    "changes": {
+      "title": "9. Changes to These Terms",
+      "content": [
+        "We may update these Terms of Service from time to time.",
+        "If significant changes are made, we will notify users through the service or by email."
+      ]
+    },
+    "contact": {
+      "title": "10. Contact",
+      "intro": "If you have questions about these Terms, you can contact us at:",
+      "email": "support@aameen.app"
+    }
+  }
+}

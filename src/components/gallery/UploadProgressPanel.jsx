@@ -1,3 +1,10 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faXmark, 
+  faMinus, 
+  faPlus 
+} from '@fortawesome/free-solid-svg-icons';
+
 /**
  * Upload Progress Panel - Shows detailed upload progress
  *
@@ -128,38 +135,14 @@ const UploadProgressPanel = ({
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors"
             title="Minimize"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18 12H6"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faMinus} className="w-4 h-4" />
           </button>
           <button
             onClick={onClear}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors"
             title="Close"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <FontAwesomeIcon icon={faXmark} className="w-4 h-4" />
           </button>
         </div>
       </div>
