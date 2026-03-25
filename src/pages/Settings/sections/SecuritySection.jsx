@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context';
 import { useVaultState } from '../../../hooks/useVaultState';
-import { authService, userService } from '../../../services';
+import { userService } from '../../../services';
 import { reEncryptMasterKey } from '../../../utils/crypto';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faTimes, faSpinner, faTriangleExclamation, faTrash } from '@fortawesome/free-solid-svg-icons';

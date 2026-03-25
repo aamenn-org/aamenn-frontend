@@ -7,7 +7,6 @@ export const shareService = {
    */
   async createShares(items) {
     const payload = { items };
-    console.log('Share service - sending payload:', JSON.stringify(payload, null, 2));
     const response = await api.post('/shares', payload);
     return response.data;
   },

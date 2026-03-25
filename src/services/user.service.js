@@ -57,6 +57,19 @@ export const userService = {
     const response = await api.post('/users/me/security', data);
     return response.data;
   },
+
+  /**
+   * Change vault password (re-encrypts master key with new password)
+   * @param {Object} data
+   * @param {string} data.currentPassword
+   * @param {string} data.newPassword
+   * @param {string} data.newEncryptedMasterKey
+   * @param {string} data.newKekSalt
+   */
+  async changeVaultPassword(data) {
+    const response = await api.patch('/users/me/vault-password', data);
+    return response.data;
+  },
 };
 
 export default userService;

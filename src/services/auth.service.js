@@ -94,14 +94,6 @@ export const authService = {
   },
 
   /**
-   * Change vault password (authenticated)
-   */
-  async changeVaultPassword(data) {
-    const response = await api.patch('/users/me/vault-password', data);
-    return response.data;
-  },
-
-  /**
    * Request vault reset OTP
    */
   async vaultResetRequest(email) {

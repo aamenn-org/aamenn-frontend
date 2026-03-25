@@ -21,16 +21,8 @@ import {
   getFileType,
   FILE_HANDLERS,
 } from '../utils/thumbnail';
-import {
-  generateFileKey,
-  encryptFile,
-  encryptFileKey,
-  encryptFilename,
-  arrayBufferToBase64,
-  computeSHA256 as computeSHA256MainThread,
-  computeSHA1 as computeSHA1MainThread,
-} from '../utils/crypto';
-import { getCryptoWorkerPool } from '../workers';
+import { encryptFile, arrayBufferToBase64 } from '../utils/crypto';
+import cryptoService from '../services/crypto.service';
 
 // Detect available CPU cores and use them all for maximum performance
 // navigator.hardwareConcurrency returns the number of logical processors
@@ -316,19 +308,8 @@ export function useUpload({ onFileUploaded } = {}) {
         // Clone the ArrayBuffer for hashing since transfer is destructive
         const hashData = fileData.slice(0);
 
-        // Compute SHA-256 hash - use worker with fallback to main thread for Safari compatibility
-        let contentHash;
-        try {
-          const workerPool = getCryptoWorkerPool();
-          contentHash = await workerPool.computeSHA256(hashData);
-        } catch (workerError) {
-          console.warn(
-            '[useUpload] Worker hash failed, using main thread:',
-            workerError.message
-          );
-          // Fallback to main thread computation (Safari compatibility)
-          contentHash = await computeSHA256MainThread(hashData);
-        }
+        // Compute SHA-256 hash via cryptoService (worker with main-thread fallback)
+        const contentHash = await cryptoService.computeSHA256(hashData);
         updateUpload(id, { progress: 5 });
 
         // Phase 1b: Check for duplicates
@@ -384,7 +365,7 @@ export function useUpload({ onFileUploaded } = {}) {
         updateUpload(id, { status: UploadStatus.ENCRYPTING, progress: 10 });
 
         // Generate file key
-        const fileKey = await generateFileKey();
+        const fileKey = await cryptoService.generateFileKey();
         updateUpload(id, { progress: 15 });
 
         // Encrypt file
@@ -392,8 +373,8 @@ export function useUpload({ onFileUploaded } = {}) {
           fileData,
           fileKey
         );
-        const cipherFileKey = await encryptFileKey(fileKey, masterKey);
-        const fileNameEncrypted = await encryptFilename(file.name, masterKey);
+        const cipherFileKey = await cryptoService.encryptFileKey(fileKey, masterKey);
+        const fileNameEncrypted = await cryptoService.encryptFilename(file.name, masterKey);
         updateUpload(id, { progress: 35 });
 
         // Generate thumbnails using file type handler (clean DRY approach)
@@ -424,19 +405,8 @@ export function useUpload({ onFileUploaded } = {}) {
         // Clone the buffer since transfer is destructive
         const sha1Data = combined.buffer.slice(0);
 
-        // Compute SHA-1 hash - use worker with fallback to main thread for Safari compatibility
-        let sha1Hash;
-        try {
-          const workerPool = getCryptoWorkerPool();
-          sha1Hash = await workerPool.computeSHA1(sha1Data);
-        } catch (workerError) {
-          console.warn(
-            '[useUpload] Worker SHA1 failed, using main thread:',
-            workerError.message
-          );
-          // Fallback to main thread computation (Safari compatibility)
-          sha1Hash = await computeSHA1MainThread(sha1Data);
-        }
+        // Compute SHA-1 hash via cryptoService (worker with main-thread fallback)
+        const sha1Hash = await cryptoService.computeSHA1(sha1Data);
 
         // Create encrypted blob
         const encryptedBlob = new Blob([combined], {

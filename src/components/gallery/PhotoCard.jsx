@@ -187,7 +187,8 @@ const PhotoCard = ({
         await thumbnailCache.getMediumThumbnail(
           file.fileId,
           file.thumbMediumUrl,
-          masterKey // Use master key directly instead of cipherThumbMediumKey
+          masterKey,
+          file.cipherFileKey
         );
         
         mediumPreloadedRef.current = true;

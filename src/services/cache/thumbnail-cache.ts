@@ -13,7 +13,7 @@
 import Dexie from 'dexie';
 import { LRUCache } from 'lru-cache';
 import { fileService } from '../index';
-import { getCryptoWorkerPool, PRIORITY } from '../../workers';
+import { cryptoService } from '../crypto.service';
 import { getDownloadLimiter } from '../../utils/download-limiter';
 import { getPerformanceMonitor } from '../../utils/performance-monitor';
 
@@ -379,8 +379,8 @@ class ThumbnailCacheService {
   ): Promise<string> {
     await this.init();
 
-    const { priority = 'normal', signal, masterKeyBytes } = options;
-    
+    const { priority = 'normal', signal } = options;
+
     const perfMonitor = getPerformanceMonitor();
     perfMonitor.markStart(`thumbnail_${fileId}`);
 
@@ -525,16 +525,13 @@ class ThumbnailCacheService {
       ))!;
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
-      // Decrypt in Web Worker using unified file key approach
-      const workerPool = getCryptoWorkerPool();
-      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
-      const decryptedData = await workerPool.decryptFile(
+      // Decrypt in Web Worker via unified CryptoService
+      const decryptedData = await cryptoService.decryptFile(
         encryptedData,
-        cipherFileKey,  // Use file key encrypted with master key
-        masterKeyBytes
+        cipherFileKey,
+        masterKey
       );
 
-      // Debug: Check the first bytes of decrypted data (JPEG should start with FF D8 FF)
       const decryptedArray = new Uint8Array(decryptedData);
       if (DEBUG) {
         const header = Array.from(decryptedArray.slice(0, 10))
@@ -592,13 +589,13 @@ class ThumbnailCacheService {
       masterKeyBytes?: ArrayBuffer; // Pre-exported to avoid repeated exportKey calls
     } = {}
   ): Promise<string> {
-    const { priority = 'normal', signal, masterKeyBytes } = options;
+    const { priority = 'normal', signal } = options;
 
     // Map string priority to worker pool priority and download priority
     const workerPriorityMap = {
-      high: PRIORITY.HIGH,
-      normal: PRIORITY.NORMAL,
-      low: PRIORITY.LOW,
+      high: cryptoService.PRIORITY.HIGH,
+      normal: cryptoService.PRIORITY.NORMAL,
+      low: cryptoService.PRIORITY.LOW,
     };
     
     const downloadPriorityMap = {
@@ -629,15 +626,11 @@ class ThumbnailCacheService {
 
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
-      // Decrypt in Web Worker with priority and abort signal
-      const workerPool = getCryptoWorkerPool();
-      // Use pre-exported bytes if available, otherwise export (fallback)
-      const keyBytes =
-        masterKeyBytes ?? (await crypto.subtle.exportKey('raw', masterKey));
-      const decryptedData = await workerPool.decryptFile(
+      // Decrypt in Web Worker with priority and abort signal via unified CryptoService
+      const decryptedData = await cryptoService.decryptFile(
         encryptedData,
-        cipherFileKey,  // Use file key encrypted with master key
-        keyBytes,
+        cipherFileKey,
+        masterKey,
         {
           priority: workerPriorityMap[priority],
           signal,
@@ -685,6 +678,7 @@ class ThumbnailCacheService {
     files: Array<{
       fileId: string;
       thumbnailUrl: string;
+      cipherFileKey: string;
     }>,
     masterKey: CryptoKey
   ): Promise<void> {
@@ -693,7 +687,8 @@ class ThumbnailCacheService {
       this.getThumbnail(
         file.fileId,
         file.thumbnailUrl,
-        masterKey
+        masterKey,
+        file.cipherFileKey
       ).catch(() => {}); // Ignore preload failures
     }
   }
@@ -932,13 +927,11 @@ class ThumbnailCacheService {
 
       const encryptedData = await fileService.downloadFileContent(downloadUrl);
 
-      // Decrypt in Web Worker using unified file key approach
-      const workerPool = getCryptoWorkerPool();
-      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
-      const decryptedData = await workerPool.decryptFile(
+      // Decrypt in Web Worker via unified CryptoService
+      const decryptedData = await cryptoService.decryptFile(
         encryptedData,
-        cipherFileKey,  // Use file key encrypted with master key
-        masterKeyBytes
+        cipherFileKey,
+        masterKey
       );
 
       const blob = new Blob([decryptedData], { type: mimeType });
@@ -1020,13 +1013,11 @@ class ThumbnailCacheService {
         thumbMediumUrl
       );
 
-      // Decrypt in Web Worker using unified file key approach
-      const workerPool = getCryptoWorkerPool();
-      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
-      const decryptedData = await workerPool.decryptFile(
+      // Decrypt in Web Worker via unified CryptoService
+      const decryptedData = await cryptoService.decryptFile(
         encryptedData,
-        cipherFileKey,  // Use file key encrypted with master key
-        masterKeyBytes
+        cipherFileKey,
+        masterKey
       );
 
       const blob = new Blob([decryptedData], { type: 'image/jpeg' });
@@ -1108,13 +1099,11 @@ class ThumbnailCacheService {
         thumbLargeUrl
       );
 
-      // Decrypt in Web Worker using unified file key approach
-      const workerPool = getCryptoWorkerPool();
-      const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
-      const decryptedData = await workerPool.decryptFile(
+      // Decrypt in Web Worker via unified CryptoService
+      const decryptedData = await cryptoService.decryptFile(
         encryptedData,
-        cipherFileKey,  // Use file key encrypted with master key
-        masterKeyBytes
+        cipherFileKey,
+        masterKey
       );
 
       const blob = new Blob([decryptedData], { type: 'image/jpeg' });
@@ -1195,6 +1184,7 @@ class ThumbnailCacheService {
       downloadUrl?: string;
       thumbMediumUrl?: string;
       mimeType?: string;
+      cipherFileKey?: string;
     }>,
     masterKey: CryptoKey
   ): Promise<void> {
@@ -1215,20 +1205,22 @@ class ThumbnailCacheService {
 
           try {
             // Preload medium first (faster, good for quick swipes)
-            if (file.thumbMediumUrl) {
+            if (file.thumbMediumUrl && file.cipherFileKey) {
               await this.getMediumThumbnail(
                 fileId,
                 file.thumbMediumUrl,
-                masterKey
+                masterKey,
+                file.cipherFileKey
               );
             }
 
             // Then preload full image
-            if (file.downloadUrl) {
+            if (file.downloadUrl && file.cipherFileKey) {
               await this.getFullImage(
                 fileId,
                 file.downloadUrl,
                 masterKey,
+                file.cipherFileKey,
                 file.mimeType || 'image/jpeg'
               );
             }
@@ -1254,6 +1246,7 @@ class ThumbnailCacheService {
       downloadUrl: string;
       thumbMediumUrl: string;
       mimeType: string;
+      cipherFileKey: string;
     }>,
     masterKey: CryptoKey
   ): Promise<void> {
@@ -1271,12 +1264,13 @@ class ThumbnailCacheService {
 
     // Preload medium thumbnails
     const mediumPromises = toPreload
-      .filter((f) => f.thumbMediumUrl)
+      .filter((f) => f.thumbMediumUrl && f.cipherFileKey)
       .map((f) =>
         this.getMediumThumbnail(
           f.fileId,
           f.thumbMediumUrl!,
-          masterKey
+          masterKey,
+          f.cipherFileKey
         ).catch(() => null)
       );
 
@@ -1292,6 +1286,7 @@ class ThumbnailCacheService {
       fileId: string;
       downloadUrl: string;
       mimeType?: string;
+      cipherFileKey: string;
     }>,
     masterKey: CryptoKey
   ): Promise<void> {
@@ -1308,12 +1303,13 @@ class ThumbnailCacheService {
     log(`Batch preloading ${toPreload.length} full images`);
 
     const fullPromises = toPreload
-      .filter((f) => f.downloadUrl)
+      .filter((f) => f.downloadUrl && f.cipherFileKey)
       .map((f) =>
         this.getFullImage(
           f.fileId,
           f.downloadUrl,
           masterKey,
+          f.cipherFileKey,
           f.mimeType || 'image/jpeg'
         ).catch(() => null)
       );

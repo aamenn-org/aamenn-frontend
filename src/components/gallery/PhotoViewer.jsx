@@ -348,6 +348,7 @@ const PhotoViewer = ({
             fileId: f.fileId,
             downloadUrl: f.downloadUrl,
             mimeType: f.mimeType,
+            cipherFileKey: f.cipherFileKey,
           })),
           masterKey
         );
@@ -458,9 +459,9 @@ const PhotoViewer = ({
             downloadUrl: f.downloadUrl,
             thumbMediumUrl: f.thumbMediumUrl,
             mimeType: f.mimeType,
+            cipherFileKey: f.cipherFileKey,
           })),
-          masterKey,
-          { prioritizeMedium: true }
+          masterKey
         );
       }
     } catch (error) {

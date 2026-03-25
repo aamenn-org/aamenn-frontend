@@ -35,6 +35,9 @@ export { default as adminService } from './admin.service';
 export { default as shareService } from './share.service';
 export { default as contactsService } from './contacts.service';
 
+// Unified crypto facade
+export { default as cryptoService } from './crypto.service';
+
 // Cache system (L1: memory, L2: IndexedDB)
 export { thumbnailCache } from './cache';
 
