@@ -11,6 +11,7 @@
  */
 
 import Dexie from 'dexie';
+import { LRUCache } from 'lru-cache';
 import { fileService } from '../index';
 import { getCryptoWorkerPool, PRIORITY } from '../../workers';
 import { getDownloadLimiter } from '../../utils/download-limiter';
@@ -71,80 +72,6 @@ class DecryptedCacheDB extends Dexie {
   }
 }
 
-// ============================================================================
-// In-Memory LRU Cache
-// ============================================================================
-
-class SimpleLRUCache<T> {
-  private cache = new Map<string, T>();
-  private maxSize: number;
-  private onEvict?: (key: string, value: T) => void;
-
-  constructor(maxSize: number, onEvict?: (key: string, value: T) => void) {
-    this.maxSize = maxSize;
-    this.onEvict = onEvict;
-  }
-
-  get(key: string): T | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Move to end (most recently used)
-      this.cache.delete(key);
-      this.cache.set(key, value);
-    }
-    return value;
-  }
-
-  set(key: string, value: T): void {
-    if (this.cache.has(key)) {
-      const oldValue = this.cache.get(key);
-      this.cache.delete(key);
-      // Revoke old value if replacing
-      if (oldValue && this.onEvict) {
-        this.onEvict(key, oldValue);
-      }
-    } else if (this.cache.size >= this.maxSize) {
-      // Remove oldest
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey) {
-        const evictedValue = this.cache.get(firstKey);
-        this.cache.delete(firstKey);
-        // Revoke evicted blob URL
-        if (evictedValue && this.onEvict) {
-          this.onEvict(firstKey, evictedValue);
-        }
-      }
-    }
-    this.cache.set(key, value);
-  }
-
-  has(key: string): boolean {
-    return this.cache.has(key);
-  }
-
-  delete(key: string): void {
-    const value = this.cache.get(key);
-    this.cache.delete(key);
-    // Revoke blob URL on explicit delete
-    if (value && this.onEvict) {
-      this.onEvict(key, value);
-    }
-  }
-
-  clear(): void {
-    // Revoke all blob URLs before clearing
-    if (this.onEvict) {
-      for (const [key, value] of this.cache.entries()) {
-        this.onEvict(key, value);
-      }
-    }
-    this.cache.clear();
-  }
-
-  get size(): number {
-    return this.cache.size;
-  }
-}
 
 // ============================================================================
 // Bloom Filter for Fast Cache Existence Checks
@@ -254,8 +181,8 @@ class BloomFilter {
 
 class ThumbnailCacheService {
   private db: DecryptedCacheDB;
-  private memoryCache: SimpleLRUCache<string>; // Stores blob URLs for thumbnails
-  private imageMemoryCache: SimpleLRUCache<string>; // L1 for full/medium images
+  private memoryCache: LRUCache<string, string>; // Stores blob URLs for thumbnails
+  private imageMemoryCache: LRUCache<string, string>; // L1 for full/medium images
   private pendingRequests = new Map<string, Promise<string>>();
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
@@ -269,24 +196,30 @@ class ThumbnailCacheService {
     
     // Memory cache with blob URL revocation on eviction
     // Increased capacity for better grid scrolling performance
-    this.memoryCache = new SimpleLRUCache<string>(3000, (key, blobUrl) => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-        log(`Revoked blob URL for thumbnail: ${key}`);
-      } catch (err) {
-        // Ignore errors from already-revoked URLs
-      }
+    this.memoryCache = new LRUCache<string, string>({
+      max: 3000,
+      dispose: (value, key) => {
+        try {
+          URL.revokeObjectURL(value);
+          log(`Revoked blob URL for thumbnail: ${key}`);
+        } catch {
+          // Ignore errors from already-revoked URLs
+        }
+      },
     });
-    
+
     // Image memory cache with blob URL revocation on eviction
     // Increased to 200 for better viewer navigation (medium + large for ~100 images)
-    this.imageMemoryCache = new SimpleLRUCache<string>(200, (key, blobUrl) => {
-      try {
-        URL.revokeObjectURL(blobUrl);
-        log(`Revoked blob URL for image: ${key}`);
-      } catch (err) {
-        // Ignore errors from already-revoked URLs
-      }
+    this.imageMemoryCache = new LRUCache<string, string>({
+      max: 200,
+      dispose: (value, key) => {
+        try {
+          URL.revokeObjectURL(value);
+          log(`Revoked blob URL for image: ${key}`);
+        } catch {
+          // Ignore errors from already-revoked URLs
+        }
+      },
     });
     
     // Bloom filters: 100K capacity, 1% false positive rate (~10KB each)
@@ -586,10 +519,10 @@ class ThumbnailCacheService {
 
       // Download encrypted thumbnail with concurrency limiting
       const downloadLimiter = getDownloadLimiter();
-      const encryptedData = await downloadLimiter.schedule(
+      const encryptedData = (await downloadLimiter.add(
         () => fileService.downloadFileContent(thumbnailUrl),
-        1 // Normal priority
-      );
+        { priority: 1 }
+      ))!;
       log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
       // Decrypt in Web Worker using unified file key approach
@@ -684,10 +617,10 @@ class ThumbnailCacheService {
 
       // Download encrypted thumbnail with concurrency limiting and priority
       const downloadLimiter = getDownloadLimiter();
-      const encryptedData = await downloadLimiter.schedule(
+      const encryptedData = (await downloadLimiter.add(
         () => fileService.downloadFileContent(thumbnailUrl),
-        downloadPriorityMap[priority]
-      );
+        { priority: downloadPriorityMap[priority] }
+      ))!;
 
       // Check abort after download
       if (signal?.aborted) {

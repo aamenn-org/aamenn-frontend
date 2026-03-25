@@ -11,9 +11,6 @@
 // Core cache service (main entry point)
 export { thumbnailCache } from './thumbnail-cache';
 
-// LRU Cache utilities (for custom cache needs)
-export { LRUCache, type LRUCacheOptions } from './lru-cache';
-
 // Types
 export type { CacheConfig, CacheStats } from './types';
 export { DEFAULT_CACHE_CONFIG } from './types';
