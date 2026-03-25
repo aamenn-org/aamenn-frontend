@@ -28,15 +28,6 @@ export const authService = {
 
 
   /**
-   * Refresh access token
-   * @param {string} refreshToken - Refresh token
-   */
-  async refreshToken(refreshToken) {
-    const response = await api.post('/auth/refresh', { refreshToken });
-    return response.data;
-  },
-
-  /**
    * Logout user (clear both local and session storage)
    */
   logout() {

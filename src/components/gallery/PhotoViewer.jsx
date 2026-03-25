@@ -1129,7 +1129,7 @@ const PhotoViewer = ({
                         // Performance: decode image async for instant rendering
                         decoding="async"
                         // Performance: hint browser this is high priority
-                        fetchpriority="high"
+                        fetchPriority="high"
                       />
                     </TransformComponent>
                   </>

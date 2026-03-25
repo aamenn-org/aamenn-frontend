@@ -672,28 +672,6 @@ class ThumbnailCacheService {
   }
 
   /**
-   * Preload thumbnails in background.
-   */
-  async preloadThumbnails(
-    files: Array<{
-      fileId: string;
-      thumbnailUrl: string;
-      cipherFileKey: string;
-    }>,
-    masterKey: CryptoKey
-  ): Promise<void> {
-    for (const file of files) {
-      // Fire and forget
-      this.getThumbnail(
-        file.fileId,
-        file.thumbnailUrl,
-        masterKey,
-        file.cipherFileKey
-      ).catch(() => {}); // Ignore preload failures
-    }
-  }
-
-  /**
    * Remove specific items from cache.
    */
   async remove(fileIds: string[]): Promise<void> {
@@ -851,29 +829,6 @@ class ThumbnailCacheService {
       return entry.metadata as unknown[];
     }
     return null;
-  }
-
-  /**
-   * Cache favorites list for offline access.
-   */
-  async cacheFavoritesList(files: unknown[]): Promise<void> {
-    await this.init();
-
-    await this.db.metadata.put({
-      fileId: '__favorites_list__',
-      metadata: files,
-      timestamp: Date.now(),
-    });
-  }
-
-  /**
-   * Get cached favorites list.
-   */
-  async getCachedFavoritesList(): Promise<unknown[] | null> {
-    await this.init();
-
-    const entry = await this.db.metadata.get('__favorites_list__');
-    return entry ? (entry.metadata as unknown[]) : null;
   }
 
   // ==========================================================================

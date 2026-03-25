@@ -43,34 +43,6 @@ export class ApiError extends Error {
     this.isApiError = true;
   }
 
-  /**
-   * Check if error is of a specific type
-   */
-  isType(errorType) {
-    return this.type === errorType;
-  }
-
-  /**
-   * Check if error is authentication related
-   */
-  isAuthError() {
-    return this.type === ErrorType.AUTHENTICATION_ERROR || 
-           this.type === ErrorType.AUTHORIZATION_ERROR;
-  }
-
-  /**
-   * Check if error is validation related
-   */
-  isValidationError() {
-    return this.type === ErrorType.VALIDATION_ERROR;
-  }
-
-  /**
-   * Get validation errors for specific fields
-   */
-  getFieldErrors() {
-    return this.details || {};
-  }
 }
 
 /**
@@ -184,34 +156,3 @@ function mapStatusToErrorType(status) {
   return typeMap[status] || ErrorType.INTERNAL_ERROR;
 }
 
-/**
- * Wrap an async API call with unified response handling
- * Automatically handles success and error cases
- * 
- * @param {Promise} apiCall - Promise from axios request
- * @returns {Promise} - Promise that resolves with unwrapped data or rejects with ApiError
- */
-export async function wrapApiCall(apiCall) {
-  try {
-    const response = await apiCall;
-    return handleSuccess(response);
-  } catch (error) {
-    handleError(error);
-  }
-}
-
-/**
- * Check if an error is an ApiError instance
- */
-export function isApiError(error) {
-  return error && error.isApiError === true;
-}
-
-export default {
-  handleSuccess,
-  handleError,
-  wrapApiCall,
-  isApiError,
-  ApiError,
-  ErrorType,
-};

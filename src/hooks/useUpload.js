@@ -83,7 +83,6 @@ const saveUploadState = (uploads, isUploading) => {
       status: u.status,
       progress: u.progress,
       error: u.error,
-      albumId: u.albumId,
     }));
     sessionStorage.setItem(
       STORAGE_KEY,
@@ -269,7 +268,7 @@ export function useUpload({ onFileUploaded } = {}) {
   // Now includes duplicate detection before encryption
   const processEncryption = useCallback(
     async (uploadInfo) => {
-      const { id, file, albumId } = uploadInfo;
+      const { id, file } = uploadInfo;
       const masterKey = getMasterKey();
 
       if (!masterKey) {
@@ -314,44 +313,19 @@ export function useUpload({ onFileUploaded } = {}) {
 
         // Phase 1b: Check for duplicates
         try {
-          const duplicateCheck = await fileService.checkDuplicate(
-            contentHash,
-            albumId
-          );
+          const duplicateCheck = await fileService.checkDuplicate(contentHash);
 
           if (duplicateCheck.isDuplicate) {
-            if (duplicateCheck.inSameAlbum) {
-              // File already exists in the same album - skip entirely
-              console.log(
-                `[useUpload] Skipping duplicate: ${file.name} (already in album)`
-              );
-              updateUpload(id, {
-                status: UploadStatus.DUPLICATE,
-                progress: 100,
-                error: 'File already exists in this album',
-                existingFileId: duplicateCheck.existingFile?.id,
-              });
-              encryptingCountRef.current--;
-              processEncryptionQueue();
-              checkIfAllDone();
-              return;
-            } else {
-              // File exists in different album - could create symlink in future
-              // For now, skip to avoid storage redundancy
-              console.log(
-                `[useUpload] Skipping duplicate: ${file.name} (exists in other albums)`
-              );
-              updateUpload(id, {
-                status: UploadStatus.DUPLICATE,
-                progress: 100,
-                error: 'File already uploaded (exists in your library)',
-                existingFileId: duplicateCheck.existingFile?.id,
-              });
-              encryptingCountRef.current--;
-              processEncryptionQueue();
-              checkIfAllDone();
-              return;
-            }
+            updateUpload(id, {
+              status: UploadStatus.DUPLICATE,
+              progress: 100,
+              error: 'File already uploaded (exists in your library)',
+              existingFileId: duplicateCheck.existingFile?.id,
+            });
+            encryptingCountRef.current--;
+            processEncryptionQueue();
+            checkIfAllDone();
+            return;
           }
         } catch (dupError) {
           // If duplicate check fails, continue with upload (fail-safe)

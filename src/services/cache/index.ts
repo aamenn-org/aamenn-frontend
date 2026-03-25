@@ -11,6 +11,3 @@
 // Core cache service (main entry point)
 export { thumbnailCache } from './thumbnail-cache';
 
-// Types
-export type { CacheConfig, CacheStats } from './types';
-export { DEFAULT_CACHE_CONFIG } from './types';
