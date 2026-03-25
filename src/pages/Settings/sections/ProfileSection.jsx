@@ -108,23 +108,18 @@ const ProfileSection = () => {
         'image/jpeg'
       );
 
-      // 3. Upload to B2 via proxy
-      const uploadResult = await fileService.uploadFile(
+      // 3. Upload via dedicated avatar endpoint (sets isAvatar=true, updates avatarFileId atomically)
+      const result = await userService.uploadAvatar(
         new Blob([encryptionResult.encryptedData], { type: 'application/octet-stream' }),
         {
           fileNameEncrypted: encryptionResult.fileNameEncrypted,
           cipherFileKey: encryptionResult.cipherFileKey,
           mimeType: 'image/jpeg',
-          sha1Hash: encryptionResult.sha1Hash
+          sha1Hash: encryptionResult.sha1Hash,
         }
       );
 
-      // 4. Update user profile with new avatarFileId
-      const updatedUser = await userService.updateProfile({
-        avatarFileId: uploadResult.fileId
-      });
-
-      setUser((prev) => ({ ...prev, ...updatedUser }));
+      setUser((prev) => ({ ...prev, avatarFileId: result.avatarFileId }));
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
