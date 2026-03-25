@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context';
 import GoogleSignInButton from '../../components/GoogleSignInButton';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
-import useImageRotation from '../../hooks/useImageRotation';
+import { useImageRotation } from '../../hooks';
 import AuthBackground from '../../components/auth/AuthBackground';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';

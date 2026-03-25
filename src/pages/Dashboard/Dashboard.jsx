@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context';
-import { useVaultState } from '../../hooks/useVaultState';
+import { useVaultState } from '../../hooks';
 import { fileService, folderService } from '../../services';
 import { getDragState, clearDragState } from '../../utils/dragState';
 import { useUpload } from '../../hooks/useUpload';

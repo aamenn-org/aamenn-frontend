@@ -327,7 +327,6 @@ class ThumbnailCacheService {
     options: {
       priority?: 'high' | 'normal' | 'low';
       signal?: AbortSignal;
-      masterKeyBytes?: ArrayBuffer;
     } = {}
   ): Promise<string> {
     const { priority = 'normal', signal } = options;

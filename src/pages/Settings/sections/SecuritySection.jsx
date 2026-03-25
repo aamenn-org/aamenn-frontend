@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context';
-import { useVaultState } from '../../../hooks/useVaultState';
+import { useVaultState } from '../../../hooks';
 import { userService } from '../../../services';
 import { reEncryptMasterKey } from '../../../utils/crypto';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
