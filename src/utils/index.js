@@ -5,7 +5,6 @@
 // Crypto utilities
 export * from './crypto';
 export { getDownloadLimiter } from './download-limiter';
-export { getPerformanceMonitor } from './performance-monitor';
 
 // Thumbnail/media utilities
 export {

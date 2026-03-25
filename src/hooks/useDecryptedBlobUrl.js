@@ -32,19 +32,7 @@ export function useDecryptedBlobUrl({
   const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
-    console.log('🔍 useDecryptedBlobUrl load called:', {
-      hasDownloadUrl: !!downloadUrl,
-      downloadUrlLength: downloadUrl?.length,
-      hasCipherFileKey: !!cipherFileKey,
-      cipherFileKeyLength: cipherFileKey?.length,
-      hasMasterKey: !!masterKey,
-      masterKeyType: masterKey?.constructor?.name,
-      enabled,
-      requestId: ++requestIdRef.current
-    });
-
     if (!downloadUrl || !cipherFileKey || !masterKey || !enabled) {
-      console.log('❌ useDecryptedBlobUrl: Missing required parameters');
       return;
     }
 
@@ -68,13 +56,11 @@ export function useDecryptedBlobUrl({
     setError(null);
 
     try {
-      console.log('📥 Starting file download...');
       // Download encrypted file
       const encryptedData = await fileService.downloadFileContent(downloadUrl);
 
       // Check if this request is still current
       if (thisRequestId !== requestIdRef.current || abortControllerRef.current?.signal.aborted) {
-        console.log('❌ Request aborted or stale');
         return;
       }
 
@@ -82,23 +68,8 @@ export function useDecryptedBlobUrl({
         throw new Error('Downloaded file is empty');
       }
 
-      console.log('📥 File downloaded successfully:', {
-        size: encryptedData.byteLength,
-        sizeKB: (encryptedData.byteLength / 1024).toFixed(2) + ' KB'
-      });
-
       // Decrypt in Web Worker
-      console.log('🔐 Starting decryption in worker...');
       const workerPool = getCryptoWorkerPool();
-      
-      console.log('🔐 Decryption parameters:', {
-        encryptedDataSize: encryptedData.byteLength,
-        cipherFileKeyLength: cipherFileKey?.length,
-        cipherFileKeyType: typeof cipherFileKey,
-        masterKeyBytesLength: (await crypto.subtle.exportKey('raw', masterKey)).byteLength,
-        mimeType
-      });
-      
       const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
       const decryptedData = await workerPool.decryptFile(
         encryptedData,
@@ -108,45 +79,24 @@ export function useDecryptedBlobUrl({
 
       // Check if this request is still current
       if (thisRequestId !== requestIdRef.current || abortControllerRef.current?.signal.aborted) {
-        console.log('❌ Decryption completed but request aborted/stale');
         return;
       }
-
-      console.log('🔐 Decryption successful:', {
-        decryptedSize: decryptedData.byteLength,
-        decryptedSizeKB: (decryptedData.byteLength / 1024).toFixed(2) + ' KB'
-      });
 
       // Create blob URL
       const blob = new Blob([decryptedData], { type: mimeType });
       const url = URL.createObjectURL(blob);
-
-      console.log('📦 Blob URL created:', {
-        blobSize: blob.size,
-        blobType: blob.type,
-        urlLength: url.length
-      });
 
       // Update state if this request is still current
       if (thisRequestId === requestIdRef.current) {
         setBlobUrl(url);
         blobUrlRef.current = url;
         setLoading(false);
-        console.log('✅ useDecryptedBlobUrl completed successfully');
       }
     } catch (err) {
-      console.error('❌ [useDecryptedBlobUrl] Failed to load:', err);
-      console.error('❌ Error details:', {
-        message: err.message,
-        stack: err.stack,
-        name: err.name
-      });
       if (thisRequestId === requestIdRef.current) {
         setError(err);
         setLoading(false);
       }
-    } finally {
-      setLoading(false);
     }
   }, [downloadUrl, cipherFileKey, masterKey, mimeType, enabled]);
 

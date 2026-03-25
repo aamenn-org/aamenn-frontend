@@ -398,13 +398,6 @@ self.onmessage = async function (e) {
         // Payload: { encryptedData, cipherFileKeyBase64, masterKeyBytes }
         const { encryptedData, cipherFileKeyBase64, masterKeyBytes } = payload;
 
-        console.log('🔐 Worker DECRYPT_FILE called:', {
-          encryptedDataSize: encryptedData.byteLength,
-          cipherFileKeyBase64Length: cipherFileKeyBase64.length,
-          masterKeyBytesLength: masterKeyBytes.byteLength,
-          id
-        });
-
         // Import master key
         const masterKey = await importMasterKey(masterKeyBytes);
 
