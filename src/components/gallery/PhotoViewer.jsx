@@ -56,7 +56,6 @@ const PhotoViewer = ({
   hasNext,
   hasPrev,
   currentIndex,
-  // totalFiles - removed, no longer displayed in minimal UI
   onAddToAlbum,
   onDelete,
   onShare,

@@ -932,33 +932,35 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* Child Folders Grid */}
-              {childFolders.length > 0 && (
-                <div
-                  className="mb-4"
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget)) {
-                      setDragOverFolderId(null);
-                    }
-                  }}
-                  onDragEnd={() => setDragOverFolderId(null)}
-                >
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1">
-                    {childFolders.map((folder) => (
-                      <FolderCard
-                        key={folder.folderId}
-                        folder={folder}
-                        onOpen={() => navigateToFolder(folder.folderId)}
-                        isDragOver={dragOverFolderId === folder.folderId}
-                        onDragOver={() => setDragOverFolderId(folder.folderId)}
-                        onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
-                        isSelected={selectedFolders.includes(folder.folderId)}
-                        onSelect={handleFolderSelect}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+{/* Child Folders Grid */}
+{childFolders.length > 0 && (
+  <div
+    className="mb-4"
+    onDragLeave={(e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        setDragOverFolderId(null);
+      }
+    }}
+    onDragEnd={() => setDragOverFolderId(null)}
+  >
+    {/* Mobile: single-column list | sm+: multi-column grid */}
+    <div className="grid grid-cols-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1">
+      {childFolders.map((folder) => (
+        <FolderCard
+          key={folder.folderId}
+          folder={folder}
+          onOpen={() => navigateToFolder(folder.folderId)}
+          isDragOver={dragOverFolderId === folder.folderId}
+          onDragOver={() => setDragOverFolderId(folder.folderId)}
+          onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
+          isSelected={selectedFolders.includes(folder.folderId)}
+          onSelect={handleFolderSelect}
+          listMode={window.innerWidth < 640} // true on mobile (<sm breakpoint)
+        />
+      ))}
+    </div>
+  </div>
+)}
 
               {/* Files in current folder */}
               {folderFiles.length === 0 && childFolders.length === 0 && !loading ? (
