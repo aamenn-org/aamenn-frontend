@@ -312,12 +312,18 @@ const Dashboard = () => {
   // Simple upload hook - adds files to list immediately when uploaded
   const {
     stats: uploadStats,
+    uploads: uploadsMap,
     isUploading,
     uploadFiles: uploadFilesWithEncryption,
     cancelAll: cancelAllUploads,
     retryFailed: retryFailedUploads,
     clearCompleted: clearUploadHistory,
     clearAllUploads,
+    pauseUpload,
+    resumeUpload,
+    cancelUpload,
+    pauseAll,
+    resumeAll,
   } = useUpload({
     onFileUploaded: (uploadedFile) => {
       setFolderFiles((prev) => [uploadedFile, ...prev]);
@@ -1272,9 +1278,15 @@ const Dashboard = () => {
       {uploadStats.total > 0 && (
         <UploadProgressPanel
           stats={uploadStats}
+          uploads={uploadsMap}
           onCancelAll={cancelAllUploads}
           onRetryFailed={retryFailedUploads}
           onClear={clearAllUploads}
+          onPauseUpload={pauseUpload}
+          onResumeUpload={resumeUpload}
+          onCancelUpload={cancelUpload}
+          onPauseAll={pauseAll}
+          onResumeAll={resumeAll}
           isMinimized={isUploadPanelMinimized}
           onToggleMinimize={() =>
             setIsUploadPanelMinimized(!isUploadPanelMinimized)

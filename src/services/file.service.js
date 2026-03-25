@@ -273,6 +273,65 @@ export const fileService = {
     return response.arrayBuffer();
   },
 
+  // ==================== Chunked Upload API ====================
+
+  /**
+   * Start a chunked upload session on the backend.
+   * @param {object} metadata
+   * @returns {Promise<{uploadId: string, b2FileId: string, b2FilePath: string}>}
+   */
+  async startChunkedUpload(metadata) {
+    const response = await api.post('/uploads/start', metadata);
+    return response.data;
+  },
+
+  /**
+   * Get signed part upload URLs (batch).
+   * @param {string} uploadId — backend session ID
+   * @param {number} count — number of URLs to fetch (1-10)
+   * @returns {Promise<{urls: Array<{uploadUrl: string, authorizationToken: string}>}>}
+   */
+  async getPartUploadUrls(uploadId, count) {
+    const response = await api.post(`/uploads/${uploadId}/part-urls`, { count });
+    return response.data;
+  },
+
+  /**
+   * Complete a chunked upload.
+   * @param {string} uploadId
+   * @param {object} data — { partSha1Array, thumbSmall?, thumbMedium?, thumbLarge? }
+   */
+  async completeChunkedUpload(uploadId, data) {
+    const response = await api.post(`/uploads/${uploadId}/complete`, data);
+    return response.data;
+  },
+
+  /**
+   * Cancel an in-progress chunked upload.
+   * @param {string} uploadId
+   */
+  async cancelChunkedUpload(uploadId) {
+    const response = await api.post(`/uploads/${uploadId}/cancel`);
+    return response.data;
+  },
+
+  /**
+   * Get upload session status with B2-reconciled completed parts.
+   * @param {string} uploadId
+   */
+  async getUploadStatus(uploadId) {
+    const response = await api.get(`/uploads/${uploadId}/status`);
+    return response.data;
+  },
+
+  /**
+   * List all pending (active) upload sessions for the current user.
+   */
+  async listPendingUploads() {
+    const response = await api.get('/uploads/pending');
+    return response.data;
+  },
+
 };
 
 export default fileService;
