@@ -1,4 +1,11 @@
 import api from './api';
+import {
+  getAccessToken,
+  getRefreshToken,
+  storeTokens as tokenStoreTokens,
+  clearTokens,
+  isAuthenticated as tokenIsAuthenticated,
+} from './token-storage.js';
 
 export const authService = {
   /**
@@ -31,10 +38,7 @@ export const authService = {
    * Logout user (clear both local and session storage)
    */
   logout() {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('refreshToken');
+    clearTokens();
   },
 
   /**
@@ -42,7 +46,7 @@ export const authService = {
    * Checks both localStorage and sessionStorage
    */
   isAuthenticated() {
-    return !!(localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken'));
+    return tokenIsAuthenticated();
   },
 
   /**
@@ -50,7 +54,7 @@ export const authService = {
    * Checks both localStorage and sessionStorage
    */
   getAccessToken() {
-    return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    return getAccessToken();
   },
 
   /**
@@ -58,7 +62,7 @@ export const authService = {
    * Checks both localStorage and sessionStorage
    */
   getRefreshToken() {
-    return localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
+    return getRefreshToken();
   },
 
   /**
@@ -69,9 +73,7 @@ export const authService = {
    * @param {boolean} tokens.rememberMe - Whether to persist across browser sessions
    */
   storeTokens(tokens) {
-    const storage = tokens.rememberMe ? localStorage : sessionStorage;
-    storage.setItem('accessToken', tokens.accessToken);
-    storage.setItem('refreshToken', tokens.refreshToken);
+    tokenStoreTokens(tokens);
   },
 
   /**

@@ -5,6 +5,7 @@
 // Crypto utilities
 export * from './crypto';
 export { getDownloadLimiter } from './download-limiter';
+export { isSafari } from './browser.js';
 
 // Thumbnail/media utilities
 export {

@@ -23,6 +23,7 @@ import {
 } from '../utils/thumbnail';
 import { encryptFile, arrayBufferToBase64 } from '../utils/crypto';
 import cryptoService from '../services/crypto.service';
+import { isSafari } from '../utils/browser.js';
 
 // Detect available CPU cores and use them all for maximum performance
 // navigator.hardwareConcurrency returns the number of logical processors
@@ -34,9 +35,6 @@ const MAX_CONCURRENT_UPLOAD = Math.min(CPU_CORES, 6);
 // Progressive upload threshold - files larger than this skip thumbnail generation
 // to start upload immediately (thumbnails can be generated later)
 const PROGRESSIVE_UPLOAD_THRESHOLD = 50 * 1024 * 1024; // 50MB
-
-// Detect Safari for workarounds (Safari has issues with some worker operations)
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 // Retry configuration (inspired by ente.io)
 const RETRY_CONFIG = {

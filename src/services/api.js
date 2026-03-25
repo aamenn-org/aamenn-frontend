@@ -1,6 +1,12 @@
 import axios from 'axios';
 import config from '../config';
 import { handleSuccess, handleError } from './api-response-handler';
+import {
+  getAccessToken,
+  getRefreshToken,
+  refreshStoredTokens,
+  clearTokens,
+} from './token-storage.js';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -13,7 +19,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -46,8 +52,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
-        const useSessionStorage = !localStorage.getItem('refreshToken') && !!sessionStorage.getItem('refreshToken');
+        const refreshToken = getRefreshToken();
         if (refreshToken) {
           // Use raw axios for refresh to avoid interceptor loop
           const response = await axios.post(`${config.apiUrl}/auth/refresh`, {
@@ -73,20 +78,14 @@ api.interceptors.response.use(
           }
 
           if (accessToken && newRefreshToken) {
-            const storage = useSessionStorage ? sessionStorage : localStorage;
-            storage.setItem('accessToken', accessToken);
-            storage.setItem('refreshToken', newRefreshToken);
-
+            refreshStoredTokens({ accessToken, refreshToken: newRefreshToken });
             originalRequest.headers.Authorization = `Bearer ${accessToken}`;
             return api(originalRequest);
           }
         }
       } catch (refreshError) {
         // Clear tokens and redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        sessionStorage.removeItem('accessToken');
-        sessionStorage.removeItem('refreshToken');
+        clearTokens();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

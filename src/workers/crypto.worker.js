@@ -15,166 +15,32 @@
  * - Chrome 37+, Firefox 48+, Edge 79+
  */
 
-// ==================== CRYPTO UTILITIES ====================
+import {
+  arrayBufferToBase64,
+  generateRandomBytes,
+  computeSHA1,
+  computeSHA256,
+  generateAesKey,
+  encryptFile,
+  encryptFileKey,
+  encryptFilename,
+} from './crypto-primitives.js';
+
+// ==================== WORKER-SPECIFIC UTILITIES ====================
 
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for streaming encryption
 
 /**
- * Convert ArrayBuffer to Base64 string
- * Safari-compatible implementation using chunked processing
- */
-function arrayBufferToBase64(buffer) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-
-  // Process in chunks to avoid "Maximum call stack size exceeded" in Safari
-  const CHUNK_SIZE = 8192;
-  let binary = '';
-
-  for (let i = 0; i < bytes.byteLength; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.byteLength));
-    binary += String.fromCharCode.apply(null, chunk);
-  }
-
-  return btoa(binary);
-}
-
-/**
- * Generate random bytes
- */
-function generateRandomBytes(length) {
-  return crypto.getRandomValues(new Uint8Array(length));
-}
-
-/**
- * Compute SHA-1 hash of data
- * Includes Safari-compatible buffer handling
- */
-async function computeSHA1(data) {
-  // Ensure we have an ArrayBuffer (Safari may need explicit conversion)
-  let buffer;
-  if (data instanceof ArrayBuffer) {
-    buffer = data;
-  } else if (data instanceof Uint8Array) {
-    buffer = data.buffer.slice(
-      data.byteOffset,
-      data.byteOffset + data.byteLength
-    );
-  } else if (data.buffer) {
-    buffer = data.buffer;
-  } else {
-    throw new Error('Unsupported data type for SHA-1');
-  }
-
-  const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
-  const hashArray = new Uint8Array(hashBuffer);
-  return Array.from(hashArray)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Compute SHA-256 hash of data (for duplicate detection)
- * Includes Safari-compatible buffer handling
- */
-async function computeSHA256(data) {
-  // Ensure we have an ArrayBuffer (Safari may need explicit conversion)
-  let buffer;
-  if (data instanceof ArrayBuffer) {
-    buffer = data;
-  } else if (data instanceof Uint8Array) {
-    buffer = data.buffer.slice(
-      data.byteOffset,
-      data.byteOffset + data.byteLength
-    );
-  } else if (data.buffer) {
-    buffer = data.buffer;
-  } else {
-    throw new Error('Unsupported data type for SHA-256');
-  }
-
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = new Uint8Array(hashBuffer);
-  return Array.from(hashArray)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Generate a random AES-256-GCM key
- */
-async function generateFileKey() {
-  return await crypto.subtle.generateKey(
-    { name: 'AES-GCM', length: 256 },
-    true,
-    ['encrypt', 'decrypt']
-  );
-}
-
-/**
- * Encrypt data with AES-256-GCM
- */
-async function encryptData(data, key) {
-  const iv = generateRandomBytes(12);
-  const encryptedData = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    data
-  );
-  return { encryptedData, iv };
-}
-
-/**
- * Encrypt file key with master key
- */
-async function encryptFileKey(fileKey, masterKey) {
-  const fileKeyBytes = await crypto.subtle.exportKey('raw', fileKey);
-  const iv = generateRandomBytes(12);
-
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    masterKey,
-    fileKeyBytes
-  );
-
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-
-  return arrayBufferToBase64(combined);
-}
-
-/**
- * Import master key from raw bytes
+ * Import master key from raw bytes (worker-specific: receives bytes over postMessage)
  */
 async function importMasterKey(keyBytes) {
-  return await crypto.subtle.importKey(
+  return crypto.subtle.importKey(
     'raw',
     keyBytes,
     { name: 'AES-GCM', length: 256 },
     true,
     ['encrypt', 'decrypt']
   );
-}
-
-/**
- * Encrypt filename with master key
- */
-async function encryptFilename(filename, masterKey) {
-  const encoder = new TextEncoder();
-  const filenameBytes = encoder.encode(filename);
-  const iv = generateRandomBytes(12);
-
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    masterKey,
-    filenameBytes
-  );
-
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-
-  return arrayBufferToBase64(combined);
 }
 
 // ==================== CHUNKED ENCRYPTION ====================
@@ -244,7 +110,7 @@ self.onmessage = async function (e) {
         const masterKey = await importMasterKey(masterKeyBytes);
 
         // Generate file key
-        const fileKey = await generateFileKey();
+        const fileKey = await generateAesKey();
 
         // Report encryption start
         self.postMessage({
@@ -326,10 +192,10 @@ self.onmessage = async function (e) {
         const { thumbnailData, masterKeyBytes, type: thumbType } = payload;
 
         const masterKey = await importMasterKey(masterKeyBytes);
-        const thumbKey = await generateFileKey();
+        const thumbKey = await generateAesKey();
 
         // Encrypt thumbnail
-        const { encryptedData, iv } = await encryptData(
+        const { encryptedData, iv } = await encryptFile(
           thumbnailData,
           thumbKey
         );
@@ -355,7 +221,7 @@ self.onmessage = async function (e) {
       }
 
       case 'GENERATE_FILE_KEY': {
-        const fileKey = await generateFileKey();
+        const fileKey = await generateAesKey();
         const keyBytes = await crypto.subtle.exportKey('raw', fileKey);
 
         self.postMessage(

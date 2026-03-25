@@ -217,7 +217,7 @@ class ThumbnailCacheService {
   ): Promise<string> {
     await this.init();
 
-    const { priority = 'normal', signal } = options;
+    const { signal } = options;
 
     // Check if already aborted
     if (signal?.aborted) {
@@ -264,7 +264,7 @@ class ThumbnailCacheService {
     }
 
     // L3: Download, decrypt, and cache
-    const fetchPromise = this.fetchAndCacheWithPriority(
+    const fetchPromise = this.fetchAndCache(
       fileId,
       thumbnailUrl,
       masterKey,
@@ -324,48 +324,62 @@ class ThumbnailCacheService {
     thumbnailUrl: string,
     masterKey: CryptoKey,
     cipherFileKey: string,
+    options: {
+      priority?: 'high' | 'normal' | 'low';
+      signal?: AbortSignal;
+      masterKeyBytes?: ArrayBuffer;
+    } = {}
   ): Promise<string> {
-    try {
-      log(`L3 FETCH: ${fileId}`);
+    const { priority = 'normal', signal } = options;
 
-      // Download encrypted thumbnail with concurrency limiting
+    const workerPriorityMap = {
+      high: cryptoService.PRIORITY.HIGH,
+      normal: cryptoService.PRIORITY.NORMAL,
+      low: cryptoService.PRIORITY.LOW,
+    };
+
+    const downloadPriorityMap: Record<'high' | 'normal' | 'low', number> = {
+      high: 2,
+      normal: 1,
+      low: 0,
+    };
+
+    try {
+      log(`L3 FETCH (${priority}): ${fileId}`);
+
+      if (signal?.aborted) {
+        throw new DOMException('Thumbnail load cancelled', 'AbortError');
+      }
+
       const downloadLimiter = getDownloadLimiter();
       const encryptedData = (await downloadLimiter.add(
         () => fileService.downloadFileContent(thumbnailUrl),
-        { priority: 1 }
+        { priority: downloadPriorityMap[priority] }
       ))!;
-      log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
 
-      // Decrypt in Web Worker via unified CryptoService
+      if (signal?.aborted) {
+        throw new DOMException('Thumbnail load cancelled', 'AbortError');
+      }
+
       const decryptedData = await cryptoService.decryptFile(
         encryptedData,
         cipherFileKey,
-        masterKey
+        masterKey,
+        {
+          priority: workerPriorityMap[priority],
+          signal,
+        }
       );
 
       const decryptedArray = new Uint8Array(decryptedData);
-      if (DEBUG) {
-        const header = Array.from(decryptedArray.slice(0, 10))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join(' ');
-        log(`Decrypted ${decryptedData.byteLength} bytes, header: ${header}`);
-      }
-
-      // Verify JPEG signature
       if (decryptedArray[0] !== 0xff || decryptedArray[1] !== 0xd8) {
         console.warn('[ThumbnailCache] Decrypted data may not be JPEG format');
       }
 
-      // Create blob
       const blob = new Blob([decryptedData], { type: 'image/jpeg' });
       const url = URL.createObjectURL(blob);
 
-      log(`Created blob URL, size: ${blob.size}`);
-
-      // Store in L1 (memory)
       this.memoryCache.set(fileId, url);
-
-      // Store in L2 (IndexedDB) - fire and forget
       this.db.thumbnails
         .put({
           fileId,
@@ -378,96 +392,6 @@ class ThumbnailCacheService {
 
       return url;
     } catch (error) {
-      console.error(`[ThumbnailCache] Failed to fetch ${fileId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Fetch and cache thumbnail with priority and cancellation support.
-   */
-  private async fetchAndCacheWithPriority(
-    fileId: string,
-    thumbnailUrl: string,
-    masterKey: CryptoKey,
-    cipherFileKey: string,
-    options: {
-      priority?: 'high' | 'normal' | 'low';
-      signal?: AbortSignal;
-      masterKeyBytes?: ArrayBuffer; // Pre-exported to avoid repeated exportKey calls
-    } = {}
-  ): Promise<string> {
-    const { priority = 'normal', signal } = options;
-
-    // Map string priority to worker pool priority and download priority
-    const workerPriorityMap = {
-      high: cryptoService.PRIORITY.HIGH,
-      normal: cryptoService.PRIORITY.NORMAL,
-      low: cryptoService.PRIORITY.LOW,
-    };
-    
-    const downloadPriorityMap = {
-      high: 2,
-      normal: 1,
-      low: 0,
-    };
-
-    try {
-      log(`L3 FETCH (${priority}): ${fileId}`);
-
-      // Check abort before download
-      if (signal?.aborted) {
-        throw new DOMException('Thumbnail load cancelled', 'AbortError');
-      }
-
-      // Download encrypted thumbnail with concurrency limiting and priority
-      const downloadLimiter = getDownloadLimiter();
-      const encryptedData = (await downloadLimiter.add(
-        () => fileService.downloadFileContent(thumbnailUrl),
-        { priority: downloadPriorityMap[priority] }
-      ))!;
-
-      // Check abort after download
-      if (signal?.aborted) {
-        throw new DOMException('Thumbnail load cancelled', 'AbortError');
-      }
-
-      log(`Downloaded encrypted data: ${encryptedData.byteLength} bytes`);
-
-      // Decrypt in Web Worker with priority and abort signal via unified CryptoService
-      const decryptedData = await cryptoService.decryptFile(
-        encryptedData,
-        cipherFileKey,
-        masterKey,
-        {
-          priority: workerPriorityMap[priority],
-          signal,
-        }
-      );
-
-      // Create blob
-      const blob = new Blob([decryptedData], { type: 'image/jpeg' });
-      const url = URL.createObjectURL(blob);
-
-      log(`Created blob URL, size: ${blob.size}`);
-
-      // Store in L1 (memory)
-      this.memoryCache.set(fileId, url);
-
-      // Store in L2 (IndexedDB) - fire and forget
-      this.db.thumbnails
-        .put({
-          fileId,
-          blob,
-          timestamp: Date.now(),
-        })
-        .catch(() => {
-          // Silent fail for persistence
-        });
-
-      return url;
-    } catch (error) {
-      // Don't log abort errors as they're expected
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw error;
       }
@@ -638,10 +562,68 @@ class ThumbnailCacheService {
   // Full Image Caching (for offline viewer access)
   // ==========================================================================
 
+  private async getCachedImage(
+    fileId: string,
+    url: string,
+    masterKey: CryptoKey,
+    cipherFileKey: string,
+    options: { prefix: string; mimeType?: string }
+  ): Promise<string> {
+    await this.init();
+    const { prefix, mimeType = 'image/jpeg' } = options;
+    const cacheKey = `${prefix}_${fileId}`;
+
+    // L1: Check memory cache (instant)
+    const memCached = this.imageMemoryCache.get(cacheKey);
+    if (memCached) {
+      log(`${prefix} L1 HIT: ${fileId}`);
+      return memCached;
+    }
+
+    // Check if already fetching
+    const pending = this.pendingRequests.get(cacheKey);
+    if (pending) return pending;
+
+    // L2: Check IndexedDB
+    const dbCached = await this.db.images.get(cacheKey);
+    if (dbCached) {
+      const blobUrl = URL.createObjectURL(dbCached.blob);
+      this.imageMemoryCache.set(cacheKey, blobUrl);
+      log(`${prefix} L2 HIT: ${fileId}`);
+      return blobUrl;
+    }
+
+    // L3: Download, decrypt, cache
+    const fetchPromise = (async () => {
+      log(`${prefix} L3 FETCH: ${fileId}`);
+      const encryptedData = await fileService.downloadFileContent(url);
+      const decryptedData = await cryptoService.decryptFile(
+        encryptedData,
+        cipherFileKey,
+        masterKey
+      );
+      const blob = new Blob([decryptedData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      this.imageMemoryCache.set(cacheKey, blobUrl);
+      this.db.images
+        .put({ fileId: cacheKey, blob, timestamp: Date.now() })
+        .catch((err) =>
+          console.error(`[ThumbnailCache] Failed to cache ${prefix}:`, err)
+        );
+      return blobUrl;
+    })();
+
+    this.pendingRequests.set(cacheKey, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.pendingRequests.delete(cacheKey);
+    }
+  }
+
   /**
    * Get full image, using cache if available.
    * Returns a blob URL for the decrypted full-size image.
-   * Uses L1 memory cache for instant access.
    */
   async getFullImage(
     fileId: string,
@@ -650,77 +632,11 @@ class ThumbnailCacheService {
     cipherFileKey: string,
     mimeType: string = 'image/jpeg'
   ): Promise<string> {
-    await this.init();
-
-    const cacheKey = `full_${fileId}`;
-
-    // L1: Check memory cache FIRST (instant)
-    const memCached = this.imageMemoryCache.get(cacheKey);
-    if (memCached) {
-      log(`Full image L1 HIT: ${fileId}`);
-      return memCached;
-    }
-
-    // Check if already fetching (prevent duplicate requests)
-    const pending = this.pendingRequests.get(cacheKey);
-    if (pending) {
-      return pending;
-    }
-
-    // L2: Check IndexedDB for cached full image
-    const dbCachedFull = await this.db.images.get(cacheKey);
-    if (dbCachedFull) {
-      const url = URL.createObjectURL(dbCachedFull.blob);
-      this.imageMemoryCache.set(cacheKey, url); // Promote to L1
-      log(`Full image L2 HIT: ${fileId}`);
-      return url;
-    }
-
-    // L3: Download, decrypt, and cache
-    const fetchPromise = (async () => {
-      log(`Full image L3 FETCH: ${fileId}`);
-
-      const encryptedData = await fileService.downloadFileContent(downloadUrl);
-
-      // Decrypt in Web Worker via unified CryptoService
-      const decryptedData = await cryptoService.decryptFile(
-        encryptedData,
-        cipherFileKey,
-        masterKey
-      );
-
-      const blob = new Blob([decryptedData], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-
-      // Store in L1 memory
-      this.imageMemoryCache.set(cacheKey, url);
-
-      // Store in L2 IndexedDB (fire and forget)
-      this.db.images
-        .put({
-          fileId: cacheKey,
-          blob,
-          timestamp: Date.now(),
-        })
-        .catch((err) =>
-          console.error('[ThumbnailCache] Failed to cache full image:', err)
-        );
-
-      return url;
-    })();
-
-    this.pendingRequests.set(cacheKey, fetchPromise);
-
-    try {
-      return await fetchPromise;
-    } finally {
-      this.pendingRequests.delete(cacheKey);
-    }
+    return this.getCachedImage(fileId, downloadUrl, masterKey, cipherFileKey, { prefix: 'full', mimeType });
   }
 
   /**
    * Get medium thumbnail for viewer, using cache if available.
-   * Uses L1 memory cache for instant access.
    */
   async getMediumThumbnail(
     fileId: string,
@@ -728,79 +644,11 @@ class ThumbnailCacheService {
     masterKey: CryptoKey,
     cipherFileKey: string
   ): Promise<string> {
-    await this.init();
-
-    const cacheKey = `medium_${fileId}`;
-
-    // L1: Check memory cache FIRST (instant)
-    const memCached = this.imageMemoryCache.get(cacheKey);
-    if (memCached) {
-      log(`Medium thumb L1 HIT: ${fileId}`);
-      return memCached;
-    }
-
-    // Check if already fetching
-    const pending = this.pendingRequests.get(cacheKey);
-    if (pending) {
-      return pending;
-    }
-
-    // L2: Check IndexedDB
-    const dbCachedMedium = await this.db.images.get(cacheKey);
-    if (dbCachedMedium) {
-      const url = URL.createObjectURL(dbCachedMedium.blob);
-      this.imageMemoryCache.set(cacheKey, url); // Promote to L1
-      log(`Medium thumb L2 HIT: ${fileId}`);
-      return url;
-    }
-
-    // L3: Download, decrypt, cache
-    const fetchPromise = (async () => {
-      log(`Medium thumb L3 FETCH: ${fileId}`);
-
-      const encryptedData = await fileService.downloadFileContent(
-        thumbMediumUrl
-      );
-
-      // Decrypt in Web Worker via unified CryptoService
-      const decryptedData = await cryptoService.decryptFile(
-        encryptedData,
-        cipherFileKey,
-        masterKey
-      );
-
-      const blob = new Blob([decryptedData], { type: 'image/jpeg' });
-      const url = URL.createObjectURL(blob);
-
-      // Store in L1
-      this.imageMemoryCache.set(cacheKey, url);
-
-      // Store in L2 (fire and forget)
-      this.db.images
-        .put({
-          fileId: cacheKey,
-          blob,
-          timestamp: Date.now(),
-        })
-        .catch((err) =>
-          console.error('[ThumbnailCache] Failed to cache medium thumb:', err)
-        );
-
-      return url;
-    })();
-
-    this.pendingRequests.set(cacheKey, fetchPromise);
-
-    try {
-      return await fetchPromise;
-    } finally {
-      this.pendingRequests.delete(cacheKey);
-    }
+    return this.getCachedImage(fileId, thumbMediumUrl, masterKey, cipherFileKey, { prefix: 'medium' });
   }
 
   /**
    * Get large thumbnail for viewer, using cache if available.
-   * Uses L1 memory cache for instant access.
    */
   async getLargeThumbnail(
     fileId: string,
@@ -808,74 +656,7 @@ class ThumbnailCacheService {
     masterKey: CryptoKey,
     cipherFileKey: string
   ): Promise<string> {
-    await this.init();
-
-    const cacheKey = `large_${fileId}`;
-
-    // L1: Check memory cache FIRST (instant)
-    const memCached = this.imageMemoryCache.get(cacheKey);
-    if (memCached) {
-      log(`Large thumb L1 HIT: ${fileId}`);
-      return memCached;
-    }
-
-    // Check if already fetching
-    const pending = this.pendingRequests.get(cacheKey);
-    if (pending) {
-      return pending;
-    }
-
-    // L2: Check IndexedDB
-    const dbCachedLarge = await this.db.images.get(cacheKey);
-    if (dbCachedLarge) {
-      const url = URL.createObjectURL(dbCachedLarge.blob);
-      this.imageMemoryCache.set(cacheKey, url); // Promote to L1
-      log(`Large thumb L2 HIT: ${fileId}`);
-      return url;
-    }
-
-    // L3: Download, decrypt, cache
-    const fetchPromise = (async () => {
-      log(`Large thumb L3 FETCH: ${fileId}`);
-
-      const encryptedData = await fileService.downloadFileContent(
-        thumbLargeUrl
-      );
-
-      // Decrypt in Web Worker via unified CryptoService
-      const decryptedData = await cryptoService.decryptFile(
-        encryptedData,
-        cipherFileKey,
-        masterKey
-      );
-
-      const blob = new Blob([decryptedData], { type: 'image/jpeg' });
-      const url = URL.createObjectURL(blob);
-
-      // Store in L1
-      this.imageMemoryCache.set(cacheKey, url);
-
-      // Store in L2 (fire and forget)
-      this.db.images
-        .put({
-          fileId: cacheKey,
-          blob,
-          timestamp: Date.now(),
-        })
-        .catch((err) =>
-          console.error('[ThumbnailCache] Failed to cache large thumb:', err)
-        );
-
-      return url;
-    })();
-
-    this.pendingRequests.set(cacheKey, fetchPromise);
-
-    try {
-      return await fetchPromise;
-    } finally {
-      this.pendingRequests.delete(cacheKey);
-    }
+    return this.getCachedImage(fileId, thumbLargeUrl, masterKey, cipherFileKey, { prefix: 'large' });
   }
 
   /**

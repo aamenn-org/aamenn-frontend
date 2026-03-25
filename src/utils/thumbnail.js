@@ -1,4 +1,6 @@
 import { encode } from 'blurhash';
+import { isSafari } from './browser.js';
+import { THUMBNAIL_SIZES, THUMBNAIL_QUALITY } from '../constants/thumbnails.js';
 
 /**
  * File type constants for clean classification
@@ -76,29 +78,7 @@ function getDocumentIconColor(mimeType) {
   return 'text-gray-400';
 }
 
-/**
- * Thumbnail sizes configuration
- * Medium and Large share same dimensions but differ in JPEG quality
- */
-export const THUMBNAIL_SIZES = {
-  small: { width: 150, height: 150 },
-  medium: { width: 1600, height: 1600 }, // Same as large, lower quality
-  large: { width: 1600, height: 1600 },  // Same as medium, higher quality
-};
-
-/**
- * JPEG quality settings for thumbnails
- */
-export const THUMBNAIL_QUALITY = {
-  small: 0.30,  // Grid thumbnails - good quality
-  medium: 0.60, // Preview initial - lower quality, faster load
-  large: 0.90,  // Preview final - high quality
-};
-
-/**
- * Detect Safari browser (has quirks with OffscreenCanvas and createImageBitmap)
- */
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+export { THUMBNAIL_SIZES, THUMBNAIL_QUALITY };
 
 /**
  * Check if OffscreenCanvas is supported (for worker-based generation)
