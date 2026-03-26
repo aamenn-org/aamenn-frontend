@@ -83,7 +83,7 @@ const StorageBar = ({ refreshTrigger, inline = false }) => {
   if (inline) {
     return (
       <div className="flex items-center gap-3">
-        <div className="w-32 bg-gray-200 dark:bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+        <div className="w-16 bg-gray-200 dark:bg-zinc-700 rounded-full h-1.5 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-300 ${getBarColor()}`}
             style={{ width: `${Math.min(percentUsed, 100)}%` }}
