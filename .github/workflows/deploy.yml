@@ -1,4 +1,4 @@
-name: Deploy Frontend to EC2 (Development)
+name: Deploy Frontend to Production
 
 on:
   push:
@@ -21,8 +21,25 @@ jobs:
             cd /var/www/aamenn-frontend
             git fetch origin main
             git reset --hard origin/main
-            docker compose down
-            docker compose build --no-cache
-            docker compose up -d
-            docker compose logs --tail=50
-            echo "Deployed commit: $(git rev-parse --short HEAD)"
+            
+            # Stop existing frontend container
+            docker stop aamenn-frontend 2>/dev/null || true
+            docker rm aamenn-frontend 2>/dev/null || true
+            
+            # Build new image
+            docker build -t aamenn-frontend:latest .
+            
+            # Start new container on port 8081 (internal port)
+            docker run -d \
+              --name aamenn-frontend \
+              --network aamenn-backend_default \
+              -p 8081:8081 \
+              --restart unless-stopped \
+              aamenn-frontend:latest
+            
+            # Wait for frontend to be ready
+            sleep 5
+            
+            # Show logs
+            docker logs --tail=50 aamenn-frontend
+            echo "Frontend deployed successfully: $(git rev-parse --short HEAD)"
