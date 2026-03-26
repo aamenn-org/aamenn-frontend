@@ -168,7 +168,7 @@ const FolderCard = ({
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 30,
+            fontSize: 20,
             fontWeight: 500,
             color: isDragOver ? '#378ADD' : 'var(--color-text-primary)',
             overflow: 'hidden',
