@@ -57,6 +57,48 @@ export const userService = {
     const response = await api.post('/users/me/security', data);
     return response.data;
   },
+
+  /**
+   * Change vault password (re-encrypts master key with new password)
+   * @param {Object} data
+   * @param {string} data.currentPassword
+   * @param {string} data.newPassword
+   * @param {string} data.newEncryptedMasterKey
+   * @param {string} data.newKekSalt
+   */
+  async changeVaultPassword(data) {
+    const response = await api.patch('/users/me/vault-password', data);
+    return response.data;
+  },
+
+  /**
+   * Upload an encrypted avatar image via the dedicated avatar endpoint.
+   * The file is stored with isAvatar=true and excluded from gallery/folder listings.
+   * Also atomically updates the user's avatarFileId.
+   *
+   * @param {Blob} encryptedBlob - Encrypted file blob
+   * @param {Object} metadata
+   * @param {string} metadata.fileNameEncrypted - Encrypted filename
+   * @param {string} metadata.cipherFileKey - Encrypted file key
+   * @param {string} metadata.mimeType - File MIME type
+   * @param {string} metadata.sha1Hash - SHA1 hash of encrypted content
+   * @returns {Promise<{fileId: string, downloadUrl: string, avatarFileId: string}>}
+   */
+  async uploadAvatar(encryptedBlob, metadata) {
+    const formData = new FormData();
+    formData.append('file', encryptedBlob);
+    formData.append('fileNameEncrypted', metadata.fileNameEncrypted);
+    formData.append('cipherFileKey', metadata.cipherFileKey);
+    formData.append('mimeType', metadata.mimeType);
+    formData.append('sha1Hash', metadata.sha1Hash);
+
+    const response = await api.post('/users/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };
 
 export default userService;

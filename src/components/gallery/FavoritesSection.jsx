@@ -83,6 +83,7 @@ const FavoritesSection = ({ onViewFile, onFavoriteToggle }) => {
       onSelectFile={handleSelectFile}
       onViewFile={onViewFile}
       onFavoriteToggle={handleFavoriteToggle}
+      gridSize="small"
     />
   );
 };

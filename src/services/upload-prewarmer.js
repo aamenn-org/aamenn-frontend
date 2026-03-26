@@ -72,14 +72,6 @@ class UploadPrewarmer {
   }
 
   /**
-   * Check if the system is warmed up and ready for fast uploads
-   * @returns {boolean}
-   */
-  isReady() {
-    return this.isWarmedUp;
-  }
-
-  /**
    * Reset warmup state (useful for testing or after logout)
    */
   reset() {
@@ -89,17 +81,6 @@ class UploadPrewarmer {
     log('Warmup state reset');
   }
 
-  /**
-   * Get warmup statistics
-   * @returns {Object}
-   */
-  getStats() {
-    const workerPool = getCryptoWorkerPool();
-    return {
-      isWarmedUp: this.isWarmedUp,
-      workerStats: workerPool.getStats(),
-    };
-  }
 }
 
 // Singleton instance

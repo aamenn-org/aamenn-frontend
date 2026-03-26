@@ -133,6 +133,24 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   direction: ltr;
 }
 
+/* Viselect wrapper — establishes stacking context so the lasso rect floats above cards */
+.viselect-container {
+  position: relative;
+  z-index: 0;
+}
+
+/* Viselect clipping element (direct child div injected by the library) */
+.viselect-container > div {
+  z-index: 99999 !important;
+}
+
+/* Viselect inner visible rectangle */
+.selection-area {
+  background: rgba(55, 138, 221, 0.15);
+  border: 1px solid rgba(55, 138, 221, 0.8);
+  border-radius: 4px;
+}
+
 /* Hide scrollbar utility */
 .scrollbar-hide {
   -ms-overflow-style: none;

@@ -403,7 +403,7 @@ class CryptoWorkerPool {
     const result = await this.submitTask(
       'DECRYPT_FILE',
       { encryptedData, cipherFileKeyBase64, masterKeyBytes },
-      [encryptedData, masterKeyBytes],
+      [encryptedData],
       null, // onProgress
       options
     );

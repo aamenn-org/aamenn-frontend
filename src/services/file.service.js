@@ -127,15 +127,10 @@ export const fileService = {
    * Used for duplicate detection before uploading.
    *
    * @param {string} hash - SHA-256 hash of the original file content
-   * @param {string} [albumId] - Optional album ID to check if duplicate exists in same album
-   * @returns {Promise<{isDuplicate: boolean, existingFile: object|null, inSameAlbum: boolean}>}
+   * @returns {Promise<{isDuplicate: boolean, existingFile: object|null}>}
    */
-  async checkDuplicate(hash, albumId = null) {
-    const params = { hash };
-    if (albumId) {
-      params.albumId = albumId;
-    }
-    const response = await api.get('/files/check-duplicate', { params });
+  async checkDuplicate(hash) {
+    const response = await api.get('/files/check-duplicate', { params: { hash } });
     return response.data;
   },
 
@@ -157,64 +152,6 @@ export const fileService = {
     formData.append('mimeType', metadata.mimeType);
     formData.append('sha1Hash', metadata.sha1Hash);
 
-    const response = await api.post('/files/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          onProgress(percentCompleted);
-        }
-      },
-    });
-    return response.data;
-  },
-
-  /**
-   * Upload file with thumbnails through backend proxy
-   * @param {File} file - The encrypted file to upload
-   * @param {Object} metadata - File metadata including thumbnails
-   * @param {string} metadata.fileNameEncrypted - Encrypted filename
-   * @param {string} metadata.cipherFileKey - Encrypted file key
-   * @param {string} metadata.mimeType - File MIME type
-   * @param {string} metadata.sha1Hash - SHA1 hash of encrypted content
-   * @param {string} metadata.thumbSmall - Base64 encoded encrypted small thumbnail
-   * @param {string} metadata.thumbMedium - Base64 encoded encrypted medium thumbnail
-   * @param {string} metadata.thumbLarge - Base64 encoded encrypted large thumbnail
-   * @param {number} metadata.width - Original image/video width
-   * @param {number} metadata.height - Original image/video height
-   * @param {number} metadata.duration - Video duration in seconds (optional)
-   * @param {Function} onProgress - Progress callback
-   */
-  async uploadFileWithThumbnails(file, metadata, onProgress) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('fileNameEncrypted', metadata.fileNameEncrypted);
-    formData.append('cipherFileKey', metadata.cipherFileKey);
-    formData.append('mimeType', metadata.mimeType);
-    formData.append('sha1Hash', metadata.sha1Hash);
-    
-    // Add thumbnails only if they exist (media files)
-    if (metadata.thumbSmall) {
-      formData.append('thumbSmall', metadata.thumbSmall);
-    }
-    if (metadata.thumbMedium) {
-      formData.append('thumbMedium', metadata.thumbMedium);
-    }
-    if (metadata.thumbLarge) {
-      formData.append('thumbLarge', metadata.thumbLarge);
-    }
-    
-    formData.append('width', String(metadata.width || 0));
-    formData.append('height', String(metadata.height || 0));
-    if (metadata.duration !== undefined && metadata.duration !== null) {
-      formData.append('duration', String(metadata.duration));
-    }
-
-    // Use unified upload endpoint (handles both with/without thumbnails)
     const response = await api.post('/files/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -334,6 +271,65 @@ export const fileService = {
   async downloadFileContent(downloadUrl) {
     const response = await fetch(downloadUrl);
     return response.arrayBuffer();
+  },
+
+  // ==================== Chunked Upload API ====================
+
+  /**
+   * Start a chunked upload session on the backend.
+   * @param {object} metadata
+   * @returns {Promise<{uploadId: string, b2FileId: string, b2FilePath: string}>}
+   */
+  async startChunkedUpload(metadata) {
+    const response = await api.post('/uploads/start', metadata);
+    return response.data;
+  },
+
+  /**
+   * Get signed part upload URLs (batch).
+   * @param {string} uploadId — backend session ID
+   * @param {number} count — number of URLs to fetch (1-10)
+   * @returns {Promise<{urls: Array<{uploadUrl: string, authorizationToken: string}>}>}
+   */
+  async getPartUploadUrls(uploadId, count) {
+    const response = await api.post(`/uploads/${uploadId}/part-urls`, { count });
+    return response.data;
+  },
+
+  /**
+   * Complete a chunked upload.
+   * @param {string} uploadId
+   * @param {object} data — { partSha1Array, thumbSmall?, thumbMedium?, thumbLarge? }
+   */
+  async completeChunkedUpload(uploadId, data) {
+    const response = await api.post(`/uploads/${uploadId}/complete`, data);
+    return response.data;
+  },
+
+  /**
+   * Cancel an in-progress chunked upload.
+   * @param {string} uploadId
+   */
+  async cancelChunkedUpload(uploadId) {
+    const response = await api.post(`/uploads/${uploadId}/cancel`);
+    return response.data;
+  },
+
+  /**
+   * Get upload session status with B2-reconciled completed parts.
+   * @param {string} uploadId
+   */
+  async getUploadStatus(uploadId) {
+    const response = await api.get(`/uploads/${uploadId}/status`);
+    return response.data;
+  },
+
+  /**
+   * List all pending (active) upload sessions for the current user.
+   */
+  async listPendingUploads() {
+    const response = await api.get('/uploads/pending');
+    return response.data;
   },
 
 };

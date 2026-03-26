@@ -9,7 +9,7 @@
  * - authService: Authentication (login, register, tokens)
  * - userService: User profile and security
  * - fileService: File CRUD, favorites, batch operations
- * - albumService: Album management
+ * - folderService: Folder management (hierarchical library)
  * - cache: Multi-layer caching (memory + IndexedDB)
  * - uploadPrewarmer: Worker pre-warming for fast uploads
  */
@@ -18,22 +18,19 @@
 export { default as api } from './api';
 
 // API response handler utilities (for custom error handling)
-export { 
-  ApiError, 
-  ErrorType, 
-  isApiError,
-  wrapApiCall 
-} from './api-response-handler';
+export { ApiError, ErrorType } from './api-response-handler';
 
 // Domain services
 export { default as authService } from './auth.service';
 export { default as userService } from './user.service';
 export { default as fileService } from './file.service';
-export { default as albumService } from './album.service';
 export { default as folderService } from './folder.service';
 export { default as adminService } from './admin.service';
 export { default as shareService } from './share.service';
 export { default as contactsService } from './contacts.service';
+
+// Unified crypto facade
+export { default as cryptoService } from './crypto.service';
 
 // Cache system (L1: memory, L2: IndexedDB)
 export { thumbnailCache } from './cache';

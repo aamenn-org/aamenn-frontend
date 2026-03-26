@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context';
-import { useVaultState } from '../../hooks/useVaultState';
+import { useVaultState, useSelection } from '../../hooks';
 import { fileService, folderService } from '../../services';
 import { getDragState, clearDragState } from '../../utils/dragState';
 import { useUpload } from '../../hooks/useUpload';
@@ -19,7 +19,6 @@ import {
   faFile,
   faFolderPlus,
   faFolderOpen,
-  faArrowRight,
   faTrash,
   faPen,
   faShare,
@@ -45,6 +44,7 @@ import {
   Breadcrumbs,
   FolderPickerModal,
   RenameModal,
+  SelectionArea,
 } from '../../components/gallery';
 
 const Dashboard = () => {
@@ -82,7 +82,6 @@ const Dashboard = () => {
     page: 1, limit: 100, total: 0, totalPages: 0, hasMore: true,
   });
 
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -99,7 +98,6 @@ const Dashboard = () => {
   const [dragOverFolderId, setDragOverFolderId] = useState(null);
 
   // Folder selection + actions
-  const [selectedFolders, setSelectedFolders] = useState([]);
   const [renamingFolder, setRenamingFolder] = useState(null); // folder object being renamed
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
 
@@ -201,8 +199,8 @@ const Dashboard = () => {
 
         const response = await fileService.listFiles({ page, limit: 100 });
         const filesData = response?.files || [];
-        const total = response?.total || 0;
-        const totalPages = response?.totalPages || 1;
+        const total = response?.pagination?.total || 0;
+        const totalPages = response?.pagination?.totalPages || 1;
 
         if (!append) {
           setAllFiles(filesData);
@@ -242,16 +240,6 @@ const Dashboard = () => {
     }
   }, [allFilesPagination.page, allFilesPagination.hasMore, fetchAllFiles]);
 
-  // Navigate into a folder — updates URL which triggers useEffect to fetch
-  const navigateToFolder = useCallback((folderId) => {
-    setSelectedFiles([]);
-    if (folderId) {
-      navigate(`/folders/${folderId}`);
-    } else {
-      navigate('/folders');
-    }
-  }, [navigate]);
-
   // Create folder
   const handleCreateFolder = async () => {
     if (!newFolderName.trim() || !hasMasterKey()) return;
@@ -289,7 +277,7 @@ const Dashboard = () => {
         const fileIds = data.fileIds.length > 0 ? data.fileIds : selectedFiles;
         if (fileIds.length === 0) return;
         await folderService.moveFilesToFolder(fileIds, targetFolder.folderId);
-        setSelectedFiles([]);
+        selection.clearSelection();
       }
       await fetchLibrary(currentFolderId, 1, false);
     } catch (error) {
@@ -302,7 +290,7 @@ const Dashboard = () => {
     if (selectedFiles.length === 0) return;
     try {
       await folderService.moveFilesToFolder(selectedFiles, targetFolderId);
-      setSelectedFiles([]);
+      selection.clearSelection();
       await fetchLibrary(currentFolderId, 1, false);
     } catch (error) {
       console.error('Failed to move files:', error);
@@ -312,12 +300,18 @@ const Dashboard = () => {
   // Simple upload hook - adds files to list immediately when uploaded
   const {
     stats: uploadStats,
+    uploads: uploadsMap,
     isUploading,
     uploadFiles: uploadFilesWithEncryption,
     cancelAll: cancelAllUploads,
     retryFailed: retryFailedUploads,
     clearCompleted: clearUploadHistory,
     clearAllUploads,
+    pauseUpload,
+    resumeUpload,
+    cancelUpload,
+    pauseAll,
+    resumeAll,
   } = useUpload({
     onFileUploaded: (uploadedFile) => {
       setFolderFiles((prev) => [uploadedFile, ...prev]);
@@ -409,6 +403,58 @@ const Dashboard = () => {
   // Files tab: ALL documents across ALL folders
   const documentFiles = allFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal);
 
+  // Build ordered ID list for the active tab (used by useSelection for range-select)
+  const selectableItems = useMemo(() => {
+    if (activeTab === 'folders') {
+      return [
+        ...childFolders.map((f) => ({ id: `folder:${f.folderId}` })),
+        ...folderFiles.map((f) => ({ id: `file:${f.fileId}` })),
+      ];
+    }
+    if (activeTab === 'photos') return photoFiles.map((f) => ({ id: `file:${f.fileId}` }));
+    if (activeTab === 'files') return documentFiles.map((f) => ({ id: `file:${f.fileId}` }));
+    return [];
+  }, [activeTab, childFolders, folderFiles, photoFiles, documentFiles]);
+
+  const selection = useSelection(selectableItems);
+
+  // Navigate into a folder — updates URL which triggers useEffect to fetch
+  const navigateToFolder = useCallback((folderId) => {
+    selection.clearSelection();
+    if (folderId) {
+      navigate(`/folders/${folderId}`);
+    } else {
+      navigate('/folders');
+    }
+  }, [navigate, selection.clearSelection]);
+
+  // Aliases — keep the rest of the unchanged
+  const selectedFiles = selection.selectedFileIds;
+  const selectedFolders = selection.selectedFolderIds;
+
+  // Keyboard shortcuts: Ctrl+A select all, Escape clear, Delete trash selected
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        selection.selectAll();
+        return;
+      }
+      if (e.key === 'Escape') {
+        selection.clearSelection();
+        return;
+      }
+      if (e.key === 'Delete' && (selectedFiles.length > 0 || selectedFolders.length > 0)) {
+        handleDeleteSelected();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selection, selectedFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Viewer file lists depend on which tab is active
   const viewerPhotoFiles = activeTab === 'folders'
     ? folderFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
@@ -417,16 +463,10 @@ const Dashboard = () => {
     ? folderFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
     : documentFiles;
 
-  // Handle file selection
-  const handleSelectFile = (file) => {
-    const fileId = file.fileId;
-    setSelectedFiles((prev) => {
-      if (prev.includes(fileId)) {
-        return prev.filter((id) => id !== fileId);
-      }
-      return [...prev, fileId];
-    });
-  };
+  // Handle file selection (checkbox click — always toggles)
+  const handleSelectFile = useCallback((file) => {
+    selection.toggle(`file:${file.fileId}`, { ctrl: true });
+  }, [selection]);
 
   // Handle file view - route to appropriate viewer
   const handleViewFile = (file) => {
@@ -551,25 +591,30 @@ const Dashboard = () => {
     setShowShareModal(true);
   };
 
-  // Handle delete - move to trash (for bulk selection)
+  // Handle delete - move to trash (files + folders combined)
   const handleDeleteSelected = async () => {
-    if (selectedFiles.length === 0) return;
+    const totalCount = selectedFiles.length + selectedFolders.length;
+    if (totalCount === 0) return;
 
-    const confirmMessage =
-      selectedFiles.length === 1
-        ? 'Move this file to trash?'
-        : `Move ${selectedFiles.length} files to trash?`;
-
-    if (!window.confirm(confirmMessage)) return;
+    const parts = [];
+    if (selectedFiles.length > 0) parts.push(`${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`);
+    if (selectedFolders.length > 0) parts.push(`${selectedFolders.length} folder${selectedFolders.length > 1 ? 's' : ''}`);
+    if (!window.confirm(`Move ${parts.join(' and ')} to trash?`)) return;
 
     try {
-      await fileService.moveToTrashBulk(selectedFiles);
-      const deletedIds = new Set(selectedFiles);
-      setFolderFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
-      setAllFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
-      setSelectedFiles([]);
+      if (selectedFiles.length > 0) {
+        await fileService.moveToTrashBulk(selectedFiles);
+        const deletedIds = new Set(selectedFiles);
+        setFolderFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
+        setAllFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
+      }
+      if (selectedFolders.length > 0) {
+        await Promise.all(selectedFolders.map((id) => folderService.deleteFolder(id)));
+        setChildFolders((prev) => prev.filter((f) => !selectedFolders.includes(f.folderId)));
+      }
+      selection.clearSelection();
     } catch (error) {
-      console.error('Failed to move files to trash:', error);
+      console.error('Failed to move items to trash:', error);
     }
   };
 
@@ -594,7 +639,7 @@ const Dashboard = () => {
 
   // Handle tab change — navigates to the tab's URL
   const handleTabChange = (tab) => {
-    setSelectedFiles([]);
+    selection.clearSelection();
     const routes = {
       photos: '/photos', files: '/files', folders: '/folders',
       favorites: '/favorites', trash: '/trash', contacts: '/contacts',
@@ -616,7 +661,7 @@ const Dashboard = () => {
         const fileIds = data.fileIds.length > 0 ? data.fileIds : selectedFiles;
         if (fileIds.length === 0) return;
         await folderService.moveFilesToFolder(fileIds, targetFolderId);
-        setSelectedFiles([]);
+        selection.clearSelection();
       }
       await fetchLibrary(currentFolderId, 1, false);
     } catch (error) {
@@ -626,37 +671,40 @@ const Dashboard = () => {
 
   // Handle move to folder (bulk from header) - opens folder picker modal
   const handleMoveToFolderBulk = () => {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0 && selectedFolders.length === 0) return;
     setShowFolderPickerModal(true);
   };
 
-  // Handle folder selection from picker modal
+  // Handle folder selection from picker modal — moves both selected files and folders
   const handleFolderPickerMove = async (targetFolderId) => {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0 && selectedFolders.length === 0) return;
     try {
-      await folderService.moveFilesToFolder(selectedFiles, targetFolderId);
-      const movedIds = new Set(selectedFiles);
-      setFolderFiles((prev) => prev.filter((f) => !movedIds.has(f.fileId || f.id)));
-      setAllFiles((prev) => prev.filter((f) => !movedIds.has(f.fileId || f.id)));
-      setSelectedFiles([]);
-      // Refresh current view
-      if (activeTab === 'folders') {
-        await fetchLibrary(currentFolderId, 1, false);
-      } else {
-        await fetchAllFiles(1, false);
+      // Move files
+      if (selectedFiles.length > 0) {
+        await folderService.moveFilesToFolder(selectedFiles, targetFolderId);
+        const movedFileIds = new Set(selectedFiles);
+        setFolderFiles((prev) => prev.filter((f) => !movedFileIds.has(f.fileId || f.id)));
+        setAllFiles((prev) => prev.filter((f) => !movedFileIds.has(f.fileId || f.id)));
       }
+      // Move folders — prevent moving a folder into itself
+      if (selectedFolders.length > 0) {
+        await Promise.all(
+          selectedFolders
+            .filter((id) => id !== targetFolderId)
+            .map((id) => folderService.moveFolderToFolder(id, targetFolderId))
+        );
+      }
+      selection.clearSelection();
+      await fetchLibrary(currentFolderId, 1, false);
     } catch (error) {
-      console.error('Failed to move files to folder:', error);
+      console.error('Failed to move items to folder:', error);
     }
   };
 
-  // Toggle folder selection
-  const handleFolderSelect = (folder) => {
-    const id = folder.folderId;
-    setSelectedFolders((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
+  // Toggle folder selection (checkbox click — always toggles)
+  const handleFolderSelect = useCallback((folder) => {
+    selection.toggle(`folder:${folder.folderId}`, { ctrl: true });
+  }, [selection]);
 
   // Rename a single folder (opens RenameModal)
   const handleFolderRenameSubmit = async (newName) => {
@@ -667,27 +715,10 @@ const Dashboard = () => {
       const nameEncrypted = await encryptFilename(newName.trim(), masterKey);
       await folderService.updateFolder(renamingFolder.folderId, { nameEncrypted });
       await fetchLibrary(currentFolderId, 1, false);
-      setSelectedFolders([]);
+      selection.clearSelection();
     } finally {
       setIsRenamingFolder(false);
       setRenamingFolder(null);
-    }
-  };
-
-  // Delete selected folders (moves each to trash recursively)
-  const handleFolderDeleteSelected = async () => {
-    if (selectedFolders.length === 0) return;
-    const confirmMsg = selectedFolders.length === 1
-      ? 'Move this folder and all its contents to trash?'
-      : `Move ${selectedFolders.length} folders and all their contents to trash?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      await Promise.all(selectedFolders.map((id) => folderService.deleteFolder(id)));
-      setChildFolders((prev) => prev.filter((f) => !selectedFolders.includes(f.folderId)));
-      setSelectedFolders([]);
-    } catch (error) {
-      console.error('Failed to delete folders:', error);
     }
   };
 
@@ -754,12 +785,13 @@ const Dashboard = () => {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
           {/* Header - without Upload button on mobile */}
           <GalleryHeader
-            selectedCount={selectedFiles.length}
-            onUpload={() => setShowUploadModal(true)}
+            selectedCount={selectedFiles.length + (activeTab === 'folders' ? selectedFolders.length : 0)}
+            selectedFilesCount={selectedFiles.length}
+            selectedFoldersCount={activeTab === 'folders' ? selectedFolders.length : 0}
             onDelete={handleDeleteSelected}
             onAddToAlbum={handleMoveToFolderBulk}
             onShare={handleShare}
-            storageBar={<StorageBar refreshTrigger={folderFiles.length + allFiles.length} inline />}
+            onClearSelection={selection.clearSelection}
             hideUploadOnMobile={true}
           />
 
@@ -773,7 +805,7 @@ const Dashboard = () => {
                 <button
                   onClick={() => setShowCreateFolderModal(true)}
                   disabled={!hasMasterKey()}
-                  className="inline-flex items-center px-3 py-2 bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+                  className="inline-flex items-center px-3 py-2 bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
                 >
                   <FontAwesomeIcon icon={faFolderPlus} className="w-3 h-3 mr-1" />
                   New
@@ -781,7 +813,7 @@ const Dashboard = () => {
               )}
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
+                className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 mr-1" />
                 Upload
@@ -789,7 +821,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Desktop: Normal tabs layout */}
+          {/* Desktop: Tabs with action buttons */}
           <div className="hidden md:flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-0 mb-4 md:mb-6">
             <GalleryTabs activeTab={activeTab} onTabChange={handleTabChange} />
             {(activeTab === 'folders' || activeTab === 'photos' || activeTab === 'files') && (
@@ -798,7 +830,7 @@ const Dashboard = () => {
                   <button
                     onClick={() => setShowCreateFolderModal(true)}
                     disabled={!hasMasterKey()}
-                    className="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
                   >
                     <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4 mr-2" />
                     New Folder
@@ -806,7 +838,7 @@ const Dashboard = () => {
                 )}
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0"
+                  className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
                 >
                   <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
                   Upload Files
@@ -823,101 +855,10 @@ const Dashboard = () => {
           {activeTab === 'folders' && (
             <div className="w-full">
 
-              {/* Folder action toolbar — shown when 1+ folders are selected */}
-              {selectedFolders.length > 0 && (
-                <div className="flex items-center justify-between gap-3 mb-4 px-3 py-2 sm:px-4 sm:py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
-                  <span className="text-xs sm:text-sm font-medium text-blue-700 dark:text-blue-300 whitespace-nowrap">
-                    {selectedFolders.length} folder{selectedFolders.length > 1 ? 's' : ''} selected
-                  </span>
-                  
-                  {/* Desktop: Full buttons with text */}
-                  <div className="hidden sm:flex items-center gap-2">
-                    {selectedFolders.length === 1 && (
-                      <button
-                        onClick={async () => {
-                          const folder = childFolders.find((f) => f.folderId === selectedFolders[0]);
-                          if (!folder || !hasMasterKey()) return;
-                          try {
-                            const { decryptFilename } = await import('../../utils/crypto');
-                            const plainName = await decryptFilename(folder.nameEncrypted, getMasterKey());
-                            setRenamingFolder({ ...folder, decryptedName: plainName });
-                          } catch {
-                            setRenamingFolder({ ...folder, decryptedName: '' });
-                          }
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-700 border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-600 transition-colors"
-                      >
-                        <FontAwesomeIcon icon={faPen} className="w-3.5 h-3.5" />
-                        Rename
-                      </button>
-                    )}
-                    <button
-                      onClick={handleFolderShareSelected}
-                      disabled={!hasMasterKey()}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                    >
-                      <FontAwesomeIcon icon={faShare} className="w-3.5 h-3.5" />
-                      Share
-                    </button>
-                    <button
-                      onClick={handleFolderDeleteSelected}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faTrash} className="w-3.5 h-3.5" />
-                      Delete
-                    </button>
-                  </div>
-
-                  {/* Mobile: Icon-only buttons */}
-                  <div className="flex sm:hidden items-center gap-1">
-                    {selectedFolders.length === 1 && (
-                      <button
-                        onClick={async () => {
-                          const folder = childFolders.find((f) => f.folderId === selectedFolders[0]);
-                          if (!folder || !hasMasterKey()) return;
-                          try {
-                            const { decryptFilename } = await import('../../utils/crypto');
-                            const plainName = await decryptFilename(folder.nameEncrypted, getMasterKey());
-                            setRenamingFolder({ ...folder, decryptedName: plainName });
-                          } catch {
-                            setRenamingFolder({ ...folder, decryptedName: '' });
-                          }
-                        }}
-                        className="p-2 bg-white dark:bg-zinc-700 border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-600 transition-colors"
-                        aria-label="Rename"
-                      >
-                        <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button
-                      onClick={handleFolderShareSelected}
-                      disabled={!hasMasterKey()}
-                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                      aria-label="Share"
-                    >
-                      <FontAwesomeIcon icon={faShare} className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleFolderDeleteSelected}
-                      className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                      aria-label="Delete"
-                    >
-                      <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => setSelectedFolders([])}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-auto sm:ml-0"
-                  >
-                    <FontAwesomeIcon icon={faXmark} className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
 
               {/* Breadcrumbs — also serve as drag targets to move items to parent folders */}
               {breadcrumbs.length > 0 && (
-                <div className="mb-4">
+                <div data-no-select className="mb-4">
                   <Breadcrumbs
                     breadcrumbs={breadcrumbs}
                     onNavigate={navigateToFolder}
@@ -926,37 +867,44 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {/* Child Folders Grid */}
-              {childFolders.length > 0 && (
-                <div
-                  className="mb-4"
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget)) {
-                      setDragOverFolderId(null);
-                    }
-                  }}
-                  onDragEnd={() => setDragOverFolderId(null)}
-                >
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-1">
-                    {childFolders.map((folder) => (
-                      <FolderCard
-                        key={folder.folderId}
-                        folder={folder}
-                        onOpen={() => navigateToFolder(folder.folderId)}
-                        isDragOver={dragOverFolderId === folder.folderId}
-                        onDragOver={() => setDragOverFolderId(folder.folderId)}
-                        onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
-                        isSelected={selectedFolders.includes(folder.folderId)}
-                        onSelect={handleFolderSelect}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+<SelectionArea
+                onSelect={selection.applyLassoChange}
+                onClear={selection.clearSelection}
+              >
+
+{/* Child Folders Grid */}
+{childFolders.length > 0 && (
+  <div
+    className="mb-4"
+    onDragLeave={(e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        setDragOverFolderId(null);
+      }
+    }}
+    onDragEnd={() => setDragOverFolderId(null)}
+  >
+    {/* Mobile: single-column list | sm+: multi-column grid */}
+    <div className="grid grid-cols-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1">
+      {childFolders.map((folder) => (
+        <FolderCard
+          key={folder.folderId}
+          folder={folder}
+          onOpen={() => navigateToFolder(folder.folderId)}
+          isDragOver={dragOverFolderId === folder.folderId}
+          onDragOver={() => setDragOverFolderId(folder.folderId)}
+          onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
+          isSelected={selectedFolders.includes(folder.folderId)}
+          onSelect={handleFolderSelect}
+          listMode={window.innerWidth < 640} // true on mobile (<sm breakpoint)
+        />
+      ))}
+    </div>
+  </div>
+)}
 
               {/* Files in current folder */}
               {folderFiles.length === 0 && childFolders.length === 0 && !loading ? (
-                <div className="flex flex-col items-center justify-center py-20">
+                <div data-no-select className="flex flex-col items-center justify-center py-20">
                   <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
                     <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
                   </div>
@@ -1001,6 +949,8 @@ const Dashboard = () => {
                 />
               ) : null}
 
+              </SelectionArea>
+
               <SyncingIndicator isSyncing={syncing} />
             </div>
           )}
@@ -1029,6 +979,10 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
+                <SelectionArea
+                  onSelect={selection.applyLassoChange}
+                  onClear={selection.clearSelection}
+                >
                 <VirtualizedPhotoGrid
                   files={photoFiles}
                   selectedFiles={selectedFiles}
@@ -1041,6 +995,7 @@ const Dashboard = () => {
                   gridSize={gridSize}
                   emptyMessage="No photos yet"
                 />
+                </SelectionArea>
               )}
 
               <SyncingIndicator isSyncing={syncing} />
@@ -1070,6 +1025,10 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
+                <SelectionArea
+                  onSelect={selection.applyLassoChange}
+                  onClear={selection.clearSelection}
+                >
                 <VirtualizedPhotoGrid
                   files={documentFiles}
                   selectedFiles={selectedFiles}
@@ -1082,6 +1041,7 @@ const Dashboard = () => {
                   gridSize={gridSize}
                   emptyMessage="No files yet"
                 />
+                </SelectionArea>
               )}
             </div>
           )}
@@ -1225,10 +1185,12 @@ const Dashboard = () => {
 
       {/* Folder Picker Modal */}
       <FolderPickerModal
+        key={showFolderPickerModal ? currentFolderId ?? 'root' : 'closed'}
         isOpen={showFolderPickerModal}
         onClose={() => setShowFolderPickerModal(false)}
         onMoveToFolder={handleFolderPickerMove}
-        selectedCount={selectedFiles.length}
+        selectedCount={selectedFiles.length + selectedFolders.length}
+        initialFolderId={currentFolderId}
       />
 
       {/* Rename Folder Modal */}
@@ -1272,9 +1234,15 @@ const Dashboard = () => {
       {uploadStats.total > 0 && (
         <UploadProgressPanel
           stats={uploadStats}
+          uploads={uploadsMap}
           onCancelAll={cancelAllUploads}
           onRetryFailed={retryFailedUploads}
           onClear={clearAllUploads}
+          onPauseUpload={pauseUpload}
+          onResumeUpload={resumeUpload}
+          onCancelUpload={cancelUpload}
+          onPauseAll={pauseAll}
+          onResumeAll={resumeAll}
           isMinimized={isUploadPanelMinimized}
           onToggleMinimize={() =>
             setIsUploadPanelMinimized(!isUploadPanelMinimized)

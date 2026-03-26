@@ -11,7 +11,6 @@ import {
   SignUpPage,
   ForgotPasswordPage,
   Dashboard,
-  Albums,
   Shared,
   Settings,
 } from './pages';
@@ -180,14 +179,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/photos/albums"
-        element={
-          <ProtectedRoute>
-            <Albums />
           </ProtectedRoute>
         }
       />

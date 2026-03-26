@@ -11,6 +11,7 @@ import {
   faSignOutAlt,
   faUser
 } from '@fortawesome/free-solid-svg-icons';
+import { StorageBar } from '../ui';
 
 const DashboardNavbar = () => {
   const { user, logout, avatarUrl } = useAuth();
@@ -19,6 +20,13 @@ const DashboardNavbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
+  const [storageTrigger, setStorageTrigger] = useState(0);
+
+  // Simple storage trigger - increment periodically or on file operations
+  useEffect(() => {
+    const interval = setInterval(() => setStorageTrigger(prev => prev + 1), 30000); // every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -49,8 +57,13 @@ const DashboardNavbar = () => {
             <span className="text-lg font-bold">AAMENN</span>
           </Link>
 
-          {/* Right Section - User Menu */}
-          <div className="relative" ref={menuRef}>
+          {/* Right Section - Storage Bar + User Menu */}
+          <div className="flex items-center gap-3">
+            {/* Storage Bar */}
+            <StorageBar refreshTrigger={storageTrigger} inline />
+            
+            {/* User Menu */}
+            <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center space-x-2 hover:bg-white/10 rounded-lg p-1.5 transition-colors"
@@ -137,6 +150,7 @@ const DashboardNavbar = () => {
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

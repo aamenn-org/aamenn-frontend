@@ -56,7 +56,6 @@ const PhotoViewer = ({
   hasNext,
   hasPrev,
   currentIndex,
-  // totalFiles - removed, no longer displayed in minimal UI
   onAddToAlbum,
   onDelete,
   onShare,
@@ -348,6 +347,7 @@ const PhotoViewer = ({
             fileId: f.fileId,
             downloadUrl: f.downloadUrl,
             mimeType: f.mimeType,
+            cipherFileKey: f.cipherFileKey,
           })),
           masterKey
         );
@@ -458,9 +458,9 @@ const PhotoViewer = ({
             downloadUrl: f.downloadUrl,
             thumbMediumUrl: f.thumbMediumUrl,
             mimeType: f.mimeType,
+            cipherFileKey: f.cipherFileKey,
           })),
-          masterKey,
-          { prioritizeMedium: true }
+          masterKey
         );
       }
     } catch (error) {
@@ -1128,7 +1128,7 @@ const PhotoViewer = ({
                         // Performance: decode image async for instant rendering
                         decoding="async"
                         // Performance: hint browser this is high priority
-                        fetchpriority="high"
+                        fetchPriority="high"
                       />
                     </TransformComponent>
                   </>

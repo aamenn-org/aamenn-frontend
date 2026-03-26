@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context';
 import GoogleSignInButton from '../../components/GoogleSignInButton';
-import useImageRotation from '../../hooks/useImageRotation';
+import { useImageRotation } from '../../hooks';
 import AuthBackground from '../../components/auth/AuthBackground';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 

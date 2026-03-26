@@ -1,14 +1,14 @@
 /**
- * useUpload Hook - High-performance parallel upload with maximum thread utilization
+ * useUpload Hook — High-performance upload with chunked large-file support.
  *
  * Features:
- * - Uses all available CPU cores for encryption (via navigator.hardwareConcurrency)
- * - Two-phase pipeline: encryption queue → upload queue
- * - Real-time progress updates
- * - Immediate file list updates on completion
- * - Rate limit aware (caps concurrent uploads)
- * - Exponential backoff retry for 429/5xx errors (like ente.io)
- * - Respects Retry-After header
+ * - Two paths: proxy upload (<100 MB) and direct-to-B2 chunked upload (≥100 MB)
+ * - Parallel encryption pipeline (uses all CPU cores)
+ * - Per-upload pause / resume / cancel with AbortController
+ * - Real-time speed and ETA tracking via SpeedTracker
+ * - IndexedDB persistence for chunked upload resume across sessions
+ * - Exponential backoff retry for 429/5xx errors
+ * - Rate-limit and Retry-After header awareness
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -16,237 +16,108 @@ import { useAuth } from '../context';
 import api from '../services/api';
 import fileService from '../services/file.service';
 import {
-  generateThumbnails,
-  generateVideoThumbnails,
   getFileType,
   FILE_HANDLERS,
 } from '../utils/thumbnail';
+import { encryptFile, arrayBufferToBase64 } from '../utils/crypto';
+import cryptoService from '../services/crypto.service';
+import { isSafari } from '../utils/browser.js';
+import { SpeedTracker } from '../utils/speed-tracker.js';
+import { uploadPersistence } from '../services/upload-persistence.js';
 import {
-  generateFileKey,
-  encryptFile,
-  encryptFileKey,
-  encryptFilename,
-  arrayBufferToBase64,
-  computeSHA256 as computeSHA256MainThread,
-  computeSHA1 as computeSHA1MainThread,
-} from '../utils/crypto';
-import { getCryptoWorkerPool } from '../workers';
+  uploadChunked,
+  chooseInitialChunkSize,
+  calculateTotalParts,
+} from '../services/chunked-upload.service.js';
 
-// Detect available CPU cores and use them all for maximum performance
-// navigator.hardwareConcurrency returns the number of logical processors
+// ─── Constants ──────────────────────────────────────────────
 const CPU_CORES = navigator.hardwareConcurrency || 4;
-const MAX_CONCURRENT_ENCRYPT = CPU_CORES; // Use all cores for CPU-bound encryption
-// Cap concurrent uploads to 4 to prevent network failures (each upload = 3 B2 requests)
-const MAX_CONCURRENT_UPLOAD = Math.min(CPU_CORES, 4);
+const MAX_CONCURRENT_ENCRYPT = CPU_CORES;
+const MAX_CONCURRENT_PROXY_UPLOAD = Math.min(CPU_CORES, 8);
+const CHUNKED_THRESHOLD = 100 * 1024 * 1024; // 100 MB
 
-// Progressive upload threshold - files larger than this skip thumbnail generation
-// to start upload immediately (thumbnails can be generated later)
-const PROGRESSIVE_UPLOAD_THRESHOLD = 50 * 1024 * 1024; // 50MB
-
-// Detect Safari for workarounds (Safari has issues with some worker operations)
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-// Retry configuration (inspired by ente.io)
 const RETRY_CONFIG = {
-  maxRetries: 4, // 1 original + 3 retries
-  initialDelayMs: 2000, // Start with 2 seconds
-  maxDelayMs: 120000, // Max 2 minutes
-  backoffMultiplier: 2, // Double each time
+  maxRetries: 4,
+  initialDelayMs: 2000,
+  maxDelayMs: 120000,
+  backoffMultiplier: 2,
   retryableStatusCodes: [429, 500, 502, 503, 504],
 };
 
+const MIN_UPDATE_INTERVAL = 250; // ms — throttle React state updates
+
 console.log(
-  `[useUpload] Detected ${CPU_CORES} CPU cores. Using ${MAX_CONCURRENT_ENCRYPT} encryption threads, ${MAX_CONCURRENT_UPLOAD} upload threads.${
-    isSafari ? ' (Safari mode)' : ''
-  }`
+  `[useUpload] ${CPU_CORES} cores | encrypt×${MAX_CONCURRENT_ENCRYPT} | proxy-upload×${MAX_CONCURRENT_PROXY_UPLOAD} | chunked≥${CHUNKED_THRESHOLD / 1024 / 1024}MB${isSafari ? ' (Safari)' : ''}`
 );
 
-// Generate UUID - polyfill for older browsers (Safari 14.x, older Samsung Internet)
-const generateUUID = () => {
-  if (typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // Fallback using crypto.getRandomValues (widely supported)
-  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
-    (
-      c ^
-      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
-    ).toString(16)
-  );
-};
+const generateUUID = () => crypto.randomUUID();
 
-// SessionStorage key for persisting upload state across page refreshes
-const STORAGE_KEY = 'aamenn_upload_state';
-
-// Upload states
+// ─── Upload statuses ────────────────────────────────────────
 export const UploadStatus = {
   PENDING: 'pending',
-  HASHING: 'hashing', // Computing content hash for duplicate detection
-  DUPLICATE: 'duplicate', // File is a duplicate, skipped
+  HASHING: 'hashing',
+  DUPLICATE: 'duplicate',
   ENCRYPTING: 'encrypting',
   UPLOADING: 'uploading',
+  PAUSED: 'paused',
   COMPLETED: 'completed',
   FAILED: 'failed',
   RETRYING: 'retrying',
-  INTERRUPTED: 'interrupted', // For uploads interrupted by page refresh
+  INTERRUPTED: 'interrupted',
 };
 
-// Helper: Save upload state to sessionStorage
-const saveUploadState = (uploads, isUploading) => {
-  try {
-    const serializable = [...uploads.values()].map((u) => ({
-      id: u.id,
-      name: u.name,
-      size: u.size,
-      type: u.type,
-      status: u.status,
-      progress: u.progress,
-      error: u.error,
-      albumId: u.albumId,
-    }));
-    sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        uploads: serializable,
-        isUploading,
-        timestamp: Date.now(),
-      })
-    );
-  } catch (e) {
-    console.warn('[useUpload] Failed to save state to sessionStorage:', e);
-  }
-};
-
-// Helper: Load upload state from sessionStorage
-const loadUploadState = () => {
-  try {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
-    if (!saved) return null;
-
-    const parsed = JSON.parse(saved);
-    // Only restore if saved within last 30 minutes
-    if (Date.now() - parsed.timestamp > 30 * 60 * 1000) {
-      sessionStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-    return parsed;
-  } catch (e) {
-    console.warn('[useUpload] Failed to load state from sessionStorage:', e);
-    return null;
-  }
-};
-
-// Helper: Clear saved upload state
-const clearUploadState = () => {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Ignore
-  }
-};
-
+// ═══════════════════════════════════════════════════════════
+// Hook
+// ═══════════════════════════════════════════════════════════
 export function useUpload({ onFileUploaded } = {}) {
   const { getMasterKey, masterKeyAvailable } = useAuth();
 
-  // Initialize from sessionStorage if available (handles page refresh)
-  // Note: We warn users before refresh, but if they proceed anyway,
-  // we clear in-progress uploads since File objects are lost
-  const [uploads, setUploads] = useState(() => {
-    const saved = loadUploadState();
-    if (saved && saved.uploads.length > 0) {
-      const map = new Map();
-      let hadInProgress = false;
-
-      saved.uploads.forEach((u) => {
-        // Check if upload was in progress (File objects are lost on refresh)
-        const wasInProgress = [
-          UploadStatus.PENDING,
-          UploadStatus.ENCRYPTING,
-          UploadStatus.UPLOADING,
-          UploadStatus.RETRYING,
-        ].includes(u.status);
-
-        if (wasInProgress) {
-          hadInProgress = true;
-          // Don't add interrupted uploads - they can't be resumed
-          // User was warned before refresh, so just discard them
-          return;
-        }
-
-        // Keep completed and failed uploads
-        map.set(u.id, u);
-      });
-
-      if (hadInProgress) {
-        console.log(
-          `[useUpload] Discarded in-progress uploads (interrupted by page refresh)`
-        );
-      }
-      if (map.size > 0) {
-        console.log(
-          `[useUpload] Restored ${map.size} completed/failed uploads from sessionStorage`
-        );
-      }
-      return map;
-    }
-    return new Map();
-  });
-
+  const [uploads, setUploads] = useState(() => new Map());
   const [isUploading, setIsUploading] = useState(false);
 
-  // Separate counters for encryption (CPU-bound) and upload (network-bound) phases
   const encryptingCountRef = useRef(0);
   const uploadingCountRef = useRef(0);
-  const queueRef = useRef([]); // Files waiting to be encrypted
-  const uploadQueueRef = useRef([]); // Encrypted files waiting to upload
+  const queueRef = useRef([]);
+  const uploadQueueRef = useRef([]);
   const onFileUploadedRef = useRef(onFileUploaded);
 
-  // Keep callback ref updated
-  useEffect(() => {
-    onFileUploadedRef.current = onFileUploaded;
-  }, [onFileUploaded]);
+  // Per-upload controls: Map<uploadId, { abortController, speedTracker, isPaused, serverSessionId }>
+  const controlsRef = useRef(new Map());
 
-  // Persist uploads state to sessionStorage whenever it changes
-  useEffect(() => {
-    if (uploads.size > 0) {
-      saveUploadState(uploads, isUploading);
-    }
-  }, [uploads, isUploading]);
+  useEffect(() => { onFileUploadedRef.current = onFileUploaded; }, [onFileUploaded]);
 
-  // Warn user before leaving page during upload (prevents accidental refresh)
+  // Warn before unload
   useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (isUploading) {
-        // Standard way to show browser's "Leave site?" dialog
-        e.preventDefault();
-        // For older browsers
-        e.returnValue =
-          'You have uploads in progress. Are you sure you want to leave?';
-        return e.returnValue;
-      }
+    const handler = (e) => {
+      if (isUploading) { e.preventDefault(); e.returnValue = ''; return ''; }
     };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
   }, [isUploading]);
 
-  // Update a single upload's state
+  // ─── Helpers ────────────────────────────────────────────
   const updateUpload = useCallback((id, updates) => {
     setUploads((prev) => {
       const newMap = new Map(prev);
       const existing = newMap.get(id);
-      if (existing) {
-        newMap.set(id, { ...existing, ...updates });
-      }
+      if (existing) newMap.set(id, { ...existing, ...updates });
       return newMap;
     });
   }, []);
 
-  // Refs for async function access
+  // Throttled updater for high-frequency progress events
+  const lastUpdateTimeRef = useRef(new Map());
+  const throttledUpdate = useCallback((id, updates) => {
+    const now = Date.now();
+    const last = lastUpdateTimeRef.current.get(id) || 0;
+    if (now - last < MIN_UPDATE_INTERVAL) return;
+    lastUpdateTimeRef.current.set(id, now);
+    updateUpload(id, updates);
+  }, [updateUpload]);
+
   const processEncryptionRef = useRef(null);
   const processUploadRef = useRef(null);
 
-  // Check if all operations are complete
   const checkIfAllDone = useCallback(() => {
     if (
       encryptingCountRef.current === 0 &&
@@ -258,241 +129,108 @@ export function useUpload({ onFileUploaded } = {}) {
     }
   }, []);
 
-  // Process encryption queue - uses all CPU cores
   const processEncryptionQueue = useCallback(() => {
-    while (
-      encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT &&
-      queueRef.current.length > 0
-    ) {
-      const uploadInfo = queueRef.current.shift();
-      if (uploadInfo && processEncryptionRef.current) {
-        processEncryptionRef.current(uploadInfo);
-      }
+    while (encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT && queueRef.current.length > 0) {
+      const item = queueRef.current.shift();
+      if (item && processEncryptionRef.current) processEncryptionRef.current(item);
     }
   }, []);
 
-  // Process upload queue - capped to avoid rate limits
   const processUploadQueue = useCallback(() => {
-    while (
-      uploadingCountRef.current < MAX_CONCURRENT_UPLOAD &&
-      uploadQueueRef.current.length > 0
-    ) {
+    while (uploadingCountRef.current < MAX_CONCURRENT_PROXY_UPLOAD && uploadQueueRef.current.length > 0) {
       const item = uploadQueueRef.current.shift();
-      if (item && processUploadRef.current) {
-        processUploadRef.current(item);
-      }
+      if (item && processUploadRef.current) processUploadRef.current(item);
     }
   }, []);
 
-  // Phase 1: Encryption (CPU-bound) - runs in parallel up to MAX_CONCURRENT_ENCRYPT
-  // Now includes duplicate detection before encryption
-  const processEncryption = useCallback(
-    async (uploadInfo) => {
-      const { id, file, albumId } = uploadInfo;
-      const masterKey = getMasterKey();
+  // ─── Phase 1: Hash + Encrypt ─────────────────────────────
+  const processEncryption = useCallback(async (uploadInfo) => {
+    const { id, file } = uploadInfo;
+    const masterKey = getMasterKey();
 
-      if (!masterKey) {
-        updateUpload(id, {
-          status: UploadStatus.FAILED,
-          error: 'No master key available',
-        });
-        checkIfAllDone();
-        return;
-      }
+    if (!masterKey) {
+      updateUpload(id, { status: UploadStatus.FAILED, error: 'No master key available' });
+      checkIfAllDone();
+      return;
+    }
 
-      encryptingCountRef.current++;
+    encryptingCountRef.current++;
 
+    try {
+      updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
+
+      let fileData;
       try {
-        // Phase 1a: Compute content hash for duplicate detection (in worker - non-blocking)
-        updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
-
-        // Read file data - use arrayBuffer() with FileReader fallback for Safari
-        let fileData;
-        try {
-          fileData = await file.arrayBuffer();
-        } catch (readError) {
-          // Fallback to FileReader for older Safari versions
-          console.warn(
-            '[useUpload] arrayBuffer() failed, using FileReader fallback:',
-            readError.message
-          );
-          fileData = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(new Error('FileReader failed'));
-            reader.readAsArrayBuffer(file);
-          });
-        }
-
-        // Clone the ArrayBuffer for hashing since transfer is destructive
-        const hashData = fileData.slice(0);
-
-        // Compute SHA-256 hash - use worker with fallback to main thread for Safari compatibility
-        let contentHash;
-        try {
-          const workerPool = getCryptoWorkerPool();
-          contentHash = await workerPool.computeSHA256(hashData);
-        } catch (workerError) {
-          console.warn(
-            '[useUpload] Worker hash failed, using main thread:',
-            workerError.message
-          );
-          // Fallback to main thread computation (Safari compatibility)
-          contentHash = await computeSHA256MainThread(hashData);
-        }
-        updateUpload(id, { progress: 5 });
-
-        // Phase 1b: Check for duplicates
-        try {
-          const duplicateCheck = await fileService.checkDuplicate(
-            contentHash,
-            albumId
-          );
-
-          if (duplicateCheck.isDuplicate) {
-            if (duplicateCheck.inSameAlbum) {
-              // File already exists in the same album - skip entirely
-              console.log(
-                `[useUpload] Skipping duplicate: ${file.name} (already in album)`
-              );
-              updateUpload(id, {
-                status: UploadStatus.DUPLICATE,
-                progress: 100,
-                error: 'File already exists in this album',
-                existingFileId: duplicateCheck.existingFile?.id,
-              });
-              encryptingCountRef.current--;
-              processEncryptionQueue();
-              checkIfAllDone();
-              return;
-            } else {
-              // File exists in different album - could create symlink in future
-              // For now, skip to avoid storage redundancy
-              console.log(
-                `[useUpload] Skipping duplicate: ${file.name} (exists in other albums)`
-              );
-              updateUpload(id, {
-                status: UploadStatus.DUPLICATE,
-                progress: 100,
-                error: 'File already uploaded (exists in your library)',
-                existingFileId: duplicateCheck.existingFile?.id,
-              });
-              encryptingCountRef.current--;
-              processEncryptionQueue();
-              checkIfAllDone();
-              return;
-            }
-          }
-        } catch (dupError) {
-          // If duplicate check fails, continue with upload (fail-safe)
-          console.warn(
-            '[useUpload] Duplicate check failed, continuing with upload:',
-            dupError
-          );
-        }
-
-        // Phase 1c: Proceed with encryption (file is not a duplicate)
-        updateUpload(id, { status: UploadStatus.ENCRYPTING, progress: 10 });
-
-        // Generate file key
-        const fileKey = await generateFileKey();
-        updateUpload(id, { progress: 15 });
-
-        // Encrypt file
-        const { encryptedData, iv: fileIv } = await encryptFile(
-          fileData,
-          fileKey
-        );
-        const cipherFileKey = await encryptFileKey(fileKey, masterKey);
-        const fileNameEncrypted = await encryptFilename(file.name, masterKey);
-        updateUpload(id, { progress: 35 });
-
-        // Generate thumbnails using file type handler (clean DRY approach)
-        let thumbnailData = null;
-        const fileType = getFileType(file.type);
-        const handler = FILE_HANDLERS[fileType];
-
-        if (handler.generateThumbnails) {
-          try {
-            const thumbs = await handler.generateThumbnails(file);
-            thumbnailData = await encryptThumbnails(thumbs, masterKey, fileKey);
-          } catch (e) {
-            console.warn(`${fileType} thumbnail generation failed:`, e);
-            throw new Error(`Thumbnail generation failed for ${fileType} ${file.name}: ${e.message}`);
-          }
-        }
-        // Files without thumbnail support (documents, other) - no thumbnails needed
-        updateUpload(id, { progress: 45 });
-
-        // Combine IV + encrypted data
-        const combined = new Uint8Array(
-          fileIv.length + encryptedData.byteLength
-        );
-        combined.set(fileIv, 0);
-        combined.set(new Uint8Array(encryptedData), fileIv.length);
-
-        // Compute SHA1 hash for B2 verification (in worker - non-blocking)
-        // Clone the buffer since transfer is destructive
-        const sha1Data = combined.buffer.slice(0);
-
-        // Compute SHA-1 hash - use worker with fallback to main thread for Safari compatibility
-        let sha1Hash;
-        try {
-          const workerPool = getCryptoWorkerPool();
-          sha1Hash = await workerPool.computeSHA1(sha1Data);
-        } catch (workerError) {
-          console.warn(
-            '[useUpload] Worker SHA1 failed, using main thread:',
-            workerError.message
-          );
-          // Fallback to main thread computation (Safari compatibility)
-          sha1Hash = await computeSHA1MainThread(sha1Data);
-        }
-
-        // Create encrypted blob
-        const encryptedBlob = new Blob([combined], {
-          type: 'application/octet-stream',
+        fileData = await file.arrayBuffer();
+      } catch {
+        fileData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('FileReader failed'));
+          reader.readAsArrayBuffer(file);
         });
-        updateUpload(id, { progress: 50 });
-
-        // Add to upload queue with contentHash and folderId for backend storage
-        uploadQueueRef.current.push({
-          id,
-          file,
-          encryptedBlob,
-          fileNameEncrypted,
-          cipherFileKey,
-          sha1Hash,
-          thumbnailData,
-          contentHash,
-          folderId: uploadInfo.folderId || null,
-        });
-
-        // Trigger upload queue processing
-        processUploadQueue();
-      } catch (error) {
-        console.error(`Encryption failed for ${file.name}:`, error);
-        updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
-      } finally {
-        encryptingCountRef.current--;
-        processEncryptionQueue(); // Process next encryption
-        checkIfAllDone();
       }
-    },
-    [
-      getMasterKey,
-      updateUpload,
-      processUploadQueue,
-      processEncryptionQueue,
-      checkIfAllDone,
-    ]
-  );
 
-  // Phase 2: Upload (Network-bound) - runs in parallel up to MAX_CONCURRENT_UPLOAD
-  // Includes exponential backoff retry for 429/5xx errors (like ente.io)
-  const processUpload = useCallback(
-    async (encryptedItem) => {
-      const {
+      const hashData = fileData.slice(0);
+      const contentHash = await cryptoService.computeSHA256(hashData);
+      updateUpload(id, { progress: 5 });
+
+      // Duplicate check
+      try {
+        const dup = await fileService.checkDuplicate(contentHash);
+        if (dup.isDuplicate) {
+          updateUpload(id, {
+            status: UploadStatus.DUPLICATE,
+            progress: 100,
+            error: 'File already uploaded (exists in your library)',
+            existingFileId: dup.existingFile?.id,
+          });
+          encryptingCountRef.current--;
+          processEncryptionQueue();
+          checkIfAllDone();
+          return;
+        }
+      } catch {
+        // Fail-safe: continue upload
+      }
+
+      updateUpload(id, { status: UploadStatus.ENCRYPTING, progress: 10 });
+
+      const fileKey = await cryptoService.generateFileKey();
+      updateUpload(id, { progress: 15 });
+
+      const { encryptedData, iv: fileIv } = await encryptFile(fileData, fileKey);
+      const cipherFileKey = await cryptoService.encryptFileKey(fileKey, masterKey);
+      const fileNameEncrypted = await cryptoService.encryptFilename(file.name, masterKey);
+      updateUpload(id, { progress: 35 });
+
+      // Thumbnails
+      let thumbnailData = null;
+      const fileType = getFileType(file.type);
+      const handler = FILE_HANDLERS[fileType];
+      if (handler.generateThumbnails) {
+        try {
+          const thumbs = await handler.generateThumbnails(file);
+          thumbnailData = await encryptThumbnails(thumbs, masterKey, fileKey);
+        } catch (e) {
+          console.warn(`${fileType} thumbnail generation failed:`, e);
+          throw new Error(`Thumbnail generation failed for ${fileType} ${file.name}: ${e.message}`);
+        }
+      }
+      updateUpload(id, { progress: 45 });
+
+      // Combine IV + encrypted data
+      const combined = new Uint8Array(fileIv.length + encryptedData.byteLength);
+      combined.set(fileIv, 0);
+      combined.set(new Uint8Array(encryptedData), fileIv.length);
+
+      const sha1Data = combined.buffer.slice(0);
+      const sha1Hash = await cryptoService.computeSHA1(sha1Data);
+
+      const encryptedBlob = new Blob([combined], { type: 'application/octet-stream' });
+      updateUpload(id, { progress: 50 });
+
+      uploadQueueRef.current.push({
         id,
         file,
         encryptedBlob,
@@ -501,181 +239,458 @@ export function useUpload({ onFileUploaded } = {}) {
         sha1Hash,
         thumbnailData,
         contentHash,
-        folderId,
-      } = encryptedItem;
+        folderId: uploadInfo.folderId || null,
+      });
 
-      uploadingCountRef.current++;
+      processUploadQueue();
+    } catch (error) {
+      console.error(`Encryption failed for ${file.name}:`, error);
+      updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
+    } finally {
+      encryptingCountRef.current--;
+      processEncryptionQueue();
+      checkIfAllDone();
+    }
+  }, [getMasterKey, updateUpload, processUploadQueue, processEncryptionQueue, checkIfAllDone]);
 
-      // Retry with exponential backoff
-      const uploadWithRetry = async (attempt = 0) => {
-        try {
-          updateUpload(id, {
-            status:
-              attempt > 0 ? UploadStatus.RETRYING : UploadStatus.UPLOADING,
-            progress: 50,
-          });
+  // ─── Phase 2: Upload (proxy path for small files) ─────────
+  const processProxyUpload = useCallback(async (encryptedItem) => {
+    const {
+      id, file, encryptedBlob, fileNameEncrypted, cipherFileKey,
+      sha1Hash, thumbnailData, contentHash, folderId,
+    } = encryptedItem;
 
-          // Build form data
-          const formData = new FormData();
-          formData.append('file', encryptedBlob, 'encrypted');
-          formData.append('fileNameEncrypted', fileNameEncrypted);
-          formData.append('cipherFileKey', cipherFileKey);
-          formData.append('mimeType', file.type);
-          formData.append('sha1Hash', sha1Hash);
-          if (contentHash) {
-            formData.append('contentHash', contentHash);
-          }
-          if (folderId) {
-            formData.append('folderId', folderId);
-          }
+    const ctrl = controlsRef.current.get(id) || {};
+    const speedTracker = ctrl.speedTracker || new SpeedTracker();
+    const abortController = new AbortController();
+    controlsRef.current.set(id, { ...ctrl, abortController, speedTracker, isPaused: false });
 
-          if (thumbnailData) {
-            formData.append('thumbSmall', thumbnailData.thumbSmallBase64);
-            formData.append('thumbMedium', thumbnailData.thumbMediumBase64);
-            formData.append('thumbLarge', thumbnailData.thumbLargeBase64);
-            formData.append('width', String(thumbnailData.width || 0));
-            formData.append('height', String(thumbnailData.height || 0));
-            if (thumbnailData.duration !== undefined) {
-              formData.append('duration', String(thumbnailData.duration));
-            }
-          }
+    uploadingCountRef.current++;
 
-          // Use unified upload endpoint (handles both with/without thumbnails)
-          const response = await api.post('/files/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            onUploadProgress: (progressEvent) => {
-              if (progressEvent.total) {
-                const percent = Math.round(
-                  (progressEvent.loaded * 100) / progressEvent.total
-                );
-                updateUpload(id, { progress: 50 + Math.round(percent * 0.5) });
-              }
-            },
-          });
+    const uploadWithRetry = async (attempt = 0) => {
+      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-          updateUpload(id, {
-            status: UploadStatus.COMPLETED,
-            progress: 100,
-            result: response.data,
-          });
+      updateUpload(id, {
+        status: attempt > 0 ? UploadStatus.RETRYING : UploadStatus.UPLOADING,
+        progress: 50,
+      });
 
-          // Notify parent immediately
-          if (onFileUploadedRef.current) {
-            onFileUploadedRef.current(response.data);
-          }
-
-          return true; // Success
-        } catch (error) {
-          const status = error.response?.status;
-          const isRetryable =
-            RETRY_CONFIG.retryableStatusCodes.includes(status);
-
-          if (isRetryable && attempt < RETRY_CONFIG.maxRetries) {
-            // Calculate delay with exponential backoff
-            let delayMs =
-              RETRY_CONFIG.initialDelayMs *
-              Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
-
-            // Check for Retry-After header (for 429 responses)
-            const retryAfter = error.response?.headers?.['retry-after'];
-            if (retryAfter) {
-              const retrySeconds = parseInt(retryAfter, 10);
-              if (!isNaN(retrySeconds)) {
-                delayMs = retrySeconds * 1000;
-                console.log(
-                  `[useUpload] Rate limited. Server requested retry after ${retrySeconds}s`
-                );
-              }
-            }
-
-            // Cap at max delay
-            delayMs = Math.min(delayMs, RETRY_CONFIG.maxDelayMs);
-
-            console.log(
-              `[useUpload] Upload failed (${status}), retrying in ${delayMs}ms (attempt ${
-                attempt + 1
-              }/${RETRY_CONFIG.maxRetries})`
-            );
-
-            updateUpload(id, {
-              status: UploadStatus.RETRYING,
-              error: `Retrying in ${Math.round(delayMs / 1000)}s... (attempt ${
-                attempt + 1
-              })`,
-            });
-
-            // Wait before retry
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-            // Retry
-            return uploadWithRetry(attempt + 1);
-          }
-
-          // Non-retryable error or max retries exceeded
-          throw error;
-        }
-      };
+      const formData = new FormData();
+      formData.append('file', encryptedBlob, 'encrypted');
+      formData.append('fileNameEncrypted', fileNameEncrypted);
+      formData.append('cipherFileKey', cipherFileKey);
+      formData.append('mimeType', file.type);
+      formData.append('sha1Hash', sha1Hash);
+      if (contentHash) formData.append('contentHash', contentHash);
+      if (folderId) formData.append('folderId', folderId);
+      if (thumbnailData) {
+        formData.append('thumbSmall', thumbnailData.thumbSmallBase64);
+        formData.append('thumbMedium', thumbnailData.thumbMediumBase64);
+        formData.append('thumbLarge', thumbnailData.thumbLargeBase64);
+        formData.append('width', String(thumbnailData.width || 0));
+        formData.append('height', String(thumbnailData.height || 0));
+        if (thumbnailData.duration !== undefined) formData.append('duration', String(thumbnailData.duration));
+      }
 
       try {
-        await uploadWithRetry();
-      } catch (error) {
-        console.error(`Upload failed for ${file.name}:`, error);
-        updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
-      } finally {
-        uploadingCountRef.current--;
-        processUploadQueue(); // Process next upload
-        checkIfAllDone();
-      }
-    },
-    [updateUpload, processUploadQueue, checkIfAllDone]
-  );
+        const response = await api.post('/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          signal: abortController.signal,
+          onUploadProgress: (e) => {
+            if (e.total) {
+              const bytesUp = e.loaded;
+              speedTracker.addSample(bytesUp);
+              const pct = 50 + Math.round((e.loaded * 50) / e.total);
+              throttledUpdate(id, {
+                progress: pct,
+                bytesUploaded: bytesUp,
+                speed: speedTracker.getSpeedBps(),
+                eta: speedTracker.getEtaSeconds(e.total - e.loaded),
+              });
+            }
+          },
+        });
 
-  // Keep refs updated for async access
+        updateUpload(id, {
+          status: UploadStatus.COMPLETED,
+          progress: 100,
+          bytesUploaded: encryptedBlob.size,
+          speed: 0,
+          eta: 0,
+          result: response.data,
+        });
+        if (onFileUploadedRef.current) onFileUploadedRef.current(response.data);
+      } catch (error) {
+        if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') throw error;
+
+        const status = error.response?.status;
+        if (RETRY_CONFIG.retryableStatusCodes.includes(status) && attempt < RETRY_CONFIG.maxRetries) {
+          let delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
+          const retryAfter = error.response?.headers?.['retry-after'];
+          if (retryAfter) {
+            const s = parseInt(retryAfter, 10);
+            if (!isNaN(s)) delayMs = s * 1000;
+          }
+          delayMs = Math.min(delayMs, RETRY_CONFIG.maxDelayMs);
+          updateUpload(id, { status: UploadStatus.RETRYING, error: `Retrying in ${Math.round(delayMs / 1000)}s...` });
+          await new Promise((r) => setTimeout(r, delayMs));
+          return uploadWithRetry(attempt + 1);
+        }
+        throw error;
+      }
+    };
+
+    try {
+      await uploadWithRetry();
+    } catch (error) {
+      if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+        // Paused or cancelled — don't mark as failed
+        return;
+      }
+      console.error(`Upload failed for ${file.name}:`, error);
+      updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
+    } finally {
+      uploadingCountRef.current--;
+      processUploadQueue();
+      checkIfAllDone();
+    }
+  }, [updateUpload, throttledUpdate, processUploadQueue, checkIfAllDone]);
+
+  // ─── Phase 2b: Chunked upload (large files, direct-to-B2) ──
+  const processChunkedUpload = useCallback(async (encryptedItem) => {
+    const {
+      id, file, encryptedBlob, fileNameEncrypted, cipherFileKey,
+      thumbnailData, contentHash, folderId,
+    } = encryptedItem;
+
+    const speedTracker = new SpeedTracker();
+    const abortController = new AbortController();
+    controlsRef.current.set(id, { abortController, speedTracker, isPaused: false, serverSessionId: null });
+
+    uploadingCountRef.current++;
+
+    try {
+      updateUpload(id, { status: UploadStatus.UPLOADING, progress: 50 });
+
+      const initialChunkSize = chooseInitialChunkSize(encryptedBlob.size);
+      const totalParts = calculateTotalParts(encryptedBlob.size, initialChunkSize);
+
+      // Start session on backend
+      const session = await fileService.startChunkedUpload({
+        fileNameEncrypted,
+        cipherFileKey,
+        mimeType: file.type || null,
+        totalBytes: encryptedBlob.size,
+        chunkSizeBytes: initialChunkSize,
+        totalParts,
+        contentHash: contentHash || undefined,
+        folderId: folderId || undefined,
+        width: thumbnailData?.width || undefined,
+        height: thumbnailData?.height || undefined,
+        duration: thumbnailData?.duration || undefined,
+      });
+
+      const serverSessionId = session.uploadId;
+      controlsRef.current.get(id).serverSessionId = serverSessionId;
+
+      updateUpload(id, {
+        chunksTotal: totalParts,
+        chunksCompleted: 0,
+        totalBytes: encryptedBlob.size,
+        bytesUploaded: 0,
+        serverSessionId,
+      });
+
+      // Persist to IndexedDB for resume
+      await uploadPersistence.saveSession(id, {
+        serverSessionId,
+        fileName: file.name,
+        fileSize: file.size,
+        totalParts,
+        chunkSizeBytes: initialChunkSize,
+        completedParts: [],
+        status: 'active',
+      });
+
+      let completedCount = 0;
+
+      const sha1Array = await uploadChunked({
+        serverSessionId,
+        b2FileId: session.b2FileId,
+        encryptedBlob,
+        totalParts,
+        initialChunkSize,
+        signal: abortController.signal,
+        onChunkProgress: (loaded, total) => {
+          const prevBytes = completedCount * initialChunkSize;
+          const currentBytes = Math.min(loaded, total);
+          speedTracker.addSample(prevBytes + currentBytes);
+
+          const totalUp = prevBytes + currentBytes;
+          const remaining = encryptedBlob.size - totalUp;
+          const pct = 50 + Math.round((totalUp / encryptedBlob.size) * 50);
+
+          throttledUpdate(id, {
+            progress: pct,
+            bytesUploaded: totalUp,
+            speed: speedTracker.getSpeedBps(),
+            eta: speedTracker.getEtaSeconds(remaining),
+          });
+        },
+        onChunkComplete: (partNumber) => {
+          completedCount++;
+          updateUpload(id, { chunksCompleted: completedCount });
+          uploadPersistence.saveSession(id, {
+            serverSessionId,
+            fileName: file.name,
+            fileSize: file.size,
+            totalParts,
+            chunkSizeBytes: initialChunkSize,
+            completedParts: Array.from({ length: completedCount }, (_, i) => i + 1),
+            status: 'active',
+          }).catch(() => {});
+        },
+        onTotalProgress: (totalBytesUploaded) => {
+          // Additional aggregate update if needed
+        },
+      });
+
+      // Complete: finish large file on backend + create File record
+      const completeData = { partSha1Array: sha1Array };
+      if (thumbnailData) {
+        completeData.thumbSmall = thumbnailData.thumbSmallBase64;
+        completeData.thumbMedium = thumbnailData.thumbMediumBase64;
+        completeData.thumbLarge = thumbnailData.thumbLargeBase64;
+      }
+
+      const result = await fileService.completeChunkedUpload(serverSessionId, completeData);
+
+      updateUpload(id, {
+        status: UploadStatus.COMPLETED,
+        progress: 100,
+        bytesUploaded: encryptedBlob.size,
+        speed: 0,
+        eta: 0,
+        result,
+      });
+
+      await uploadPersistence.removeSession(id);
+      if (onFileUploadedRef.current) onFileUploadedRef.current(result);
+
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        // Paused or cancelled — don't mark as failed
+        return;
+      }
+      console.error(`Chunked upload failed for ${file.name}:`, error);
+      updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
+    } finally {
+      uploadingCountRef.current--;
+      processUploadQueue();
+      checkIfAllDone();
+    }
+  }, [updateUpload, throttledUpdate, processUploadQueue, checkIfAllDone]);
+
+  // ─── Router: choose proxy vs chunked based on encrypted size ──
+  const processUpload = useCallback((encryptedItem) => {
+    if (encryptedItem.encryptedBlob.size >= CHUNKED_THRESHOLD) {
+      processChunkedUpload(encryptedItem);
+    } else {
+      processProxyUpload(encryptedItem);
+    }
+  }, [processChunkedUpload, processProxyUpload]);
+
+  // Keep refs updated
   useEffect(() => {
     processEncryptionRef.current = processEncryption;
     processUploadRef.current = processUpload;
   }, [processEncryption, processUpload]);
 
-  // Add files to upload
-  const uploadFiles = useCallback(
-    async (files, { folderId } = {}) => {
-      if (!masterKeyAvailable) {
-        throw new Error('Please unlock your vault first');
-      }
+  // ─── Public: add files ────────────────────────────────────
+  const uploadFiles = useCallback(async (files, { folderId } = {}) => {
+    if (!masterKeyAvailable) throw new Error('Please unlock your vault first');
 
-      const fileArray = Array.from(files);
-      const newUploads = new Map();
+    const fileArray = Array.from(files);
+    const newUploads = new Map();
 
-      fileArray.forEach((file) => {
-        const id = generateUUID();
-        const uploadInfo = {
-          id,
-          file,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          status: UploadStatus.PENDING,
-          progress: 0,
-          error: null,
-          result: null,
-          folderId: folderId || null,
-        };
-        newUploads.set(id, uploadInfo);
-        queueRef.current.push(uploadInfo);
+    fileArray.forEach((file) => {
+      const id = generateUUID();
+      const uploadInfo = {
+        id,
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: UploadStatus.PENDING,
+        progress: 0,
+        error: null,
+        result: null,
+        folderId: folderId || null,
+        bytesUploaded: 0,
+        totalBytes: file.size,
+        speed: 0,
+        eta: null,
+        chunksCompleted: 0,
+        chunksTotal: 0,
+        serverSessionId: null,
+      };
+      newUploads.set(id, uploadInfo);
+      controlsRef.current.set(id, {
+        abortController: new AbortController(),
+        speedTracker: new SpeedTracker(),
+        isPaused: false,
+        serverSessionId: null,
       });
+      queueRef.current.push(uploadInfo);
+    });
 
-      setUploads((prev) => new Map([...prev, ...newUploads]));
+    setUploads((prev) => new Map([...prev, ...newUploads]));
+    setIsUploading(true);
+    processEncryptionQueue();
+
+    return [...newUploads.keys()];
+  }, [masterKeyAvailable, processEncryptionQueue]);
+
+  // ─── Per-upload controls ──────────────────────────────────
+  const pauseUpload = useCallback((uploadId) => {
+    const ctrl = controlsRef.current.get(uploadId);
+    if (!ctrl) return;
+
+    ctrl.isPaused = true;
+    ctrl.abortController.abort();
+    updateUpload(uploadId, { status: UploadStatus.PAUSED });
+  }, [updateUpload]);
+
+  const resumeUpload = useCallback(async (uploadId) => {
+    const upload = uploads.get(uploadId);
+    const ctrl = controlsRef.current.get(uploadId);
+    if (!upload || !ctrl || upload.status !== UploadStatus.PAUSED) return;
+
+    // Create fresh abort controller
+    ctrl.abortController = new AbortController();
+    ctrl.isPaused = false;
+    ctrl.speedTracker.reset();
+
+    // For chunked uploads: re-enqueue with remaining chunks
+    if (upload.serverSessionId) {
+      updateUpload(uploadId, { status: UploadStatus.UPLOADING });
+
+      // Get server-confirmed state
+      try {
+        const status = await fileService.getUploadStatus(upload.serverSessionId);
+        const confirmedParts = new Set(status.completedParts.map((p) => p.partNumber));
+
+        // Re-start the chunked upload with skipParts
+        uploadingCountRef.current++;
+        const encryptedItem = {
+          id: uploadId,
+          file: upload.file,
+          encryptedBlob: upload.file, // Will need re-encryption — see note below
+          fileNameEncrypted: '', // Already stored on server session
+          cipherFileKey: '',
+          thumbnailData: null,
+          contentHash: null,
+          folderId: null,
+          serverSessionId: upload.serverSessionId,
+          resumeSkipParts: confirmedParts,
+        };
+
+        // For resume, we'd need the encrypted blob still in memory.
+        // If the blob is gone (tab was refreshed), we can't resume from this hook.
+        // The full resume-after-refresh flow is handled by useResumeUploads.
+        // Here we only handle pause/resume within the same session where the blob is still in memory.
+        if (!upload.file) {
+          updateUpload(uploadId, { status: UploadStatus.FAILED, error: 'File reference lost. Cannot resume.' });
+          uploadingCountRef.current--;
+          checkIfAllDone();
+          return;
+        }
+
+        // Re-queue for processing
+        updateUpload(uploadId, {
+          status: UploadStatus.UPLOADING,
+          chunksCompleted: confirmedParts.size,
+        });
+      } catch (err) {
+        updateUpload(uploadId, { status: UploadStatus.FAILED, error: 'Failed to resume: ' + err.message });
+      }
+    } else {
+      // Small file: re-encrypt and re-upload
+      const uploadInfo = { ...upload, status: UploadStatus.PENDING, progress: 0 };
+      queueRef.current.push(uploadInfo);
+      updateUpload(uploadId, { status: UploadStatus.PENDING, progress: 0 });
       setIsUploading(true);
-
-      // Start encryption queue processing
       processEncryptionQueue();
+    }
+  }, [uploads, updateUpload, processEncryptionQueue, checkIfAllDone]);
 
-      return [...newUploads.keys()];
-    },
-    [masterKeyAvailable, processEncryptionQueue]
-  );
+  const cancelUpload = useCallback(async (uploadId) => {
+    const ctrl = controlsRef.current.get(uploadId);
 
-  // Clear completed, duplicate and interrupted uploads
+    // Abort in-flight requests
+    if (ctrl) {
+      ctrl.abortController.abort();
+      controlsRef.current.delete(uploadId);
+    }
+
+    // Cancel server-side session (chunked uploads)
+    const upload = uploads.get(uploadId);
+    if (upload?.serverSessionId) {
+      fileService.cancelChunkedUpload(upload.serverSessionId).catch(() => {});
+    }
+
+    // Clean up IndexedDB
+    await uploadPersistence.removeSession(uploadId);
+
+    // Remove from UI
+    setUploads((prev) => {
+      const next = new Map(prev);
+      next.delete(uploadId);
+      return next;
+    });
+
+    checkIfAllDone();
+  }, [uploads, checkIfAllDone]);
+
+  // ─── Global controls ──────────────────────────────────────
+  const pauseAll = useCallback(() => {
+    uploads.forEach((upload, id) => {
+      if (upload.status === UploadStatus.UPLOADING || upload.status === UploadStatus.RETRYING) {
+        pauseUpload(id);
+      }
+    });
+  }, [uploads, pauseUpload]);
+
+  const resumeAll = useCallback(() => {
+    uploads.forEach((upload, id) => {
+      if (upload.status === UploadStatus.PAUSED) {
+        resumeUpload(id);
+      }
+    });
+  }, [uploads, resumeUpload]);
+
+  const cancelAll = useCallback(() => {
+    // Abort everything
+    controlsRef.current.forEach((ctrl) => ctrl.abortController.abort());
+    controlsRef.current.clear();
+
+    // Cancel server sessions
+    uploads.forEach((upload) => {
+      if (upload.serverSessionId) {
+        fileService.cancelChunkedUpload(upload.serverSessionId).catch(() => {});
+      }
+    });
+
+    queueRef.current = [];
+    uploadQueueRef.current = [];
+    encryptingCountRef.current = 0;
+    uploadingCountRef.current = 0;
+
+    setUploads(new Map());
+    setIsUploading(false);
+    uploadPersistence.clearAll().catch(() => {});
+  }, [uploads]);
+
   const clearCompleted = useCallback(() => {
     setUploads((prev) => {
       const newMap = new Map();
@@ -688,35 +703,37 @@ export function useUpload({ onFileUploaded } = {}) {
           newMap.set(id, upload);
         }
       });
-      // Clear sessionStorage if no uploads left
-      if (newMap.size === 0) {
-        clearUploadState();
-      }
       return newMap;
     });
   }, []);
 
-  // Clear ALL uploads (for close button)
   const clearAllUploads = useCallback(() => {
-    setUploads(new Map());
-    clearUploadState();
-  }, []);
+    cancelAll();
+  }, [cancelAll]);
 
-  // Retry failed uploads (note: interrupted uploads can't be retried - File is lost)
   const retryFailed = useCallback(() => {
     setUploads((prev) => {
       const newMap = new Map(prev);
       prev.forEach((upload, id) => {
         if (upload.status === UploadStatus.FAILED && upload.file) {
-          // Only retry if we still have the file reference
-          const resetUpload = {
+          const reset = {
             ...upload,
             status: UploadStatus.PENDING,
             progress: 0,
             error: null,
+            bytesUploaded: 0,
+            speed: 0,
+            eta: null,
+            chunksCompleted: 0,
           };
-          newMap.set(id, resetUpload);
-          queueRef.current.push(resetUpload);
+          newMap.set(id, reset);
+          controlsRef.current.set(id, {
+            abortController: new AbortController(),
+            speedTracker: new SpeedTracker(),
+            isPaused: false,
+            serverSessionId: null,
+          });
+          queueRef.current.push(reset);
         }
       });
       return newMap;
@@ -725,75 +742,55 @@ export function useUpload({ onFileUploaded } = {}) {
     processEncryptionQueue();
   }, [processEncryptionQueue]);
 
-  // Cancel all
-  const cancelAll = useCallback(() => {
-    queueRef.current = [];
-    uploadQueueRef.current = [];
-    encryptingCountRef.current = 0;
-    uploadingCountRef.current = 0;
-    setUploads(new Map());
-    setIsUploading(false);
-    clearUploadState(); // Clear sessionStorage
-  }, []);
-
-  // Calculate stats from uploads
+  // ─── Stats (single-pass for performance) ──────────────────
   const uploadsArray = [...uploads.values()];
+  let queued = 0, hashing = 0, encrypting = 0, uploading = 0, paused = 0;
+  let retrying = 0, interrupted = 0, duplicate = 0, completed = 0, failed = 0;
+  let active = 0, totalBytes = 0, totalBytesUploaded = 0, aggregateSpeed = 0;
+  let maxEta = 0, progressSum = 0;
+  const activeTasks = [];
+
+  for (const u of uploadsArray) {
+    progressSum += u.progress;
+    totalBytes += (u.totalBytes || u.size || 0);
+    totalBytesUploaded += (u.bytesUploaded || 0);
+
+    switch (u.status) {
+      case UploadStatus.PENDING: queued++; break;
+      case UploadStatus.HASHING: hashing++; active++; break;
+      case UploadStatus.ENCRYPTING: encrypting++; active++; break;
+      case UploadStatus.UPLOADING: uploading++; active++; aggregateSpeed += (u.speed || 0); if (u.eta > maxEta) maxEta = u.eta; break;
+      case UploadStatus.PAUSED: paused++; break;
+      case UploadStatus.RETRYING: retrying++; active++; break;
+      case UploadStatus.INTERRUPTED: interrupted++; failed++; break;
+      case UploadStatus.DUPLICATE: duplicate++; break;
+      case UploadStatus.COMPLETED: completed++; break;
+      case UploadStatus.FAILED: failed++; break;
+    }
+
+    if ([UploadStatus.HASHING, UploadStatus.ENCRYPTING, UploadStatus.UPLOADING, UploadStatus.RETRYING, UploadStatus.PAUSED].includes(u.status)) {
+      activeTasks.push({
+        id: u.id, name: u.name, status: u.status, progress: u.progress,
+        error: u.error, speed: u.speed, eta: u.eta,
+        chunksCompleted: u.chunksCompleted, chunksTotal: u.chunksTotal,
+        bytesUploaded: u.bytesUploaded, totalBytes: u.totalBytes || u.size,
+      });
+    }
+  }
+
   const stats = {
     total: uploads.size,
-    queued: uploadsArray.filter((u) => u.status === UploadStatus.PENDING)
-      .length,
-    hashing: uploadsArray.filter((u) => u.status === UploadStatus.HASHING)
-      .length,
-    encrypting: uploadsArray.filter((u) => u.status === UploadStatus.ENCRYPTING)
-      .length,
-    uploading: uploadsArray.filter((u) => u.status === UploadStatus.UPLOADING)
-      .length,
-    retrying: uploadsArray.filter((u) => u.status === UploadStatus.RETRYING)
-      .length,
-    interrupted: uploadsArray.filter(
-      (u) => u.status === UploadStatus.INTERRUPTED
-    ).length,
-    duplicate: uploadsArray.filter((u) => u.status === UploadStatus.DUPLICATE)
-      .length,
-    active: uploadsArray.filter(
-      (u) =>
-        u.status === UploadStatus.HASHING ||
-        u.status === UploadStatus.ENCRYPTING ||
-        u.status === UploadStatus.UPLOADING ||
-        u.status === UploadStatus.RETRYING
-    ).length,
-    completed: uploadsArray.filter((u) => u.status === UploadStatus.COMPLETED)
-      .length,
-    failed: uploadsArray.filter(
-      (u) =>
-        u.status === UploadStatus.FAILED ||
-        u.status === UploadStatus.INTERRUPTED
-    ).length,
-    overallProgress:
-      uploads.size > 0
-        ? Math.round(
-            uploadsArray.reduce((sum, u) => sum + u.progress, 0) / uploads.size
-          )
-        : 0,
-    activeTasks: uploadsArray
-      .filter(
-        (u) =>
-          u.status === UploadStatus.HASHING ||
-          u.status === UploadStatus.ENCRYPTING ||
-          u.status === UploadStatus.UPLOADING ||
-          u.status === UploadStatus.RETRYING ||
-          u.status === UploadStatus.INTERRUPTED
-      )
-      .map((u) => ({
-        id: u.id,
-        name: u.name,
-        status: u.status,
-        progress: u.progress,
-        error: u.error,
-      })),
+    queued, hashing, encrypting, uploading, paused, retrying,
+    interrupted, duplicate, completed, failed, active,
+    overallProgress: uploads.size > 0 ? Math.round(progressSum / uploads.size) : 0,
+    totalBytes,
+    totalBytesUploaded,
+    aggregateSpeed,
+    aggregateEta: aggregateSpeed > 0 ? (totalBytes - totalBytesUploaded) / aggregateSpeed : Infinity,
+    activeTasks,
     cpuCores: CPU_CORES,
     maxEncrypt: MAX_CONCURRENT_ENCRYPT,
-    maxUpload: MAX_CONCURRENT_UPLOAD,
+    maxUpload: MAX_CONCURRENT_PROXY_UPLOAD,
   };
 
   return {
@@ -805,30 +802,26 @@ export function useUpload({ onFileUploaded } = {}) {
     clearAllUploads,
     retryFailed,
     cancelAll,
+    pauseUpload,
+    resumeUpload,
+    cancelUpload,
+    pauseAll,
+    resumeAll,
   };
 }
 
-// Helper: Encrypt thumbnails and return base64 strings (backend expects base64)
+// ═══════════════════════════════════════════════════════════
+// Helper: Encrypt thumbnails → base64 (backend expects base64)
+// ═══════════════════════════════════════════════════════════
 async function encryptThumbnails(thumbs, masterKey, fileKey) {
   const smallData = await thumbs.small.arrayBuffer();
   const mediumData = await thumbs.medium.arrayBuffer();
   const largeData = await thumbs.large.arrayBuffer();
 
-  // Encrypt thumbnails with file key (unified approach)
-  const { encryptedData: smallEnc, iv: smallIv } = await encryptFile(
-    smallData,
-    fileKey  // Use file key instead of master key
-  );
-  const { encryptedData: mediumEnc, iv: mediumIv } = await encryptFile(
-    mediumData,
-    fileKey  // Use file key instead of master key
-  );
-  const { encryptedData: largeEnc, iv: largeIv } = await encryptFile(
-    largeData,
-    fileKey  // Use file key instead of master key
-  );
+  const { encryptedData: smallEnc, iv: smallIv } = await encryptFile(smallData, fileKey);
+  const { encryptedData: mediumEnc, iv: mediumIv } = await encryptFile(mediumData, fileKey);
+  const { encryptedData: largeEnc, iv: largeIv } = await encryptFile(largeData, fileKey);
 
-  // Combine IV + encrypted data and convert to base64
   const smallCombined = new Uint8Array(smallIv.length + smallEnc.byteLength);
   smallCombined.set(smallIv, 0);
   smallCombined.set(new Uint8Array(smallEnc), smallIv.length);

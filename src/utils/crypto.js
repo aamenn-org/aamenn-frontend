@@ -16,6 +16,28 @@
  * - Chrome 37+, Firefox 34+, Edge 79+
  */
 
+import {
+  arrayBufferToBase64,
+  generateRandomBytes,
+  computeSHA1,
+  computeSHA256,
+  generateAesKey,
+  encryptAesGcm,
+  encryptFile,
+  encryptFileKey,
+  encryptFilename,
+} from '../workers/crypto-primitives.js';
+
+export {
+  arrayBufferToBase64,
+  generateRandomBytes,
+  computeSHA1,
+  computeSHA256,
+  encryptFile,
+  encryptFileKey,
+  encryptFilename,
+};
+
 // KDF Configuration - must match backend expectations
 const KDF_CONFIG = {
   algorithm: 'pbkdf2',
@@ -26,13 +48,6 @@ const KDF_CONFIG = {
 // Debug logging - disabled in production
 const DEBUG = false;
 const log = (...args) => DEBUG && console.log('[Crypto]', ...args);
-
-// ==================== BROWSER DETECTION ====================
-
-/**
- * Detect Safari browser for workarounds
- */
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 /**
  * Check if Web Crypto API is available (requires secure context in modern browsers)
@@ -50,20 +65,6 @@ function isCryptoAvailable() {
 // ==================== UTILITIES ====================
 
 /**
- * Convert ArrayBuffer to Base64 string
- * Safari-compatible: chunked to avoid "Maximum call stack size exceeded"
- */
-export function arrayBufferToBase64(buffer) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const CHUNK_SIZE = 8192;
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i += CHUNK_SIZE) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.byteLength)));
-  }
-  return btoa(binary);
-}
-
-/**
  * Convert Base64 string to ArrayBuffer
  */
 export function base64ToArrayBuffer(base64) {
@@ -73,36 +74,7 @@ export function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-/**
- * Generate random bytes
- */
-export function generateRandomBytes(length) {
-  return crypto.getRandomValues(new Uint8Array(length));
-}
-
 // ==================== PRIVATE HELPERS ====================
-
-/**
- * Normalize input data to ArrayBuffer for SubtleCrypto (Safari-compatible)
- */
-async function _normalizeToBuffer(data, label) {
-  if (data instanceof ArrayBuffer) return data;
-  if (data instanceof Uint8Array) return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-  if (data.arrayBuffer) return data.arrayBuffer();
-  throw new Error(`Unsupported data type for ${label}`);
-}
-
-/**
- * AES-GCM encrypt plaintext with key. Returns base64(IV + ciphertext).
- */
-async function _aesGcmEncrypt(key, plaintext) {
-  const iv = generateRandomBytes(12);
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
-  const combined = new Uint8Array(12 + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), 12);
-  return arrayBufferToBase64(combined);
-}
 
 /**
  * AES-GCM decrypt base64(IV + ciphertext) with key. Returns ArrayBuffer.
@@ -110,13 +82,6 @@ async function _aesGcmEncrypt(key, plaintext) {
 async function _aesGcmDecrypt(key, base64) {
   const combined = new Uint8Array(base64ToArrayBuffer(base64));
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, key, combined.slice(12));
-}
-
-/**
- * Generate a random AES-256-GCM CryptoKey.
- */
-async function _generateAesKey() {
-  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 }
 
 /**
@@ -141,29 +106,6 @@ function _bytesToHexPhrase(bytes) {
   const groups = [];
   for (let i = 0; i < hex.length; i += 4) groups.push(hex.slice(i, i + 4));
   return groups.join('-');
-}
-
-// ==================== HASH FUNCTIONS ====================
-
-/**
- * Compute SHA-1 hash of data (for B2 upload verification)
- */
-export async function computeSHA1(data) {
-  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
-  const buffer = await _normalizeToBuffer(data, 'SHA-1');
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-1', buffer)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Compute SHA-256 hash of data (for duplicate detection)
- * Computed on ORIGINAL file content (before encryption) to detect duplicates.
- */
-export async function computeSHA256(data) {
-  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
-  const buffer = await _normalizeToBuffer(data, 'SHA-256');
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buffer)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ==================== KEY DERIVATION ====================
@@ -196,7 +138,7 @@ export async function deriveKEK(password, saltBase64) {
  *
  * @returns {Promise<CryptoKey>} - New master key
  */
-export const generateMasterKey = _generateAesKey;
+export const generateMasterKey = generateAesKey;
 
 /**
  * Encrypt Master Key with KEK. Returns: base64(IV + ciphertext)
@@ -207,7 +149,7 @@ export const generateMasterKey = _generateAesKey;
  */
 export async function encryptMasterKey(keyToEncrypt, wrappingKey) {
   const keyBytes = await crypto.subtle.exportKey('raw', keyToEncrypt);
-  return _aesGcmEncrypt(wrappingKey, keyBytes);
+  return encryptAesGcm(wrappingKey, keyBytes);
 }
 
 /**
@@ -239,20 +181,7 @@ export async function decryptMasterKey(encryptedMasterKeyBase64, kek) {
  *
  * @returns {Promise<CryptoKey>} - New file key
  */
-export const generateFileKey = _generateAesKey;
-
-/**
- * Encrypt a file with a file-specific key
- *
- * @param {ArrayBuffer} fileData - Raw file data
- * @param {CryptoKey} fileKey - File-specific encryption key
- * @returns {Promise<{encryptedData: ArrayBuffer, iv: Uint8Array}>}
- */
-export async function encryptFile(fileData, fileKey) {
-  const iv = generateRandomBytes(12);
-  const encryptedData = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, fileKey, fileData);
-  return { encryptedData, iv };
-}
+export const generateFileKey = generateAesKey;
 
 /**
  * Decrypt a file with a file-specific key
@@ -267,18 +196,6 @@ export async function decryptFile(encryptedData, fileKey, iv) {
 }
 
 /**
- * Encrypt file key with master key (for storage on server)
- *
- * @param {CryptoKey} fileKey - The file key to encrypt
- * @param {CryptoKey} masterKey - User's master key
- * @returns {Promise<string>} - Encrypted file key as base64 (IV + ciphertext)
- */
-export async function encryptFileKey(fileKey, masterKey) {
-  const fileKeyBytes = await crypto.subtle.exportKey('raw', fileKey);
-  return _aesGcmEncrypt(masterKey, fileKeyBytes);
-}
-
-/**
  * Decrypt file key with master key
  *
  * @param {string} encryptedFileKeyBase64 - Encrypted file key from server
@@ -290,17 +207,6 @@ export async function decryptFileKey(encryptedFileKeyBase64, masterKey) {
   return crypto.subtle.importKey(
     'raw', fileKeyBytes, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
   );
-}
-
-/**
- * Encrypt filename (stored encrypted on server)
- *
- * @param {string} filename - Original filename
- * @param {CryptoKey} masterKey - User's master key
- * @returns {Promise<string>} - Encrypted filename as base64
- */
-export async function encryptFilename(filename, masterKey) {
-  return _aesGcmEncrypt(masterKey, new TextEncoder().encode(filename));
 }
 
 /**
@@ -456,7 +362,7 @@ export async function generateRecoveryParams(masterKey) {
 
   const recoveryKek = await _deriveKekFromBytes(recoveryKeyBytes, recoverySaltBytes);
   const recoveryEncryptedMasterKey = await encryptMasterKey(masterKey, recoveryKek);
-  const encryptedRecoveryKey = await _aesGcmEncrypt(masterKey, recoveryKeyBytes);
+  const encryptedRecoveryKey = await encryptAesGcm(masterKey, recoveryKeyBytes);
 
   log('Recovery key params generated');
   return { recoveryPhrase, recoveryEncryptedMasterKey, recoverySalt, recoveryKdfParams: KDF_CONFIG, encryptedRecoveryKey };
@@ -511,7 +417,7 @@ export async function encryptContactField(plaintext, masterKey) {
   if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
   
   const plaintextBytes = new TextEncoder().encode(plaintext);
-  return _aesGcmEncrypt(masterKey, plaintextBytes);
+  return encryptAesGcm(masterKey, plaintextBytes);
 }
 
 /**
@@ -599,7 +505,7 @@ export async function generateShareKey(cipherFileKeyBase64, masterKey) {
   );
   
   // Re-encrypt the file key with the share key
-  const shareKey = await _aesGcmEncrypt(shareKeyForEncryption, fileKeyBytes);
+  const shareKey = await encryptAesGcm(shareKeyForEncryption, fileKeyBytes);
   
   return {
     shareKey, // base64, stored on server
@@ -660,7 +566,7 @@ export async function generateFolderShareKeys(files, masterKey, folderNameEncryp
   // Re-encrypt the folder name with the share key
   // Decrypt folder name with master key → plaintext bytes → re-encrypt with share key
   const folderNameBytes = await _aesGcmDecrypt(masterKey, folderNameEncrypted);
-  const shareKey = await _aesGcmEncrypt(shareKeyForEncryption, folderNameBytes);
+  const shareKey = await encryptAesGcm(shareKeyForEncryption, folderNameBytes);
 
   // Re-encrypt each file's key with the folder share key
   const fileKeys = {};
@@ -669,7 +575,7 @@ export async function generateFolderShareKeys(files, masterKey, folderNameEncryp
     // Decrypt file key with master key → raw file key bytes
     const fileKeyBytes = await _aesGcmDecrypt(masterKey, file.cipherFileKey);
     // Re-encrypt with folder share key
-    fileKeys[file.fileId] = await _aesGcmEncrypt(shareKeyForEncryption, fileKeyBytes);
+    fileKeys[file.fileId] = await encryptAesGcm(shareKeyForEncryption, fileKeyBytes);
   }
 
   return {

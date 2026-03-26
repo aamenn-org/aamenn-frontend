@@ -11,21 +11,7 @@
  */
 
 import { encode as encodeBlurhash } from 'blurhash';
-
-// Thumbnail sizes (must match main thread config)
-// Medium and Large share same dimensions but differ in JPEG quality
-const THUMBNAIL_SIZES = {
-  small: { width: 150, height: 150 },
-  medium: { width: 1600, height: 1600 }, // Same as large, lower quality
-  large: { width: 1600, height: 1600 },  // Same as medium, higher quality
-};
-
-// JPEG quality settings
-const THUMBNAIL_QUALITY = {
-  small: 0.30,  // Grid thumbnails - good quality
-  medium: 0.60, // Preview initial - lower quality, faster load
-  large: 0.90,  // Preview final - high quality
-};
+import { THUMBNAIL_SIZES, THUMBNAIL_QUALITY } from '../constants/thumbnails.js';
 
 /**
  * Create a thumbnail using OffscreenCanvas
