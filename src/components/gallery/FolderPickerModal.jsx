@@ -12,16 +12,15 @@ import {
   faTimes
 } from '@fortawesome/free-solid-svg-icons';
 
-const FolderPickerModal = ({ isOpen, onClose, onMoveToFolder, selectedCount = 0 }) => {
+const FolderPickerModal = ({ isOpen, onClose, onMoveToFolder, selectedCount = 0, initialFolderId = null }) => {
   const { getMasterKey, hasMasterKey } = useAuth();
-  const [currentFolderId, setCurrentFolderId] = useState(null);
+  const [currentFolderId, setCurrentFolderId] = useState(initialFolderId);
   const [folders, setFolders] = useState([]);
   const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [decryptedFolders, setDecryptedFolders] = useState([]);
   const [decryptedBreadcrumbs, setDecryptedBreadcrumbs] = useState([]);
 
-  // Fetch folders for current level
   useEffect(() => {
     if (!isOpen || !hasMasterKey()) return;
 

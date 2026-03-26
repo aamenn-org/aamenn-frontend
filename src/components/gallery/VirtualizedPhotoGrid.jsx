@@ -77,7 +77,7 @@ const LazyPhotoCard = ({
   }, []);
 
   return (
-    <div ref={ref} className="aspect-square">
+    <div ref={ref} className="aspect-square" data-select-id={`file:${file.fileId}`}>
       {hasBeenVisible ? (
         <PhotoCard
           file={file}

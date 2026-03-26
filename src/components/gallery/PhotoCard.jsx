@@ -16,7 +16,8 @@ import {
   faPlay, 
   faSpinner, 
   faSquareCheck, 
-  faHeart 
+  faHeart,
+  faCheck 
 } from '@fortawesome/free-solid-svg-icons';
 
 const PhotoCard = ({
@@ -251,15 +252,22 @@ const PhotoCard = ({
       className={`
         relative aspect-square overflow-hidden cursor-pointer
         transition-all duration-200 group bg-gray-200 dark:bg-zinc-700
+        rounded-lg
         ${
           isSelected
-            ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-50 dark:ring-offset-zinc-900'
+            ? 'border-2 border-blue-500'
             : ''
         }
       `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onView?.(file)}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+          onSelect?.(file);
+          return;
+        }
+        onView?.(file);
+      }}
       title="Hover to preload, click to view"
       draggable
       onDragStart={(e) => {
@@ -313,21 +321,17 @@ const PhotoCard = ({
               src={thumbnailUrl}
               alt="Photo"
               style={{
-                // Force complete coverage with slight overflow to prevent sub-pixel gaps
                 position: 'absolute',
-                top: '-1px',
-                left: '-1px',
-                right: '-1px',
-                width: 'calc(100% + 2px)',
-                height: 'calc(100% + 2px)',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
                 objectFit: 'cover',
-                // Force GPU rendering to avoid sub-pixel artifacts
-                transform: 'translateZ(0)',
                 backfaceVisibility: 'hidden',
               }}
               className={`
                 z-10 transition-all duration-300
-                group-hover:scale-105
+                ${isSelected ? '' : ''}
                 ${imageLoaded ? 'opacity-100' : 'opacity-0'}
               `}
               onLoad={() => setImageLoaded(true)}
@@ -376,31 +380,39 @@ const PhotoCard = ({
       {/* Selection Checkbox */}
       <div
         className={`
-          absolute top-2 start-2 w-6 h-6 border-2 z-30
+          absolute top-2 start-2 w-3 h-3 z-30
           flex items-center justify-center
           transition-all duration-200
           ${
-            isSelected
-              ? 'bg-blue-500 border-blue-500'
-              : isHovered
-              ? 'bg-black/50 border-white/50'
-              : 'opacity-0'
+            isSelected || isHovered ? 'opacity-100' : 'opacity-0'
           }
         `}
         onClick={(e) => {
           e.stopPropagation();
           onSelect?.(file);
         }}
+        style={{
+          width: 19,
+          height: 19,
+          borderRadius: '50%',
+          border: isSelected ? '1.5px solid #378ADD' : '1.5px solid rgba(0,0,0,0.22)',
+          background: isSelected ? '#378ADD' : 'white',
+        }}
       >
         {isSelected && (
-          <FontAwesomeIcon icon={faSquareCheck} className="w-4 h-4 text-white" />
+          <FontAwesomeIcon 
+            icon={faCheck} 
+            className="text-white" 
+            style={{ width: 10, height: 10 }} 
+          />
         )}
       </div>
 
       {/* Favorite Button */}
       <button
+        data-no-select
         className={`
-          absolute top-2 end-2 w-7 h-7  z-30
+          absolute top-2 end-2 w-7 h-7 rounded-full z-30
           flex items-center justify-center
           transition-all duration-200
           ${

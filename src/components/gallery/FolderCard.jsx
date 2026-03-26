@@ -65,7 +65,10 @@ const FolderCard = ({
   const iconColor = isDragOver || isSelected ? '#378ADD' : '#EF9F27';
 
   const handleClick = useCallback((e) => {
-    if (isSelected) { onSelect?.(folder); return; }
+    if (e.ctrlKey || e.metaKey || e.shiftKey || isSelected) {
+      onSelect?.(folder);
+      return;
+    }
     onOpen?.(folder);
   }, [isSelected, folder, onSelect, onOpen]);
 
@@ -98,6 +101,7 @@ const FolderCard = ({
     tabIndex: 0,
     'aria-label': `Folder: ${displayName}`,
     'aria-selected': isSelected,
+    'data-select-id': `folder:${folder.folderId}`,
     onClick: handleClick,
     onKeyDown: (e) => e.key === 'Enter' && handleClick(e),
     onMouseEnter: () => setIsHovered(true),
@@ -108,7 +112,7 @@ const FolderCard = ({
     onDragOver: handleDragOver,
     onDragLeave: (e) => { e.preventDefault(); e.stopPropagation(); },
     onDrop: handleDrop,
-  }), [displayName, isSelected, handleClick, handleDragStart, handleDragOver, handleDrop]);
+  }), [displayName, isSelected, folder.folderId, handleClick, handleDragStart, handleDragOver, handleDrop]);
 
   const sharedStyles = useMemo(() => ({
     background: isDragOver ? 'rgba(55,138,221,0.08)' : isSelected ? 'rgba(55,138,221,0.07)' : isHovered ? 'var(--color-background-tertiary, #f0f0ee43)' : 'var(--color-background-secondary, #ffffff0c)',

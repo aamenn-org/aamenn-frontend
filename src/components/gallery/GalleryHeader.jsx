@@ -4,123 +4,111 @@ import {
   faFolderPlus, 
   faShare, 
   faTrash, 
-  faCloudUpload
+  faCloudUpload,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 
 const GalleryHeader = ({
   selectedCount = 0,
+  selectedFilesCount = 0,
+  selectedFoldersCount = 0,
   onUpload,
+  onNewFolder,
+  showNewFolder = false,
   onDelete,
   onAddToAlbum,
   onShare,
+  onClearSelection,
   storageBar,
   hideUploadOnMobile = false,
 }) => {
   const { t } = useTranslation('photos');
 
+  // Build smart label: "3 files", "2 folders", "2 files + 1 folder", etc.
+  const selectionLabel = (() => {
+    const parts = [];
+    if (selectedFilesCount > 0) parts.push(`${selectedFilesCount} file${selectedFilesCount > 1 ? 's' : ''}`);
+    if (selectedFoldersCount > 0) parts.push(`${selectedFoldersCount} folder${selectedFoldersCount > 1 ? 's' : ''}`);
+    return parts.join(' + ') || `${selectedCount} selected`;
+  })();
+
+  // Show Move whenever anything is selected — picker handles both files and folders
+  const showMove = selectedCount > 0;
+  // Only show Rename if exactly 1 folder selected and no files
+  const showShare = selectedCount > 0;
+
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-2 md:mb-6">
-      <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-        {selectedCount > 0 && (
-          <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-            {t('selected', '{{count}} selected', { count: selectedCount })}
-          </span>
+    <>
+      {/* Top bar: storage info + action buttons */}
+      <div className="flex items-center justify-between gap-3 mb-2 md:mb-6">
+        <div className="flex-1">{storageBar}</div>
+        <div className="flex items-center gap-2">
+          {showNewFolder && onNewFolder && (
+            <button
+              onClick={onNewFolder}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors whitespace-nowrap"
+            >
+              <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4" />
+              <span className="hidden sm:inline">New Folder</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Floating bottom action bar — slides up when items are selected */}
+      <div
+        data-no-select
+        className={`
+          fixed bottom-6 left-1/2 -translate-x-1/2 z-50
+          flex items-center gap-1 px-2 py-2
+          bg-zinc-900 dark:bg-zinc-800 text-white
+          rounded-2xl shadow-2xl border border-white/10
+          transition-all duration-300 ease-out
+          ${selectedCount > 0
+            ? 'opacity-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 translate-y-6 pointer-events-none'}
+        `}
+      >
+        {/* Smart count label */}
+        <span className="px-3 py-1.5 text-sm font-medium text-zinc-300 whitespace-nowrap border-r border-white/10 mr-1">
+          {selectionLabel}
+        </span>
+
+        {/* Move to folder — only for files */}
+        {showMove && (
+          <ActionButton icon={faFolderPlus} label="Move" onClick={onAddToAlbum} color="text-purple-400 hover:text-purple-300 hover:bg-purple-500/20" />
         )}
-        {storageBar}
+
+        {/* Share */}
+        {showShare && onShare && (
+          <ActionButton icon={faShare} label="Share" onClick={onShare} color="text-green-400 hover:text-green-300 hover:bg-green-500/20" />
+        )}
+
+        {/* Delete */}
+        <ActionButton icon={faTrash} label="Delete" onClick={onDelete} color="text-red-400 hover:text-red-300 hover:bg-red-500/20" />
+
+        {/* Divider + close */}
+        <div className="w-px h-6 bg-white/10 mx-1" />
+        <button
+          onClick={onClearSelection}
+          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+          aria-label="Clear selection"
+        >
+          <FontAwesomeIcon icon={faXmark} className="w-4 h-4" />
+        </button>
       </div>
-
-      <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-        {/* Desktop: Full buttons */}
-        <div className="hidden sm:flex items-center gap-2">
-          {selectedCount > 0 && (
-            <button
-              onClick={onAddToAlbum}
-              className="inline-flex items-center px-4 py-2 bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-colors whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4 mr-2" />
-              Add to Folder
-            </button>
-          )}
-
-          {selectedCount > 0 && onShare && (
-            <button
-              onClick={onShare}
-              className="inline-flex items-center px-4 py-2 bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-colors whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faShare} className="w-4 h-4 mr-2" />
-              {t('share', 'Share')}
-            </button>
-          )}
-
-          {selectedCount > 0 && (
-            <button
-              onClick={onDelete}
-              className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faTrash} className="w-4 h-4 mr-2" />
-              {t('delete', 'Delete')}
-            </button>
-          )}
-
-          {!hideUploadOnMobile && (
-            <button
-              onClick={onUpload}
-              className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
-              {t('uploadFiles', 'Upload')}
-            </button>
-          )}
-        </div>
-
-        {/* Mobile: Icon-only buttons + Dropdown for selected actions */}
-        <div className="flex sm:hidden items-center gap-2 w-full justify-end">
-          {selectedCount > 0 && (
-            <>
-              {/* Icon-only Add to Folder */}
-              <button
-                onClick={onAddToAlbum}
-                className="p-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors"
-                aria-label="Add to Folder"
-              >
-                <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4" />
-              </button>
-
-              {/* Icon-only Share */}
-              {onShare && (
-                <button
-                  onClick={onShare}
-                  className="p-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                  aria-label={t('share', 'Share')}
-                >
-                  <FontAwesomeIcon icon={faShare} className="w-4 h-4" />
-                </button>
-              )}
-
-              {/* Icon-only Delete */}
-              <button
-                onClick={onDelete}
-                className="p-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                aria-label={t('delete', 'Delete')}
-              >
-                <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
-              </button>
-            </>
-          )}
-
-          {!hideUploadOnMobile && (
-            <button
-              onClick={onUpload}
-              className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              aria-label={t('uploadFiles', 'Upload')}
-            >
-              <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </>
   );
 };
+
+const ActionButton = ({ icon, label, onClick, color }) => (
+  <button
+    onClick={onClick}
+    className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors ${color}`}
+  >
+    <FontAwesomeIcon icon={icon} className="w-4 h-4" />
+    <span className="text-[10px] font-medium leading-none">{label}</span>
+  </button>
+);
 
 export default GalleryHeader;

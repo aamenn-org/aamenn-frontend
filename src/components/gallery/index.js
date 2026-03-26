@@ -19,3 +19,4 @@ export { default as ContactsSection } from './ContactsSection';
 export { default as FolderCard } from './FolderCard';
 export { default as Breadcrumbs } from './Breadcrumbs';
 export { default as FolderPickerModal } from './FolderPickerModal';
+export { default as SelectionArea } from './SelectionArea';
