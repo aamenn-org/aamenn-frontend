@@ -46,7 +46,7 @@ const GalleryHeader = ({
           {showNewFolder && onNewFolder && (
             <button
               onClick={onNewFolder}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors whitespace-nowrap"
             >
               <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4" />
               <span className="hidden sm:inline">New Folder</span>
@@ -76,16 +76,16 @@ const GalleryHeader = ({
 
         {/* Move to folder — only for files */}
         {showMove && (
-          <ActionButton icon={faFolderPlus} label="Move" onClick={onAddToAlbum} color="text-purple-400 hover:text-purple-300 hover:bg-purple-500/20" />
+          <ActionButton icon={faFolderPlus} label="Move" onClick={onAddToAlbum} color="text-zinc-300 hover:text-zinc-200 hover:bg-zinc-300/20" />
         )}
 
         {/* Share */}
         {showShare && onShare && (
-          <ActionButton icon={faShare} label="Share" onClick={onShare} color="text-green-400 hover:text-green-300 hover:bg-green-500/20" />
+          <ActionButton icon={faShare} label="Share" onClick={onShare} color="text-zinc-300 hover:text-zinc-200 hover:bg-zinc-300/20" />
         )}
 
         {/* Delete */}
-        <ActionButton icon={faTrash} label="Delete" onClick={onDelete} color="text-red-400 hover:text-red-300 hover:bg-red-500/20" />
+        <ActionButton icon={faTrash} label="Delete" onClick={onDelete} color="text-zinc-300 hover:text-zinc-200 hover:bg-zinc-300/20" />
 
         {/* Divider + close */}
         <div className="w-px h-6 bg-white/10 mx-1" />

@@ -805,7 +805,7 @@ const Dashboard = () => {
                 <button
                   onClick={() => setShowCreateFolderModal(true)}
                   disabled={!hasMasterKey()}
-                  className="inline-flex items-center px-3 py-2 bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
+                  className="inline-flex items-center px-3 py-2 bg-zinc-300 text-zinc-900 text-xs font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
                 >
                   <FontAwesomeIcon icon={faFolderPlus} className="w-3 h-3 mr-1" />
                   New
@@ -813,7 +813,7 @@ const Dashboard = () => {
               )}
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
+                className="inline-flex items-center px-3 py-2 bg-zinc-300 text-zinc-900 text-xs font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 mr-1" />
                 Upload
@@ -830,7 +830,7 @@ const Dashboard = () => {
                   <button
                     onClick={() => setShowCreateFolderModal(true)}
                     disabled={!hasMasterKey()}
-                    className="inline-flex items-center px-4 py-2 bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
+                    className="inline-flex items-center px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
                   >
                     <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4 mr-2" />
                     New Folder
@@ -838,10 +838,10 @@ const Dashboard = () => {
                 )}
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
+                  className="inline-flex items-center px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
                 >
                   <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
-                  Upload Files
+                  Upload
                 </button>
                 <GridSizeControl
                   size={gridSize}
@@ -919,7 +919,7 @@ const Dashboard = () => {
                   <div className="flex gap-3">
                     <button
                       onClick={() => setShowUploadModal(true)}
-                      className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+                      className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
                     >
                       <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
                       Upload Files
@@ -927,7 +927,7 @@ const Dashboard = () => {
                     <button
                       onClick={() => setShowCreateFolderModal(true)}
                       disabled={!hasMasterKey()}
-                      className="inline-flex items-center px-6 py-3 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
                     >
                       <FontAwesomeIcon icon={faFolderPlus} className="w-5 h-5 mr-2" />
                       New Folder
@@ -972,7 +972,7 @@ const Dashboard = () => {
                   </p>
                   <button
                     onClick={() => setShowUploadModal(true)}
-                    className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+                    className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
                   >
                     <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
                     Upload Photos
@@ -1018,7 +1018,7 @@ const Dashboard = () => {
                   </p>
                   <button
                     onClick={() => setShowUploadModal(true)}
-                    className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+                    className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
                   >
                     <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
                     Upload Files
