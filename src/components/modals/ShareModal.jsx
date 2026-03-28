@@ -148,13 +148,13 @@ const ShareModal = ({ isOpen, onClose, items }) => {
                     <option value="weeks">Weeks</option>
                   </select>
                 </div>
-<p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Leave empty for no expiration
                 </p>
               </div>
  
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className=" p-3 rounded-lg">
+                <p className="text-sm">
                   <strong>Public Access:</strong> Anyone with the link can view and download.
                   The link includes a decryption key for secure access.
                 </p>
