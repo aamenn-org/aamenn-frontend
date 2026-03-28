@@ -3,40 +3,43 @@ import { DashboardNavbar } from '../../components/layout';
 import { shareService } from '../../services';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faShareNodes } from '@fortawesome/free-solid-svg-icons';
-
+ 
 const Shared = () => {
   const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-
+ 
   useEffect(() => {
     loadShares();
   }, [page]);
-
+ 
   const loadShares = async () => {
     try {
       setLoading(true);
       const response = await shareService.listShares({ page, limit: 20 });
-      setShares(response.data.shares || []);
-      setTotalPages(response.data.pagination?.totalPages || 1);
+      setShares(response.shares || []);
+      setTotalPages(response.pagination?.totalPages || 1);
     } catch (error) {
       console.error('Failed to load shares:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const handleCopyLink = (url) => {
-    navigator.clipboard.writeText(url);
-    alert('Link copied to clipboard!');
+ 
+  const handleCopyLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      alert('Copy failed — please copy the link manually.');
+    }
   };
-
+ 
   const handleRevoke = async (shareId) => {
     if (!window.confirm('Revoke this share link? It will no longer be accessible.')) {
       return;
     }
-
+ 
     try {
       await shareService.revokeShare(shareId);
       await loadShares();
@@ -45,7 +48,7 @@ const Shared = () => {
       alert('Failed to revoke share link');
     }
   };
-
+ 
   const getStatusBadge = (status) => {
     const styles = {
       active: 'bg-green-100 text-green-800',
@@ -58,21 +61,21 @@ const Shared = () => {
       </span>
     );
   };
-
+ 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <DashboardNavbar />
-
+ 
       <main className="flex-1 pt-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900">Your Share Links</h1>
             <p className="text-gray-500 mt-1">
-              Manage your shared files and albums
+              Manage your shared files and folders
             </p>
           </div>
-
+ 
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -86,7 +89,7 @@ const Shared = () => {
                 No share links yet
               </h3>
               <p className="text-gray-500 mb-6 text-center max-w-md">
-                Create share links from your files or albums to share them with others.
+                Create share links from your files or folders to share them with others.
               </p>
             </div>
           ) : (
@@ -95,7 +98,7 @@ const Shared = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
+                      Items
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Link
@@ -118,7 +121,7 @@ const Shared = () => {
                   {shares.map((share) => (
                     <tr key={share.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {share.resourceType}
+                        {share.items?.length ?? 0} {(share.items?.length ?? 0) === 1 ? 'item' : 'items'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <code className="text-xs bg-gray-100 px-2 py-1 rounded">
@@ -156,7 +159,7 @@ const Shared = () => {
                   ))}
                 </tbody>
               </table>
-
+ 
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
@@ -211,5 +214,5 @@ const Shared = () => {
     </div>
   );
 };
-
+ 
 export default Shared;
