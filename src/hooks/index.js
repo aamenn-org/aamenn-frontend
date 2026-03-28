@@ -7,4 +7,4 @@ export { useDecryptedBlobUrl } from './useDecryptedBlobUrl';
 export { default as useImageRotation } from './useImageRotation';
 export { useVaultState } from './useVaultState';
 export { useSelection } from './useSelection';
-export { useShareViewer } from './useShareViewer'
+export { useShareViewer } from './useShareViewer';

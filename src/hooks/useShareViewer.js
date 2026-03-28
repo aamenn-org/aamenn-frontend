@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { shareService } from '../services';
 import { importShareKeyRaw } from '../utils/crypto';
- 
+
 /**
  * useShareViewer — Manages all state for a public share link.
  *
@@ -36,29 +36,29 @@ export function useShareViewer(slug) {
   const [fileKeys, setFileKeys] = useState({});
   const [navStack, setNavStack] = useState([]);
   const [previewFile, setPreviewFile] = useState(null);
- 
+
   const currentLevel = navStack[navStack.length - 1] ?? null;
- 
+
   useEffect(() => {
     let cancelled = false;
- 
+
     async function loadShare() {
       try {
         setLoading(true);
         setError(null);
- 
+
         const fragment = window.location.hash.substring(1);
         const params = new URLSearchParams(fragment);
         const shareKeyRaw = params.get('k');
         if (!shareKeyRaw) throw new Error('Share key missing from URL');
- 
+
         // Import the raw share key bytes as an extractable CryptoKey.
         // Must be done ONCE here to produce a stable object reference —
         // crypto.service._getMasterKeyBytes caches by object identity (===).
         const importedKey = await importShareKeyRaw(shareKeyRaw);
- 
+
         const data = await shareService.resolveShare(slug);
- 
+
         if (!cancelled) {
           setShareKey(importedKey);
           setFileKeys(data.fileKeys || {});
@@ -74,13 +74,13 @@ export function useShareViewer(slug) {
         }
       }
     }
- 
+
     loadShare();
     return () => {
       cancelled = true;
     };
   }, [slug]);
- 
+
   const handleFolderClick = useCallback(
     async (folder) => {
       try {
@@ -99,11 +99,11 @@ export function useShareViewer(slug) {
     },
     [slug],
   );
- 
+
   const handleBreadcrumbClick = useCallback((index) => {
     setNavStack((prev) => prev.slice(0, index + 1));
   }, []);
- 
+
   return {
     loading,
     error,
@@ -117,5 +117,5 @@ export function useShareViewer(slug) {
     handleBreadcrumbClick,
   };
 }
- 
+
 export default useShareViewer;
