@@ -4,7 +4,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faXmark, 
   faCloudUpload, 
-  faTrash 
+  faTrash,
+  faFileVideo,
+  faFilePdf,
+  faFileWord,
+  faFileLines,
+  faFile,
 } from '@fortawesome/free-solid-svg-icons';
 
 const UploadModal = ({ isOpen, onClose, onUpload }) => {
@@ -81,9 +86,19 @@ const removeFile = (index) => {
     });
   };
 
-const generatePreviews = (newFiles) => {
+const getFileIcon = (file) => {
+    if (file.type.startsWith('video/')) return faFileVideo;
+    if (file.type === 'application/pdf') return faFilePdf;
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return faFileWord;
+    if (file.type.startsWith('text/')) return faFileLines;
+    return faFile;
+  };
+
+  const generatePreviews = (newFiles) => {
     newFiles.forEach((file) => {
-      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
+      // Only generate previews for images — rendering a video/doc blob URL
+      // inside <img> causes a broken icon and can crash iOS Safari WebView.
+      if (!file.type.startsWith('image/')) return;
       const tempUrl = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
@@ -108,6 +123,10 @@ const generatePreviews = (newFiles) => {
     setUploading(true);
     try {
       await onUpload(files, (progress) => setProgress(progress));
+      // Revoke all object URLs before clearing files
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current.clear();
+      setPreviews(new Map());
       setFiles([]);
       onClose();
     } catch (error) {
@@ -179,15 +198,22 @@ const generatePreviews = (newFiles) => {
                 className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-zinc-700 mb-2"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gray-200 dark:bg-zinc-600 overflow-hidden">
-<img
-                    src={previews.get(file) || getObjectUrl(file)}
-                    alt={file.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
-                  </div>
+                  <div className="w-10 h-10 bg-gray-200 dark:bg-zinc-600 overflow-hidden flex items-center justify-center">
+                  {previews.get(file) ? (
+                    <img
+                      src={previews.get(file)}
+                      alt={file.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <FontAwesomeIcon
+                      icon={file.type.startsWith('image/') ? faFile : getFileIcon(file)}
+                      className="w-5 h-5 text-gray-400 dark:text-gray-500"
+                    />
+                  )}
+                </div>
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]">
                       {file.name}
