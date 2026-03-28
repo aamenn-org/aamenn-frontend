@@ -151,7 +151,11 @@ function initThumbnailWorker() {
     };
 
     thumbnailWorker.onerror = (err) => {
-      console.error('[ThumbnailWorker] Worker error:', err);
+      console.error('[ThumbnailWorker] Worker crashed — rejecting all pending tasks:', err);
+      pendingTasks.forEach((task) => task.reject(new Error('Thumbnail worker crashed')));
+      pendingTasks.clear();
+      thumbnailWorker = null;
+      thumbnailWorkerReady = false;
     };
   } catch (err) {
     console.warn('[ThumbnailWorker] Failed to create worker:', err);
@@ -173,9 +177,19 @@ async function generateThumbnailsInWorker(file) {
 
   return new Promise((resolve, reject) => {
     const id = nextTaskId++;
-    pendingTasks.set(id, { resolve, reject });
 
-    // Send the file blob directly - createImageBitmap can handle it
+    const timeoutId = setTimeout(() => {
+      if (pendingTasks.has(id)) {
+        pendingTasks.delete(id);
+        reject(new Error('Thumbnail generation timed out'));
+      }
+    }, 30000);
+
+    pendingTasks.set(id, {
+      resolve: (result) => { clearTimeout(timeoutId); resolve(result); },
+      reject: (err) => { clearTimeout(timeoutId); reject(err); },
+    });
+
     thumbnailWorker.postMessage({
       type: 'GENERATE_THUMBNAILS',
       id,

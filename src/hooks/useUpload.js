@@ -284,8 +284,8 @@ let fileData;
           const thumbs = await handler.generateThumbnails(file);
           thumbnailData = await encryptThumbnails(thumbs, masterKey, fileKey);
         } catch (e) {
-          console.warn(`${fileType} thumbnail generation failed:`, e);
-          throw new Error(`Thumbnail generation failed for ${fileType} ${file.name}: ${e.message}`);
+          console.warn(`${fileType} thumbnail generation failed — uploading without thumbnails:`, e);
+          thumbnailData = null;
         }
       }
       updateUpload(id, { progress: 45 });
