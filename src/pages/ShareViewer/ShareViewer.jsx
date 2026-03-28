@@ -1,217 +1,281 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { shareService } from '../../services';
-import { decryptFileKeyWithShareKey, decryptTextWithShareKey } from '../../utils/crypto';
+import { thumbnailCache } from '../../services/cache/thumbnail-cache';
+import { useShareViewer } from '../../hooks';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTriangleExclamation, faXmark, faDownload, faCircleExclamation, faImage, faFolder, faFile } from '@fortawesome/free-solid-svg-icons';
+import {
+  faTriangleExclamation,
+  faXmark,
+  faDownload,
+  faCircleExclamation,
+  faImage,
+  faFolder,
+  faFile,
+  faChevronRight,
+  faHouse,
+} from '@fortawesome/free-solid-svg-icons';
 
-// Component that decrypts and displays a single shared file thumbnail
-const SharedFileThumbnail = ({ file, shareKeyRaw, encryptedFileKey }) => {
-  const [blobUrl, setBlobUrl] = useState(null);
+// ─── Thumbnail: uses thumbnailCache (L1 memory → L2 IndexedDB → worker decrypt) ─
+/**
+ * Renders a decrypted thumbnail for a shared file.
+ *
+ * Uses the same `thumbnailCache.getThumbnailWithPriority` as the dashboard —
+ * the share key CryptoKey is passed as the `masterKey` argument, which the cache
+ * and worker treat identically to the user's master key.
+ *
+ * On second view the blob URL is served instantly from L1 memory (LRU, 3000 items).
+ * On page refresh it is served from L2 IndexedDB — no network round-trip.
+ */
+const SharedFileThumbnail = ({ file, shareKey, encryptedFileKey }) => {
+  const [blobUrl, setBlobUrl] = useState(
+    // Synchronous L1 check: zero async overhead for already-seen items
+    () => thumbnailCache.getSmallThumbnailFromMemory(file.fileId),
+  );
   const [decrypting, setDecrypting] = useState(false);
   const [failed, setFailed] = useState(false);
+  const abortRef = useRef(null);
 
   useEffect(() => {
-    if (!file.thumbSmallUrl || !shareKeyRaw || !encryptedFileKey) return;
-    if (!file.mimeType?.startsWith('image/')) return;
+    // Non-image files show a placeholder; thumbnails without a URL are skipped
+    if (!file.thumbSmallUrl || !shareKey || !encryptedFileKey) return;
+    if (!file.mimeType?.startsWith('image/') && !file.mimeType?.startsWith('video/')) return;
 
-    let cancelled = false;
+    // Already in L1 — synchronous path already handled by useState initializer
+    if (thumbnailCache.getSmallThumbnailFromMemory(file.fileId)) return;
 
-    const decrypt = async () => {
-      try {
-        setDecrypting(true);
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-        // Decrypt file key using folder share key
-        const fileKey = await decryptFileKeyWithShareKey(shareKeyRaw, encryptedFileKey);
+    setDecrypting(true);
 
-        // Download encrypted thumbnail
-        const response = await fetch(file.thumbSmallUrl);
-        if (!response.ok) throw new Error('Download failed');
-        const encryptedData = await response.arrayBuffer();
-
-        // Decrypt thumbnail: first 12 bytes = IV, rest = ciphertext
-        const encArray = new Uint8Array(encryptedData);
-        const iv = encArray.slice(0, 12);
-        const ciphertext = encArray.slice(12);
-        const decryptedData = await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv },
-          fileKey,
-          ciphertext
-        );
-
-        if (!cancelled) {
-          const blob = new Blob([decryptedData], { type: 'image/jpeg' });
-          setBlobUrl(URL.createObjectURL(blob));
+    thumbnailCache
+      .getThumbnailWithPriority(file.fileId, file.thumbSmallUrl, shareKey, encryptedFileKey, {
+        priority: 'high',
+        signal: controller.signal,
+      })
+      .then((url) => {
+        if (!controller.signal.aborted) {
+          setBlobUrl(url);
+          setDecrypting(false);
         }
-      } catch {
-        if (!cancelled) setFailed(true);
-      } finally {
-        if (!cancelled) setDecrypting(false);
-      }
-    };
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        setFailed(true);
+        setDecrypting(false);
+      });
 
-    decrypt();
+    return () => controller.abort();
+  }, [file.fileId, file.thumbSmallUrl, file.mimeType, shareKey, encryptedFileKey]);
 
-    return () => {
-      cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [file.thumbSmallUrl, shareKeyRaw, encryptedFileKey]);
-
-  if (decrypting) {
+  if (decrypting && !blobUrl) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+      <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-zinc-800">
         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
       </div>
     );
   }
-
   if (blobUrl) {
     return <img src={blobUrl} alt="" className="w-full h-full object-cover" />;
   }
-
   return (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-      <FontAwesomeIcon icon={failed ? faFile : faImage} className="w-10 h-10 text-gray-300" />
+    <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-zinc-800">
+      <FontAwesomeIcon
+        icon={failed ? faFile : faImage}
+        className="w-10 h-10 text-gray-300 dark:text-zinc-600"
+      />
     </div>
   );
 };
 
-const ShareViewer = () => {
-  const { slug } = useParams();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [shareData, setShareData] = useState(null);
-  const [shareKeyRaw, setShareKeyRaw] = useState(null);
-  const [decryptedFilename, setDecryptedFilename] = useState(null);
-  const [fileKey, setFileKey] = useState(null);
-
-  // State for single-file share decryption
-  const [blobUrl, setBlobUrl] = useState(null);
-  const [isDecrypting, setIsDecrypting] = useState(false);
+// ─── Full-screen preview: uses thumbnailCache.getMediumThumbnail (cached) ────────────
+/**
+ * Full-screen overlay that decrypts and displays a single shared file.
+ *
+ * Uses `thumbnailCache.getMediumThumbnail` — same infrastructure as the dashboard viewer.
+ * Second open of the same file is instant from L1 memory; refresh uses L2 IndexedDB.
+ */
+const FilePreviewOverlay = ({ file, shareKey, encryptedFileKey, onClose }) => {
+  const [blobUrl, setBlobUrl] = useState(
+    () => thumbnailCache.getMediumFromMemory(file.fileId),
+  );
+  const [decrypting, setDecrypting] = useState(
+    !thumbnailCache.getMediumFromMemory(file.fileId),
+  );
   const [decryptError, setDecryptError] = useState(null);
 
-  // Decrypt single file when we have the file key and share data
   useEffect(() => {
-    if (!fileKey || !shareData?.data?.downloadUrl) return;
+    if (!encryptedFileKey || !shareKey || !file.thumbMediumUrl) return;
 
-    let cancelled = false;
+    // Already in L1 memory — nothing to do
+    if (thumbnailCache.getMediumFromMemory(file.fileId)) return;
 
-    const decryptFile = async () => {
-      try {
-        setIsDecrypting(true);
-        setDecryptError(null);
+    thumbnailCache
+      .getMediumThumbnail(
+        file.fileId,
+        file.thumbMediumUrl,
+        shareKey,
+        encryptedFileKey,
+      )
+      .then((url) => {
+        setBlobUrl(url);
+        setDecrypting(false);
+      })
+      .catch((err) => {
+        setDecryptError(err);
+        setDecrypting(false);
+      });
+  }, [file.fileId, file.thumbMediumUrl, shareKey, encryptedFileKey]);
 
-        const response = await fetch(shareData.data.downloadUrl);
-        const encryptedData = await response.arrayBuffer();
-        const encArray = new Uint8Array(encryptedData);
-        const iv = encArray.slice(0, 12);
-        const ciphertext = encArray.slice(12);
-
-        const decryptedData = await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv },
-          fileKey,
-          ciphertext
-        );
-
-        if (!cancelled) {
-          const blob = new Blob([decryptedData], { type: shareData.data.mimeType });
-          setBlobUrl(URL.createObjectURL(blob));
-          setIsDecrypting(false);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setDecryptError(err);
-          setIsDecrypting(false);
-        }
-      }
-    };
-
-    decryptFile();
-    return () => {
-      cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [fileKey, shareData?.data?.downloadUrl]);
-
-  useEffect(() => {
-    loadShare();
-  }, [slug]);
-
-  const loadShare = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const fragment = window.location.hash.substring(1);
-      const params = new URLSearchParams(fragment);
-      const keyFromUrl = params.get('k');
-
-      if (!keyFromUrl) throw new Error('Share key missing from URL');
-
-      setShareKeyRaw(keyFromUrl);
-
-      const response = await shareService.resolveShare(slug);
-      setShareData(response);
-
-      if (response.type === 'file') {
-        try {
-          const decryptedFileKey = await decryptFileKeyWithShareKey(keyFromUrl, response.shareKey);
-          setFileKey(decryptedFileKey);
-          setDecryptedFilename('Shared File');
-        } catch {
-          setDecryptedFilename('Shared File');
-        }
-      } else if (response.type === 'folder') {
-        // Decrypt folder name using the share key
-        try {
-          const folderName = await decryptTextWithShareKey(keyFromUrl, response.shareKey);
-          setDecryptedFilename(folderName);
-        } catch {
-          // Fallback: derive from slug
-          setDecryptedFilename(
-            slug.replace(/-\d+$/, '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-          );
-        }
-      }
-
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to load share:', err);
-      setError(err.message || 'Failed to load shared content');
-      setLoading(false);
-    }
-  };
-
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!blobUrl) return;
     const link = document.createElement('a');
     link.href = blobUrl;
-    link.download = decryptedFilename || 'shared-file';
+    link.download = 'shared-file';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+      >
+        <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
+      </button>
+      <button
+        onClick={handleDownload}
+        disabled={decrypting || !blobUrl}
+        className="absolute top-4 left-4 z-10 px-4 py-2 bg-black/50 backdrop-blur-sm text-white rounded-lg hover:bg-black/70 transition-colors flex items-center gap-2 disabled:opacity-50"
+      >
+        <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+        {decrypting ? 'Decrypting…' : 'Download'}
+      </button>
+
+      {decrypting ? (
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4" />
+          <p className="text-white">Decrypting…</p>
+        </div>
+      ) : decryptError ? (
+        <div className="text-center text-white">
+          <FontAwesomeIcon icon={faCircleExclamation} className="w-8 h-8 text-red-400 mb-4" />
+          <p>Failed to decrypt file</p>
+        </div>
+      ) : blobUrl && file.mimeType?.startsWith('image/') ? (
+        <img src={blobUrl} alt="Shared file" className="max-w-full max-h-full object-contain" />
+      ) : blobUrl && file.mimeType?.startsWith('video/') ? (
+        <video src={blobUrl} controls className="max-w-full max-h-full" />
+      ) : blobUrl ? (
+        <div className="text-center text-white">
+          <FontAwesomeIcon icon={faFile} className="w-16 h-16 text-gray-400 mb-4" />
+          <p className="text-lg">File ready</p>
+          <p className="text-sm text-gray-400 mt-1">{file.mimeType}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+// ─── Folder card ───────────────────────────────────────────────────────────────
+const FolderIcon = () => (
+  <svg viewBox="0 0 44 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-10 h-8">
+    <rect x="2" y="0" width="14" height="7" rx="3" fill="#EF9F27" opacity="0.85" />
+    <rect x="2" y="5" width="40" height="29" rx="4" fill="#EF9F27" />
+  </svg>
+);
+
+// ─── Unified grid: files + folders ────────────────────────────────────────────
+const SharedGrid = ({ items, shareKey, fileKeys, onFileClick, onFolderClick }) => {
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-500">
+        <FontAwesomeIcon icon={faFolder} className="w-12 h-12 text-gray-300 mb-4" />
+        <p>This share is empty</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      {items.map((item) => {
+        if (item.type === 'folder') {
+          return (
+            <button
+              key={item.folderId}
+              onClick={() => onFolderClick(item)}
+              className="aspect-square rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-amber-50 dark:hover:bg-zinc-700 transition-colors flex flex-col items-start justify-end p-3 gap-1 text-left"
+            >
+              <div className="mb-1">
+                <FolderIcon />
+              </div>
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate w-full">
+                {item.decryptedName || 'Folder'}
+              </span>
+            </button>
+          );
+        }
+
+        return (
+          <button
+            key={item.fileId}
+            onClick={() => onFileClick(item)}
+            className="aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 hover:ring-2 hover:ring-blue-400 transition-all"
+          >
+            <SharedFileThumbnail
+              file={item}
+              shareKey={shareKey}
+              encryptedFileKey={fileKeys[item.fileId]}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Main component ────────────────────────────────────────────────────────────
+const ShareViewer = () => {
+  const { slug } = useParams();
+  const navigate = useNavigate();
+
+  const {
+    loading,
+    error,
+    shareKey,
+    fileKeys,
+    navStack,
+    currentLevel,
+    previewFile,
+    setPreviewFile,
+    handleFolderClick,
+    handleBreadcrumbClick,
+  } = useShareViewer(slug);
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-zinc-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-zinc-900">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-800 rounded-2xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <FontAwesomeIcon icon={faTriangleExclamation} className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Share Not Found</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button onClick={() => navigate('/')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Share Not Found</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             Go Home
           </button>
         </div>
@@ -219,125 +283,69 @@ const ShareViewer = () => {
     );
   }
 
-  if (shareData?.type === 'file') {
-    return (
-      <div className="fixed inset-0 z-50 bg-black">
-        <div className="relative w-full h-full flex items-center justify-center">
-          <button onClick={() => navigate('/')} className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors">
-            <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
-          </button>
-          <button onClick={handleDownload} disabled={isDecrypting || !blobUrl} className="absolute top-4 left-4 z-10 px-4 py-2 bg-black/50 backdrop-blur-sm text-white rounded-lg hover:bg-black/70 transition-colors flex items-center gap-2 disabled:opacity-50">
-            <FontAwesomeIcon icon={faDownload} className="w-5 h-5" />
-            {isDecrypting ? 'Decrypting...' : 'Download'}
-          </button>
-          {isDecrypting ? (
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-              <p className="text-white">Decrypting...</p>
-            </div>
-          ) : blobUrl && shareData.data.mimeType?.startsWith('image/') ? (
-            <img src={blobUrl} alt="Shared image" className="max-w-full max-h-full object-contain" />
-          ) : decryptError ? (
-            <div className="text-center text-white">
-              <FontAwesomeIcon icon={faCircleExclamation} className="w-8 h-8 text-red-400 mb-4" />
-              <p>Failed to decrypt image</p>
-            </div>
-          ) : (
-            <div className="text-center text-white">
-              <p className="text-lg mb-2">{decryptedFilename || 'Shared File'}</p>
-              <p className="text-sm text-gray-300">
-                {(shareData.data.sizeBytes / 1024 / 1024).toFixed(2)} MB • {shareData.data.mimeType}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  if (shareData?.type === 'folder') {
-    const fileKeys = shareData.fileKeys || {};
-
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                <FontAwesomeIcon icon={faFolder} className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {decryptedFilename || 'Shared Folder'}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {shareData.data.totalFiles} {shareData.data.totalFiles === 1 ? 'file' : 'files'}
-                </p>
-              </div>
-            </div>
-
-            {shareData.data.files.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <p>This folder is empty</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {shareData.data.files.map((file) => (
-                  <div
-                    key={file.fileId}
-                    className="aspect-square rounded-lg overflow-hidden relative group"
+        {/* Breadcrumb navigation */}
+        {navStack.length > 0 && (
+          <nav className="flex items-center gap-1 mb-6 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
+            {navStack.map((level, index) => (
+              <span key={index} className="flex items-center gap-1">
+                {index > 0 && (
+                  <FontAwesomeIcon icon={faChevronRight} className="w-3 h-3 text-gray-400" />
+                )}
+                {index === 0 ? (
+                  <button
+                    onClick={() => handleBreadcrumbClick(0)}
+                    className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                   >
-                    <SharedFileThumbnail
-                      file={file}
-                      shareKeyRaw={shareKeyRaw}
-                      encryptedFileKey={fileKeys[file.fileId]}
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                  </div>
-                ))}
-              </div>
-            )}
+                    <FontAwesomeIcon icon={faHouse} className="w-3.5 h-3.5" />
+                    <span>{level.name}</span>
+                  </button>
+                ) : index === navStack.length - 1 ? (
+                  <span className="font-medium text-gray-800 dark:text-gray-200">{level.name}</span>
+                ) : (
+                  <button
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className="hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  >
+                    {level.name}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
 
-            <div className="mt-6 text-center text-sm text-gray-500">
-              <p>This folder is end-to-end encrypted.</p>
-              <p>Only people with this link can access it.</p>
-            </div>
-          </div>
-        </div>
+        {/* Shared grid */}
+        {currentLevel && shareKey && (
+          <SharedGrid
+            items={currentLevel.items}
+            shareKey={shareKey}
+            fileKeys={fileKeys}
+            onFileClick={setPreviewFile}
+            onFolderClick={handleFolderClick}
+          />
+        )}
+
+        {/* Footer */}
+        <p className="mt-10 text-center text-xs text-gray-400 dark:text-gray-600">
+          End-to-end encrypted. Only people with this link can access it.
+        </p>
       </div>
-    );
-  }
 
-  if (shareData?.type === 'album') {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">Shared Album</h1>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {shareData.data.files.map((file) => (
-                <div key={file.fileId} className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                  {file.thumbSmallUrl ? (
-                    <img src={file.thumbSmallUrl} alt="Thumbnail" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <FontAwesomeIcon icon={faImage} className="w-12 h-12 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 text-center text-sm text-gray-500">
-              <p>This album is end-to-end encrypted.</p>
-              <p>Only people with this link can access it.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
+      {/* Full-screen file preview — rendered only when shareKey is ready */}
+      {previewFile && shareKey && (
+        <FilePreviewOverlay
+          file={previewFile}
+          shareKey={shareKey}
+          encryptedFileKey={fileKeys[previewFile.fileId]}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
+    </div>
+  );
 };
 
 export default ShareViewer;
