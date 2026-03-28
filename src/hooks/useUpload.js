@@ -19,13 +19,9 @@ import {
   getFileType,
   FILE_HANDLERS,
 } from '../utils/thumbnail';
-import {
-  encryptFile,
-  arrayBufferToBase64,
-  computeSHA1 as computeSHA1Direct,
-  computeSHA256 as computeSHA256Direct,
-} from '../utils/crypto';
+import { encryptFile, arrayBufferToBase64 } from '../utils/crypto';
 import cryptoService from '../services/crypto.service';
+import { isSafari } from '../utils/browser.js';
 import { SpeedTracker } from '../utils/speed-tracker.js';
 import { uploadPersistence } from '../services/upload-persistence.js';
 import {
@@ -48,8 +44,6 @@ const MAX_CONCURRENT_ENCRYPT = IS_MOBILE ? 1 : CPU_CORES;
 // Desktop: up to 8 parallel uploads
 const MAX_CONCURRENT_PROXY_UPLOAD = IS_MOBILE ? 2 : Math.min(CPU_CORES, 8);
 
-const MAX_IN_MEMORY_UPLOAD_ITEMS = IS_MOBILE ? 2 : MAX_CONCURRENT_PROXY_UPLOAD * 2;
-
 const CHUNKED_THRESHOLD = 100 * 1024 * 1024; // 100 MB
 
 const RETRY_CONFIG = {
@@ -61,6 +55,10 @@ const RETRY_CONFIG = {
 };
 
 const MIN_UPDATE_INTERVAL = IS_MOBILE ? 500 : 250; // less UI thrash on mobile
+
+console.log(
+  `[useUpload] ${IS_MOBILE ? 'MOBILE' : 'DESKTOP'} | ${CPU_CORES} cores | encrypt×${MAX_CONCURRENT_ENCRYPT} | proxy-upload×${MAX_CONCURRENT_PROXY_UPLOAD} | chunked≥${CHUNKED_THRESHOLD / 1024 / 1024}MB`
+);
 
 const generateUUID = () => crypto.randomUUID();
 
@@ -96,7 +94,7 @@ export function useUpload({ onFileUploaded } = {}) {
   // Per-upload controls: Map<uploadId, { abortController, speedTracker, isPaused, serverSessionId }>
   const controlsRef = useRef(new Map());
 
-  useEffect(() => { onFileUploadedRef.current = onFileUploaded; }, [onFileUploaded]);
+useEffect(() => { onFileUploadedRef.current = onFileUploaded; }, [onFileUploaded]);
 
   // Warn before unload (desktop only — mobile never fires this)
   useEffect(() => {
@@ -126,28 +124,26 @@ export function useUpload({ onFileUploaded } = {}) {
     updateUpload(id, updates);
   }, [updateUpload]);
 
-  const hasUploadMemoryCapacity = useCallback(() => {
-    return uploadQueueRef.current.length + uploadingCountRef.current < MAX_IN_MEMORY_UPLOAD_ITEMS;
-  }, []);
-
   const processEncryptionRef = useRef(null);
   const processUploadRef = useRef(null);
 
   const processEncryptionQueue = useCallback(() => {
-    while (
-      encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT &&
-      queueRef.current.length > 0 &&
-      hasUploadMemoryCapacity()
-    ) {
+    while (encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT && queueRef.current.length > 0) {
       const item = queueRef.current.shift();
-      if (item && processEncryptionRef.current) processEncryptionRef.current(item);
+      if (item && processEncryptionRef.current) {
+        encryptingCountRef.current++; // increment synchronously before async body starts
+        processEncryptionRef.current(item);
+      }
     }
-  }, [hasUploadMemoryCapacity]);
+  }, []);
 
   const processUploadQueue = useCallback(() => {
     while (uploadingCountRef.current < MAX_CONCURRENT_PROXY_UPLOAD && uploadQueueRef.current.length > 0) {
       const item = uploadQueueRef.current.shift();
-      if (item && processUploadRef.current) processUploadRef.current(item);
+      if (item && processUploadRef.current) {
+        uploadingCountRef.current++; // increment synchronously before async body starts
+        processUploadRef.current(item);
+      }
     }
   }, []);
 
@@ -210,6 +206,8 @@ export function useUpload({ onFileUploaded } = {}) {
     return () => window.removeEventListener('online', handleOnline);
   }, [isUploading, processEncryptionQueue, processUploadQueue]);
 
+
+
   // ─── Phase 1: Hash + Encrypt ─────────────────────────────
   const processEncryption = useCallback(async (uploadInfo) => {
     const { id, file } = uploadInfo;
@@ -221,12 +219,10 @@ export function useUpload({ onFileUploaded } = {}) {
       return;
     }
 
-    encryptingCountRef.current++;
-
     try {
       updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
 
-      let fileData;
+let fileData;
       try {
         // On mobile, arrayBuffer() can silently fail on large files due to RAM limits.
         // FileReader is more memory-efficient on iOS/Android as it streams internally.
@@ -250,7 +246,8 @@ export function useUpload({ onFileUploaded } = {}) {
         });
       }
 
-      const contentHash = await computeSHA256Direct(fileData);
+      // Pass fileData directly — no .slice(0) copy needed (not mutated)
+      const contentHash = await cryptoService.computeSHA256(fileData);
       updateUpload(id, { progress: 5 });
 
       // Duplicate check
@@ -262,8 +259,10 @@ export function useUpload({ onFileUploaded } = {}) {
             progress: 100,
             error: 'File already uploaded (exists in your library)',
             existingFileId: dup.existingFile?.id,
-            file: null,
           });
+          encryptingCountRef.current--;
+          processEncryptionQueue();
+          checkIfAllDone();
           return;
         }
       } catch {
@@ -274,6 +273,12 @@ export function useUpload({ onFileUploaded } = {}) {
 
       const fileKey = await cryptoService.generateFileKey();
       updateUpload(id, { progress: 15 });
+
+      const { encryptedData, iv: fileIv } = await encryptFile(fileData, fileKey);
+      fileData = null; // Free RAM: raw file bytes no longer needed after encryption
+      const cipherFileKey = await cryptoService.encryptFileKey(fileKey, masterKey);
+      const fileNameEncrypted = await cryptoService.encryptFilename(file.name, masterKey);
+      updateUpload(id, { progress: 35 });
 
       // Thumbnails
       let thumbnailData = null;
@@ -288,20 +293,19 @@ export function useUpload({ onFileUploaded } = {}) {
           thumbnailData = null;
         }
       }
-
-      const { encryptedData, iv: fileIv } = await encryptFile(fileData, fileKey);
-      const cipherFileKey = await cryptoService.encryptFileKey(fileKey, masterKey);
-      const fileNameEncrypted = await cryptoService.encryptFilename(file.name, masterKey);
       updateUpload(id, { progress: 45 });
 
-      // Combine IV + encrypted data
+      // Combine IV + encrypted data into one buffer for upload
       const combined = new Uint8Array(fileIv.length + encryptedData.byteLength);
       combined.set(fileIv, 0);
       combined.set(new Uint8Array(encryptedData), fileIv.length);
 
-      const sha1Hash = await computeSHA1Direct(combined.buffer);
-
+      // Create the blob FIRST — Blob snapshots bytes at construction time.
+      // computeSHA1 transfers combined.buffer to a worker (detaching it from the
+      // main thread), so the blob must exist before that transfer happens.
       const encryptedBlob = new Blob([combined], { type: 'application/octet-stream' });
+
+      const sha1Hash = await cryptoService.computeSHA1(combined.buffer);
       updateUpload(id, { progress: 50 });
 
       uploadQueueRef.current.push({
@@ -339,8 +343,6 @@ export function useUpload({ onFileUploaded } = {}) {
     const abortController = new AbortController();
     controlsRef.current.set(id, { ...ctrl, abortController, speedTracker, isPaused: false });
 
-    uploadingCountRef.current++;
-
     const uploadWithRetry = async (attempt = 0) => {
       if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -368,7 +370,6 @@ export function useUpload({ onFileUploaded } = {}) {
 
       try {
         const response = await api.post('/files/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
           signal: abortController.signal,
           onUploadProgress: (e) => {
             if (e.total) {
@@ -391,11 +392,10 @@ export function useUpload({ onFileUploaded } = {}) {
           bytesUploaded: encryptedBlob.size,
           speed: 0,
           eta: 0,
-          file: null,
           result: response.data,
         });
         if (onFileUploadedRef.current) onFileUploadedRef.current(response.data);
-      } catch (error) {
+} catch (error) {
         if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') throw error;
 
         const status = error.response?.status;
@@ -447,14 +447,16 @@ export function useUpload({ onFileUploaded } = {}) {
         return;
       }
       console.error(`Upload failed for ${file.name}:`, error);
-      updateUpload(id, { status: UploadStatus.FAILED, error: error.message });
+      const errMsg = error.code && error.code !== error.message
+        ? `[HTTP ${error.code}] ${error.message}`
+        : error.message;
+      updateUpload(id, { status: UploadStatus.FAILED, error: errMsg });
     } finally {
       uploadingCountRef.current--;
       processUploadQueue();
-      processEncryptionQueue();
       checkIfAllDone();
     }
-  }, [updateUpload, throttledUpdate, processUploadQueue, processEncryptionQueue, checkIfAllDone]);
+  }, [updateUpload, throttledUpdate, processUploadQueue, checkIfAllDone]);
 
   // ─── Phase 2b: Chunked upload (large files, direct-to-B2) ──
   const processChunkedUpload = useCallback(async (encryptedItem) => {
@@ -466,8 +468,6 @@ export function useUpload({ onFileUploaded } = {}) {
     const speedTracker = new SpeedTracker();
     const abortController = new AbortController();
     controlsRef.current.set(id, { abortController, speedTracker, isPaused: false, serverSessionId: null });
-
-    uploadingCountRef.current++;
 
     try {
       updateUpload(id, { status: UploadStatus.UPLOADING, progress: 50 });
@@ -571,7 +571,6 @@ export function useUpload({ onFileUploaded } = {}) {
         bytesUploaded: encryptedBlob.size,
         speed: 0,
         eta: 0,
-        file: null,
         result,
       });
 
@@ -588,10 +587,9 @@ export function useUpload({ onFileUploaded } = {}) {
     } finally {
       uploadingCountRef.current--;
       processUploadQueue();
-      processEncryptionQueue();
       checkIfAllDone();
     }
-  }, [updateUpload, throttledUpdate, processUploadQueue, processEncryptionQueue, checkIfAllDone]);
+  }, [updateUpload, throttledUpdate, processUploadQueue, checkIfAllDone]);
 
   // ─── Router: choose proxy vs chunked based on encrypted size ──
   const processUpload = useCallback((encryptedItem) => {

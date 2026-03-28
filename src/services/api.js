@@ -16,12 +16,19 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and fix FormData Content-Type
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // When body is FormData, remove the default Content-Type: application/json.
+    // The browser XHR will then auto-set Content-Type: multipart/form-data; boundary=...
+    // which is required for the server's multer middleware to parse the body correctly.
+    // Without this, body-parser's JSON parser intercepts the request → PayloadTooLargeError.
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
     }
     return config;
   },

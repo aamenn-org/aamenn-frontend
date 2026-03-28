@@ -92,11 +92,7 @@ export const userService = {
     formData.append('mimeType', metadata.mimeType);
     formData.append('sha1Hash', metadata.sha1Hash);
 
-    const response = await api.post('/users/me/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/users/me/avatar', formData);
     return response.data;
   },
 };

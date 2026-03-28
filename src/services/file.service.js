@@ -153,9 +153,6 @@ export const fileService = {
     formData.append('sha1Hash', metadata.sha1Hash);
 
     const response = await api.post('/files/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       onUploadProgress: (progressEvent) => {
         if (onProgress) {
           const percentCompleted = Math.round(

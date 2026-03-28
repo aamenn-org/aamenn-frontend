@@ -2,6 +2,9 @@ import { encode } from 'blurhash';
 import { isSafari } from './browser.js';
 import { THUMBNAIL_SIZES, THUMBNAIL_QUALITY } from '../constants/thumbnails.js';
 
+const IS_MOBILE_THUMBNAIL = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const WORKER_TASK_TIMEOUT_MS = IS_MOBILE_THUMBNAIL ? 10000 : 30000;
+
 /**
  * File type constants for clean classification
  */
@@ -183,7 +186,7 @@ async function generateThumbnailsInWorker(file) {
         pendingTasks.delete(id);
         reject(new Error('Thumbnail generation timed out'));
       }
-    }, 30000);
+    }, WORKER_TASK_TIMEOUT_MS);
 
     pendingTasks.set(id, {
       resolve: (result) => { clearTimeout(timeoutId); resolve(result); },
@@ -468,10 +471,6 @@ async function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-
-    // Safari requires crossOrigin to be set for some operations
-    // even on blob URLs in certain contexts
-    img.crossOrigin = 'anonymous';
 
     img.onload = () => {
       // Revoke URL after image loads to prevent memory leak
