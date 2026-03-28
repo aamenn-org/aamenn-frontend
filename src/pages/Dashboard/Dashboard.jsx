@@ -561,33 +561,53 @@ const Dashboard = () => {
     }
   };
 
-  // Handle share - create share links for selected files
   // Handle share single file from PhotoViewer
   const handleShareSingle = (file) => {
-    const itemToShare = {
+    setShareItems([{
       fileId: file.fileId || file.id,
       cipherFileKey: file.cipherFileKey,
       fileNameEncrypted: file.fileNameEncrypted,
-    };
-    
-    setShareItems([itemToShare]);
+    }]);
+
     setShowShareModal(true);
   };
-
-  // Handle share bulk from header
-  const handleShare = () => {
-    if (selectedFiles.length === 0) return;
+  // Handle share — unified for any mix of selected files and folders
+  const handleShare = async () => {
+    const hasFiles = selectedFiles.length > 0;
+    const hasFolders = activeTab === 'folders' && selectedFolders.length > 0;
+    if (!hasFiles && !hasFolders) return;
 
     const sourceList = activeTab === 'folders' ? folderFiles : allFiles;
-    const itemsToShare = sourceList
-      .filter((file) => selectedFiles.includes(file.fileId || file.id))
-      .map((file) => ({
-        fileId: file.fileId || file.id,
-        cipherFileKey: file.cipherFileKey,
-        fileNameEncrypted: file.fileNameEncrypted,
+ 
+    const fileItems = sourceList
+      .filter((f) => selectedFiles.includes(f.fileId || f.id))
+      .map((f) => ({
+        fileId: f.fileId || f.id,
+        cipherFileKey: f.cipherFileKey,
+        fileNameEncrypted: f.fileNameEncrypted,
       }));
 
-    setShareItems(itemsToShare);
+
+    let folderItems = [];
+    if (hasFolders && hasMasterKey()) {
+      const resolved = await Promise.all(
+        selectedFolders.map(async (id) => {
+          const folder = childFolders.find((f) => f.folderId === id);
+          if (!folder) return null;
+          const result = await folderService.getAllFilesInFolder(id);
+          return {
+            folderId: folder.folderId,
+            nameEncrypted: folder.nameEncrypted,
+            files: result.files || [],
+          };
+        })
+      );
+      folderItems = resolved.filter((f) => f !== null);
+    }
+ 
+    if (fileItems.length === 0 && folderItems.length === 0) return;
+    setShareItems([...fileItems, ...folderItems]);
+
     setShowShareModal(true);
   };
 
@@ -719,36 +739,6 @@ const Dashboard = () => {
     } finally {
       setIsRenamingFolder(false);
       setRenamingFolder(null);
-    }
-  };
-
-  // Share selected folders — fetch all files and pass to ShareModal for re-encryption
-  const handleFolderShareSelected = async () => {
-    if (selectedFolders.length === 0 || !hasMasterKey()) return;
-    try {
-      const foldersToShare = await Promise.all(
-        selectedFolders.map(async (id) => {
-          const folder = childFolders.find((f) => f.folderId === id);
-          if (!folder) return null;
-
-          // Fetch all files in folder recursively
-          const result = await folderService.getAllFilesInFolder(id);
-          const files = result.files || [];
-
-          return {
-            folderId: folder.folderId,
-            nameEncrypted: folder.nameEncrypted,
-            files, // Array of { fileId, cipherFileKey, ... }
-          };
-        })
-      );
-      const validFolders = foldersToShare.filter((f) => f !== null);
-      if (validFolders.length === 0) return;
-      
-      setShareItems(validFolders);
-      setShowShareModal(true);
-    } catch (error) {
-      console.error('Failed to prepare folder share:', error);
     }
   };
 

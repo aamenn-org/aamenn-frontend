@@ -2,20 +2,24 @@ import api from './api';
 
 export const shareService = {
   /**
-   * Create share links for files or albums
-   * @param {Array} items - Array of {type, id, slugBase, shareKey, expiresInSeconds}
+ * Create a single unified share link for any selection of files and/or folders.
+   * @param {Object} payload
+   * @param {Array<{type: string, id: string}>} payload.items
+   * @param {string} payload.slugBase
+   * @param {string} payload.shareKey
+   * @param {Record<string, string>} [payload.fileKeys]
+   * @param {number|null} [payload.expiresInSeconds]
    */
-  async createShares(items) {
-    const payload = { items };
-    const response = await api.post('/shares', payload);
+  async createShare(payload) {
+        const response = await api.post('/shares', payload);
     return response.data;
   },
 
   /**
    * List user's share links
-   * @param {Object} params - Query parameters
-   * @param {number} params.page - Page number
-   * @param {number} params.limit - Items per page
+   * @param {Object} params
+   * @param {number} [params.page]
+   * @param {number} [params.limit]
    */
   async listShares(params = {}) {
     const response = await api.get('/shares', { params });
@@ -24,7 +28,7 @@ export const shareService = {
 
   /**
    * Revoke a share link
-   * @param {string} shareId - Share link UUID
+   * @param {string} shareId
    */
   async revokeShare(shareId) {
     const response = await api.delete(`/shares/${shareId}`);
@@ -33,11 +37,22 @@ export const shareService = {
 
   /**
    * Resolve a public share link (no auth required)
-   * @param {string} slug - Share link slug
-   * @param {Object} params - Query parameters (for album pagination)
+   * Returns: { shareKey, fileKeys, items: SharedRootItem[] }
+   * @param {string} slug
    */
-  async resolveShare(slug, params = {}) {
-    const response = await api.get(`/shares/${slug}`, { params });
+  async resolveShare(slug) {
+    const response = await api.get(`/shares/${slug}`);
+    return response.data;
+  },
+ 
+  /**
+   * Browse a folder within a share (no auth required)
+   * Returns: { folderId, nameEncrypted, items: SharedRootItem[] }
+   * @param {string} slug
+   * @param {string} folderId
+   */
+  async browseShare(slug, folderId) {
+    const response = await api.get(`/shares/${slug}/browse/${folderId}`);
     return response.data;
   },
 };

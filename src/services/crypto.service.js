@@ -20,10 +20,9 @@ import {
   decryptContactField,
   encryptContact,
   decryptContact,
-  generateShareKey,
-  generateFolderShareKeys,
+  generateUnifiedShareKeys,
   decryptFileKeyWithShareKey,
-  decryptTextWithShareKey,
+  importShareKeyRaw,
   generateRegistrationKeys,
   unlockMasterKey,
   unlockMasterKeyWithRecovery,
@@ -176,10 +175,9 @@ export const cryptoService = {
 
   // ── Share key operations ──────────────────────────────────────────────────
 
-  generateShareKey,
-  generateFolderShareKeys,
+  generateUnifiedShareKeys,
   decryptFileKeyWithShareKey,
-  decryptTextWithShareKey,
+  importShareKeyRaw,
 
   // ── Master key / vault operations ─────────────────────────────────────────
 
