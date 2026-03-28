@@ -30,24 +30,34 @@ import {
   calculateTotalParts,
 } from '../services/chunked-upload.service.js';
 
+// ─── Device detection ────────────────────────────────────────
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 // ─── Constants ──────────────────────────────────────────────
 const CPU_CORES = navigator.hardwareConcurrency || 4;
-const MAX_CONCURRENT_ENCRYPT = CPU_CORES;
-const MAX_CONCURRENT_PROXY_UPLOAD = Math.min(CPU_CORES, 8);
+
+// Mobile: encrypt 1 at a time to avoid RAM exhaustion + thermal throttle
+// Desktop: use all cores
+const MAX_CONCURRENT_ENCRYPT = IS_MOBILE ? 1 : CPU_CORES;
+
+// Mobile: max 2 parallel uploads (mobile network can't sustain more)
+// Desktop: up to 8 parallel uploads
+const MAX_CONCURRENT_PROXY_UPLOAD = IS_MOBILE ? 2 : Math.min(CPU_CORES, 8);
+
 const CHUNKED_THRESHOLD = 100 * 1024 * 1024; // 100 MB
 
 const RETRY_CONFIG = {
-  maxRetries: 4,
-  initialDelayMs: 2000,
-  maxDelayMs: 120000,
+  maxRetries: 6,                // more retries on mobile network drops
+  initialDelayMs: 1000,
+  maxDelayMs: 60000,
   backoffMultiplier: 2,
   retryableStatusCodes: [429, 500, 502, 503, 504],
 };
 
-const MIN_UPDATE_INTERVAL = 250; // ms — throttle React state updates
+const MIN_UPDATE_INTERVAL = IS_MOBILE ? 500 : 250; // less UI thrash on mobile
 
 console.log(
-  `[useUpload] ${CPU_CORES} cores | encrypt×${MAX_CONCURRENT_ENCRYPT} | proxy-upload×${MAX_CONCURRENT_PROXY_UPLOAD} | chunked≥${CHUNKED_THRESHOLD / 1024 / 1024}MB${isSafari ? ' (Safari)' : ''}`
+  `[useUpload] ${IS_MOBILE ? 'MOBILE' : 'DESKTOP'} | ${CPU_CORES} cores | encrypt×${MAX_CONCURRENT_ENCRYPT} | proxy-upload×${MAX_CONCURRENT_PROXY_UPLOAD} | chunked≥${CHUNKED_THRESHOLD / 1024 / 1024}MB`
 );
 
 const generateUUID = () => crypto.randomUUID();
@@ -84,9 +94,9 @@ export function useUpload({ onFileUploaded } = {}) {
   // Per-upload controls: Map<uploadId, { abortController, speedTracker, isPaused, serverSessionId }>
   const controlsRef = useRef(new Map());
 
-  useEffect(() => { onFileUploadedRef.current = onFileUploaded; }, [onFileUploaded]);
+useEffect(() => { onFileUploadedRef.current = onFileUploaded; }, [onFileUploaded]);
 
-  // Warn before unload
+  // Warn before unload (desktop only — mobile never fires this)
   useEffect(() => {
     const handler = (e) => {
       if (isUploading) { e.preventDefault(); e.returnValue = ''; return ''; }
@@ -105,7 +115,6 @@ export function useUpload({ onFileUploaded } = {}) {
     });
   }, []);
 
-  // Throttled updater for high-frequency progress events
   const lastUpdateTimeRef = useRef(new Map());
   const throttledUpdate = useCallback((id, updates) => {
     const now = Date.now();
@@ -117,17 +126,6 @@ export function useUpload({ onFileUploaded } = {}) {
 
   const processEncryptionRef = useRef(null);
   const processUploadRef = useRef(null);
-
-  const checkIfAllDone = useCallback(() => {
-    if (
-      encryptingCountRef.current === 0 &&
-      uploadingCountRef.current === 0 &&
-      queueRef.current.length === 0 &&
-      uploadQueueRef.current.length === 0
-    ) {
-      setIsUploading(false);
-    }
-  }, []);
 
   const processEncryptionQueue = useCallback(() => {
     while (encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT && queueRef.current.length > 0) {
@@ -142,6 +140,67 @@ export function useUpload({ onFileUploaded } = {}) {
       if (item && processUploadRef.current) processUploadRef.current(item);
     }
   }, []);
+
+  const checkIfAllDone = useCallback(() => {
+    // Re-drain queues first — critical on mobile where a suspended tab
+    // may have left items in the queue with slots now free
+    if (queueRef.current.length > 0 && encryptingCountRef.current < MAX_CONCURRENT_ENCRYPT) {
+      processEncryptionQueue();
+      return;
+    }
+    if (uploadQueueRef.current.length > 0 && uploadingCountRef.current < MAX_CONCURRENT_PROXY_UPLOAD) {
+      processUploadQueue();
+      return;
+    }
+    if (
+      encryptingCountRef.current === 0 &&
+      uploadingCountRef.current === 0 &&
+      queueRef.current.length === 0 &&
+      uploadQueueRef.current.length === 0
+    ) {
+      setIsUploading(false);
+    }
+  }, [processEncryptionQueue, processUploadQueue]);
+
+  // ─── Page Visibility: pause on hide, resume on show (critical for mobile) ──
+  const isPageHiddenRef = useRef(false);
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Page is being backgrounded/locked — mark it so we know
+        isPageHiddenRef.current = true;
+      } else if (document.visibilityState === 'visible') {
+        // Page came back — if uploads were in progress, re-drain queues
+        if (isPageHiddenRef.current) {
+          isPageHiddenRef.current = false;
+          // Give the network stack 800ms to re-establish before retrying
+          setTimeout(() => {
+            processEncryptionQueue();
+            processUploadQueue();
+          }, 800);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [processEncryptionQueue, processUploadQueue]);
+
+  // ─── Network recovery: resume queues when connection comes back ──────────
+  useEffect(() => {
+    const handleOnline = () => {
+      if (isUploading) {
+        // Wait for network to stabilize then re-drain
+        setTimeout(() => {
+          processEncryptionQueue();
+          processUploadQueue();
+        }, 1000);
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [isUploading, processEncryptionQueue, processUploadQueue]);
+
+
 
   // ─── Phase 1: Hash + Encrypt ─────────────────────────────
   const processEncryption = useCallback(async (uploadInfo) => {
@@ -159,10 +218,22 @@ export function useUpload({ onFileUploaded } = {}) {
     try {
       updateUpload(id, { status: UploadStatus.HASHING, progress: 2 });
 
-      let fileData;
+let fileData;
       try {
-        fileData = await file.arrayBuffer();
+        // On mobile, arrayBuffer() can silently fail on large files due to RAM limits.
+        // FileReader is more memory-efficient on iOS/Android as it streams internally.
+        if (IS_MOBILE) {
+          fileData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('FileReader failed'));
+            reader.readAsArrayBuffer(file);
+          });
+        } else {
+          fileData = await file.arrayBuffer();
+        }
       } catch {
+        // Final fallback for both platforms
         fileData = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -320,11 +391,23 @@ export function useUpload({ onFileUploaded } = {}) {
           result: response.data,
         });
         if (onFileUploadedRef.current) onFileUploadedRef.current(response.data);
-      } catch (error) {
+} catch (error) {
         if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') throw error;
 
         const status = error.response?.status;
-        if (RETRY_CONFIG.retryableStatusCodes.includes(status) && attempt < RETRY_CONFIG.maxRetries) {
+
+        // Network drop has no status (undefined) — always retry these on mobile
+        const isNetworkError = !error.response && (
+          error.code === 'ERR_NETWORK' ||
+          error.message === 'Network Error' ||
+          error instanceof TypeError
+        );
+
+        const isRetryable =
+          isNetworkError ||
+          RETRY_CONFIG.retryableStatusCodes.includes(status);
+
+        if (isRetryable && attempt < RETRY_CONFIG.maxRetries) {
           let delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt);
           const retryAfter = error.response?.headers?.['retry-after'];
           if (retryAfter) {
@@ -332,13 +415,25 @@ export function useUpload({ onFileUploaded } = {}) {
             if (!isNaN(s)) delayMs = s * 1000;
           }
           delayMs = Math.min(delayMs, RETRY_CONFIG.maxDelayMs);
-          updateUpload(id, { status: UploadStatus.RETRYING, error: `Retrying in ${Math.round(delayMs / 1000)}s...` });
-          await new Promise((r) => setTimeout(r, delayMs));
+
+          // On network error, wait for online event OR timeout — whichever first
+          if (isNetworkError && !navigator.onLine) {
+            await new Promise((resolve) => {
+              const onOnline = () => { window.removeEventListener('online', onOnline); resolve(); };
+              window.addEventListener('online', onOnline);
+              // Fallback timeout in case online event never fires
+              setTimeout(resolve, delayMs);
+            });
+          } else {
+            updateUpload(id, { status: UploadStatus.RETRYING, error: `Retrying in ${Math.round(delayMs / 1000)}s...` });
+            await new Promise((r) => setTimeout(r, delayMs));
+          }
+
           return uploadWithRetry(attempt + 1);
         }
         throw error;
       }
-    };
+    }
 
     try {
       await uploadWithRetry();

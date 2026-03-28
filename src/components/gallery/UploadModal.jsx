@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -14,6 +14,23 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef(null);
+  const objectUrlsRef = useRef(new Map());
+  const [previews, setPreviews] = useState(new Map());
+  
+// Cleanup all object URLs on unmount
+  useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current.clear();
+    };
+  }, []);
+
+  const getObjectUrl = useCallback((file) => {
+    if (!objectUrlsRef.current.has(file)) {
+      objectUrlsRef.current.set(file, URL.createObjectURL(file));
+    }
+    return objectUrlsRef.current.get(file);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -27,27 +44,62 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
     setIsDragging(false);
   };
 
-  const handleDrop = (e) => {
+const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      (file) => 
-        file.type.startsWith('image/') || 
+      (file) =>
+        file.type.startsWith('image/') ||
         file.type.startsWith('video/') ||
         file.type === 'application/pdf' ||
         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
         file.type.startsWith('text/')
     );
     setFiles((prev) => [...prev, ...droppedFiles]);
+    generatePreviews(droppedFiles);
   };
 
-  const handleFileSelect = (e) => {
+const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
     setFiles((prev) => [...prev, ...selectedFiles]);
+    generatePreviews(selectedFiles);
   };
 
-  const removeFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+const removeFile = (index) => {
+    setFiles((prev) => {
+      const removed = prev[index];
+      if (objectUrlsRef.current.has(removed)) {
+        URL.revokeObjectURL(objectUrlsRef.current.get(removed));
+        objectUrlsRef.current.delete(removed);
+      }
+      setPreviews((p) => {
+        const next = new Map(p);
+        next.delete(removed);
+        return next;
+      });
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+const generatePreviews = (newFiles) => {
+    newFiles.forEach((file) => {
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
+      const tempUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(tempUrl);
+        const MAX = 80;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setPreviews((prev) => new Map(prev).set(file, dataUrl));
+      };
+      img.onerror = () => URL.revokeObjectURL(tempUrl);
+      img.src = tempUrl;
+    });
   };
 
   const handleUpload = async () => {
@@ -128,11 +180,13 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-gray-200 dark:bg-zinc-600 overflow-hidden">
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                    />
+<img
+                    src={previews.get(file) || getObjectUrl(file)}
+                    alt={file.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]">
