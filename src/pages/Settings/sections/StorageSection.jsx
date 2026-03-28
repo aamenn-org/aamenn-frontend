@@ -86,8 +86,8 @@ const StorageSection = () => {
   }
 
   const usedBytes = storageData?.usedBytes || 0;
-  const totalBytes = storageData?.totalBytes || 1073741824; // 1GB default
-  const percentage = Math.min((usedBytes / totalBytes) * 100, 100);
+  const totalBytes = storageData?.limitBytes || 1073741824; // 1GB default
+  const percentage = storageData?.percentUsed || Math.min((usedBytes / totalBytes) * 100, 100);
   const fileCount = storageData?.fileCount || 0;
 
   // Determine color based on usage
@@ -128,7 +128,7 @@ const StorageSection = () => {
           </div>
 
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            {percentage.toFixed(1)}% used
+            {percentage.toFixed(2)}% used
           </p>
         </div>
 
