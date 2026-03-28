@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
-import { useShareViewer } from '../../hooks';
+import { useShareViewer } from "../../hooks/useShareViewer";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTriangleExclamation,
