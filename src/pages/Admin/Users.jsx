@@ -9,6 +9,7 @@ import {
   faCheck,
   faUpDown,
   faTrash,
+  faFloppyDisk,
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -51,6 +52,12 @@ const UsersPage = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, email, fileCount, storageBytes }
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  // limitEdits: { [userId]: number } — tracks unsaved input values for storage limits
+  const [limitEdits, setLimitEdits] = useState({});
+  // limitSaving: userId | null — which user's limit is currently being saved
+  const [limitSaving, setLimitSaving] = useState(null);
+  // limitErrors: { [userId]: string } — validation error per user
+  const [limitErrors, setLimitErrors] = useState({});
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -63,6 +70,7 @@ const UsersPage = () => {
         sortOrder,
       });
       setUsers(data.users);
+      setLimitEdits({});
       setPagination((prev) => ({
         ...prev,
         total: data.total,
@@ -126,7 +134,42 @@ const UsersPage = () => {
     }
   };
 
-  
+  const handleLimitChange = (userId, rawValue) => {
+    setLimitEdits((prev) => ({ ...prev, [userId]: rawValue }));
+    const parsed = parseInt(rawValue, 10);
+    if (rawValue === '' || isNaN(parsed)) {
+      setLimitErrors((prev) => ({ ...prev, [userId]: 'Enter a number between 1 and 1024 GB.' }));
+    } else if (parsed < 1) {
+      setLimitErrors((prev) => ({ ...prev, [userId]: 'Minimum limit is 1 GB.' }));
+    } else if (parsed > 1024) {
+      setLimitErrors((prev) => ({ ...prev, [userId]: 'Maximum limit is 1024 GB.' }));
+    } else {
+      setLimitErrors((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+    }
+  };
+
+  const handleSaveStorageLimit = async (userId) => {
+    const value = limitEdits[userId];
+    if (value === undefined) return;
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed < 1 || parsed > 1024) return;
+    try {
+      setLimitSaving(userId);
+      await adminService.setUserStorageLimit(userId, parsed);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, storageLimitGb: parsed } : u)),
+      );
+      setLimitEdits((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+      setLimitErrors((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+      setSuccessMessage(`Storage limit updated to ${parsed} GB.`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Failed to update storage limit:', err);
+    } finally {
+      setLimitSaving(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -201,6 +244,9 @@ const UsersPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Limit (GB)
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
                 </th>
@@ -263,6 +309,43 @@ const UsersPage = () => {
                       >
                         {user.isActive ? 'Active' : 'Disabled'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col gap-0.5">
+                          <input
+                            type="number"
+                            min={1}
+                            max={1024}
+                            value={limitEdits[user.id] !== undefined ? limitEdits[user.id] : user.storageLimitGb ?? 5}
+                            onChange={(e) => handleLimitChange(user.id, e.target.value)}
+                            className={`w-16 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
+                              limitErrors[user.id]
+                                ? 'border-red-400 dark:border-red-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}
+                          />
+                          {limitErrors[user.id] && (
+                            <span className="text-xs text-red-500 dark:text-red-400 whitespace-nowrap">
+                              {limitErrors[user.id]}
+                            </span>
+                          )}
+                        </div>
+                        {limitEdits[user.id] !== undefined && (
+                          <button
+                            onClick={() => handleSaveStorageLimit(user.id)}
+                            disabled={limitSaving === user.id || !!limitErrors[user.id]}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors rounded disabled:opacity-50"
+                            title="Save storage limit"
+                          >
+                            {limitSaving === user.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                            ) : (
+                              <FontAwesomeIcon icon={faFloppyDisk} className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
@@ -384,7 +467,7 @@ const UsersPage = () => {
                   </div>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Storage</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Storage Used</div>
                   <div className="text-sm font-semibold text-gray-900 dark:text-white">
                     {formatBytes(user.storageBytes)}
                   </div>
@@ -401,6 +484,44 @@ const UsersPage = () => {
                     {formatDate(user.lastLoginAt)}
                   </div>
                 </div>
+              </div>
+
+              {/* Storage Limit */}
+              <div className="flex flex-col gap-1 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Limit (GB):</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1024}
+                    value={limitEdits[user.id] !== undefined ? limitEdits[user.id] : user.storageLimitGb ?? 5}
+                    onChange={(e) => handleLimitChange(user.id, e.target.value)}
+                    className={`w-20 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
+                      limitErrors[user.id]
+                        ? 'border-red-400 dark:border-red-500'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  />
+                  {limitEdits[user.id] !== undefined && (
+                    <button
+                      onClick={() => handleSaveStorageLimit(user.id)}
+                      disabled={limitSaving === user.id || !!limitErrors[user.id]}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded transition-colors disabled:opacity-50"
+                    >
+                      {limitSaving === user.id ? (
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-blue-600"></div>
+                      ) : (
+                        <FontAwesomeIcon icon={faFloppyDisk} className="w-3.5 h-3.5" />
+                      )}
+                      <span>Save</span>
+                    </button>
+                  )}
+                </div>
+                {limitErrors[user.id] && (
+                  <p className="text-xs text-red-500 dark:text-red-400 ml-0">
+                    {limitErrors[user.id]}
+                  </p>
+                )}
               </div>
 
               {/* Actions */}
