@@ -306,7 +306,9 @@ let fileData;
       const encryptedBlob = new Blob([combined], { type: 'application/octet-stream' });
 
       const sha1Hash = await cryptoService.computeSHA1(combined.buffer);
-      updateUpload(id, { progress: 50 });
+      // Align totalBytes to the encrypted blob size so bytesUploaded and totalBytes
+      // always live in the same unit space (encrypted bytes, not original file bytes).
+      updateUpload(id, { progress: 50, totalBytes: encryptedBlob.size });
 
       uploadQueueRef.current.push({
         id,
@@ -373,14 +375,21 @@ let fileData;
           signal: abortController.signal,
           onUploadProgress: (e) => {
             if (e.total) {
-              const bytesUp = e.loaded;
+              // Map FormData transfer progress onto the encrypted blob size.
+              // e.loaded / e.total is the true transfer fraction, but e.loaded itself is
+              // FormData bytes (file + thumbnails + metadata fields) which is always
+              // larger than encryptedBlob.size. Using raw e.loaded as bytesUploaded
+              // causes it to exceed totalBytes during the upload, then snap back DOWN
+              // to encryptedBlob.size on completion — creating a visible regression and
+              // an empty-looking progress bar at the end.
+              const bytesUp = Math.round((e.loaded / e.total) * encryptedBlob.size);
               speedTracker.addSample(bytesUp);
               const pct = 50 + Math.round((e.loaded * 50) / e.total);
               throttledUpdate(id, {
                 progress: pct,
                 bytesUploaded: bytesUp,
                 speed: speedTracker.getSpeedBps(),
-                eta: speedTracker.getEtaSeconds(e.total - e.loaded),
+                eta: speedTracker.getEtaSeconds(encryptedBlob.size - bytesUp),
               });
             }
           },
