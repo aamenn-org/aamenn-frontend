@@ -480,6 +480,107 @@ export async function decryptContact(contact, masterKey) {
   return decrypted;
 }
 
+// ==================== CONTACT SEARCH TOKENS ====================
+
+/**
+ * Derive a domain-separated HMAC-SHA256 search subkey from the master key.
+ * Separate from the AES-GCM encryption key to prevent cross-domain misuse.
+ * The resulting key is used only for HMAC token computation — never for encryption.
+ *
+ * @param {CryptoKey} masterKey - User's AES-GCM master key
+ * @returns {Promise<CryptoKey>} - Non-extractable HMAC-SHA256 key
+ */
+export async function deriveContactSearchKey(masterKey) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  const masterKeyBytes = await crypto.subtle.exportKey('raw', masterKey);
+  const derivationKey = await crypto.subtle.importKey(
+    'raw', masterKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const searchKeyBytes = await crypto.subtle.sign(
+    'HMAC', derivationKey, new TextEncoder().encode('aamenn-contact-search-v1')
+  );
+  return crypto.subtle.importKey(
+    'raw', searchKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+}
+
+/**
+ * Extract unique 3-character substrings (trigrams) from a normalised string.
+ * Strings shorter than 3 chars are returned as-is (single entry).
+ */
+function _extractTrigrams(text) {
+  if (!text) return [];
+  const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (normalized.length === 0) return [];
+  if (normalized.length < 3) return [normalized];
+  const trigrams = new Set();
+  for (let i = 0; i <= normalized.length - 3; i++) {
+    trigrams.add(normalized.slice(i, i + 3));
+  }
+  return [...trigrams];
+}
+
+/**
+ * Compute a single HMAC-SHA256 token for a trigram.
+ * Returns the first 8 bytes as a 16-character hex string (64-bit token space).
+ */
+async function _hmacToken(searchKey, trigram) {
+  const tokenBytes = await crypto.subtle.sign(
+    'HMAC', searchKey, new TextEncoder().encode(trigram)
+  );
+  return Array.from(new Uint8Array(tokenBytes).slice(0, 8))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Compute HMAC search tokens for a contact's searchable fields.
+ * Called during sync — tokens are stored alongside the encrypted contact blobs.
+ * The server stores these tokens but cannot reverse them to plaintext.
+ *
+ * @param {string|undefined} name
+ * @param {string|undefined} phone
+ * @param {string|undefined} email
+ * @param {CryptoKey} searchKey - From deriveContactSearchKey()
+ * @returns {Promise<string[]>} - Deduplicated array of 16-char hex tokens
+ */
+export async function computeContactSearchTokens(name, phone, email, searchKey) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  const parts = [];
+  if (name) parts.push(name.toLowerCase().trim());
+  if (phone) parts.push(phone.replace(/\D/g, ''));
+  if (email) parts.push(email.toLowerCase().trim());
+  const combined = parts.join(' ');
+  const trigrams = _extractTrigrams(combined);
+  if (trigrams.length === 0) return [];
+  const tokens = await Promise.all(trigrams.map(t => _hmacToken(searchKey, t)));
+  return [...new Set(tokens)];
+}
+
+/**
+ * Compute HMAC search tokens for a user query string.
+ * Called during search — tokens are sent to the backend for matching.
+ * Processes both the raw query and a digit-normalised version for phone search.
+ * Capped at 8 tokens to bound request size while preserving precision.
+ *
+ * @param {string} query - Raw search input (must be >= 3 chars)
+ * @param {CryptoKey} searchKey - From deriveContactSearchKey()
+ * @returns {Promise<string[]>} - Token array, empty if query is too short
+ */
+export async function computeQueryTokens(query, searchKey) {
+  if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
+  const normalized = query.toLowerCase().trim();
+  const digits = normalized.replace(/\D/g, '');
+  const allTrigrams = new Set([
+    ..._extractTrigrams(normalized),
+    ...(digits.length >= 3 ? _extractTrigrams(digits) : []),
+  ]);
+  if (allTrigrams.size === 0) return [];
+  const capped = [...allTrigrams].slice(0, 8);
+  const tokens = await Promise.all(capped.map(t => _hmacToken(searchKey, t)));
+  return [...new Set(tokens)];
+}
+
 // ==================== SHARE KEY FUNCTIONS ====================
 
 

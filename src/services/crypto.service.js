@@ -16,8 +16,6 @@ import {
   encryptFileKey,
   encryptFilename,
   decryptFilename,
-  encryptContactField,
-  decryptContactField,
   encryptContact,
   decryptContact,
   generateUnifiedShareKeys,
@@ -168,8 +166,6 @@ export const cryptoService = {
 
   // ── Contact operations ────────────────────────────────────────────────────
 
-  encryptContactField,
-  decryptContactField,
   encryptContact,
   decryptContact,
 
