@@ -537,28 +537,14 @@ const Dashboard = () => {
     }
   };
 
-  // Handle upload - encrypts and uploads files
-  const handleUpload = async (files, onProgress) => {
-    const masterKey = getMasterKey();
-
-    if (!masterKey) {
-      alert('Session expired. Please log in again to upload files.');
-      return;
+  // Handle upload — queues files into useUpload; actual encryption + transfer
+  // happens in the background and is tracked by UploadProgressPanel.
+  const handleUpload = async (files) => {
+    if (!getMasterKey()) {
+      throw new Error('Session expired. Please unlock your vault before uploading.');
     }
-
-    try {
-      // Ensure panel is visible
-      setIsUploadPanelMinimized(false);
-
-      // Add files to upload queue - encryption and upload happens in background
-      await uploadFilesWithEncryption(files, { folderId: currentFolderId });
-
-      // Signal to the upload modal that files were accepted
-      onProgress(100);
-    } catch (error) {
-      console.error('Upload failed:', error);
-      throw error;
-    }
+    setIsUploadPanelMinimized(false);
+    await uploadFilesWithEncryption(files, { folderId: currentFolderId });
   };
 
   // Handle share single file from PhotoViewer
