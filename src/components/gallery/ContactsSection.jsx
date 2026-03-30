@@ -1,13 +1,22 @@
-import { useState, useEffect } from 'react';
-import { GoogleLogin, useGoogleLogin } from '@react-oauth/google';
+import { useState, useEffect, useRef } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { contactsService } from '../../services';
-import config from '../../config';
+import { decryptContact } from '../../utils/crypto';
+import { useAuth } from '../../context/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUsers, faTrash, faSync, faDownload, faChevronLeft, faChevronRight, faSearch, faClipboard, faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import { faGoogle as faGoogleBrand } from '@fortawesome/free-brands-svg-icons';
 
+const PAGE_LIMIT = 20;
+const MIN_SEARCH_CHARS = 3;
+const SEARCH_DEBOUNCE_MS = 400;
+
 export const ContactsSection = () => {
+  const { getMasterKey } = useAuth();
   const [contacts, setContacts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalContacts, setTotalContacts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
@@ -15,23 +24,47 @@ export const ContactsSection = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedField, setCopiedField] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const contactsPerPage = 10;
+  const [activeQuery, setActiveQuery] = useState('');
+  const debounceRef = useRef(null);
 
   useEffect(() => {
-    loadContacts();
-  }, []);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const shouldSearch = searchTerm.length === 0 || searchTerm.length >= MIN_SEARCH_CHARS;
+    if (shouldSearch) {
+      debounceRef.current = setTimeout(() => {
+        setCurrentPage(1);
+        setActiveQuery(searchTerm);
+      }, SEARCH_DEBOUNCE_MS);
+    }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadContacts = async () => {
-    // 🚨 TODO: Implement zero-knowledge decryption
-    // Current: Backend sends plaintext contacts
-    // Target: Backend sends encrypted blobs, frontend decrypts with master key
-    
+  useEffect(() => {
+    loadPage(currentPage, activeQuery);
+  }, [currentPage, activeQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadPage = async (page, query) => {
     try {
       setLoading(true);
-      const data = await contactsService.getContacts();
-      // 🚨 SECURITY: Currently receiving plaintext contacts from backend
-      // TODO: Decrypt encrypted contact blobs with master key here
-      setContacts(data);
+      setError(null);
+      const masterKey = getMasterKey();
+      if (!masterKey) {
+        setError('Master key not available. Please re-login to decrypt contacts.');
+        setContacts([]);
+        return;
+      }
+      const result = query.length >= MIN_SEARCH_CHARS
+        ? await contactsService.searchContacts(query, masterKey, page, PAGE_LIMIT)
+        : await contactsService.getContacts(page, PAGE_LIMIT);
+      const decrypted = await Promise.all(
+        result.data.map(c => decryptContact(c, masterKey))
+      );
+      setContacts(decrypted);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+      if (query.length < MIN_SEARCH_CHARS) {
+        setTotalContacts(result.total);
+      }
     } catch (err) {
       console.error('Failed to load contacts:', err);
       setError('Failed to load contacts');
@@ -45,14 +78,21 @@ export const ContactsSection = () => {
       setError('No access token received from Google');
       return;
     }
+    const masterKey = getMasterKey();
+    if (!masterKey) {
+      setError('Master key not available. Please re-login before syncing.');
+      return;
+    }
     setSyncing(true);
     setError(null);
     try {
-      await contactsService.syncContacts(tokenResponse.access_token);
+      await contactsService.syncContacts(tokenResponse.access_token, masterKey);
       setLastSync(new Date());
-      await loadContacts();
+      setSearchTerm('');
+      setActiveQuery('');
+      setCurrentPage(1);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to sync contacts');
+      setError(err.message || err.response?.data?.message || 'Failed to sync contacts');
     } finally {
       setSyncing(false);
     }
@@ -84,17 +124,17 @@ export const ContactsSection = () => {
 
     const headers = ['Name', 'Nickname', 'Phone', 'Email', 'Address', 'Organization', 'Occupation', 'Birthday', 'Bio', 'URLs', 'Photo URL'];
     const rows = contacts.map(contact => [
-      contact.nameEncrypted || '',
-      contact.nicknameEncrypted || '',
-      contact.phoneEncrypted || '',
-      contact.emailEncrypted || '',
-      contact.addressEncrypted || '',
-      contact.organizationEncrypted || '',
-      contact.occupationEncrypted || '',
-      contact.birthdayEncrypted || '',
-      contact.bioEncrypted || '',
-      contact.urlsEncrypted || '',
-      contact.photoUrlEncrypted || ''
+      contact.name || '',
+      contact.nickname || '',
+      contact.phone || '',
+      contact.email || '',
+      contact.address || '',
+      contact.organization || '',
+      contact.occupation || '',
+      contact.birthday || '',
+      contact.bio || '',
+      contact.urls || '',
+      contact.photoUrl || ''
     ]);
 
     // Create CSV content with proper Unicode handling
@@ -131,44 +171,30 @@ export const ContactsSection = () => {
     try {
       await contactsService.deleteAllContacts();
       setContacts([]);
+      setTotal(0);
+      setTotalPages(0);
+      setTotalContacts(0);
       setLastSync(null);
+      setSearchTerm('');
+      setActiveQuery('');
       setCurrentPage(1);
     } catch (err) {
       setError('Failed to delete contacts');
     }
   };
 
-  // Search filtering logic
-  const filteredContacts = contacts.filter(contact => {
-    if (!searchTerm) return true;
-    
-    const searchLower = searchTerm.toLowerCase();
-    const name = (contact.nameEncrypted || '').toLowerCase();
-    const phone = (contact.phoneEncrypted || '').toLowerCase();
-    const email = (contact.emailEncrypted || '').toLowerCase();
-    
-    return name.includes(searchLower) || 
-           phone.includes(searchLower) || 
-           email.includes(searchLower);
-  });
-
-  // Pagination logic for filtered results
-  const indexOfLastContact = currentPage * contactsPerPage;
-  const indexOfFirstContact = indexOfLastContact - contactsPerPage;
-  const currentContacts = filteredContacts.slice(indexOfFirstContact, indexOfLastContact);
-  const totalPages = Math.ceil(filteredContacts.length / contactsPerPage);
+  const isSearchMode = activeQuery.length >= MIN_SEARCH_CHARS;
 
   const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+    if (currentPage < totalPages) setCurrentPage(p => p + 1);
   };
 
   const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
+    if (currentPage > 1) setCurrentPage(p => p - 1);
   };
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset to page 1 when searching
   };
 
   if (loading) {
@@ -189,7 +215,7 @@ export const ContactsSection = () => {
             Google Contacts
           </h2>
         </div>
-        {contacts.length > 0 && (
+        {totalContacts > 0 && (
           <button
             onClick={handleDeleteAll}
             className="flex items-center gap-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
@@ -203,7 +229,7 @@ export const ContactsSection = () => {
 
 
       {/* Contacts List */}
-      {contacts.length > 0 && (
+      {(totalContacts > 0 || isSearchMode) && (
         <div className="bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 p-6">
           <div className="space-y-4">
             {/* Search Bar */}
@@ -213,12 +239,17 @@ export const ContactsSection = () => {
                 placeholder="Search by name, phone, or email..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className="w-full px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-4 py-2 pl-10 border border-gray-300 dark:bg-zinc-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
               <div className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500">
                 <FontAwesomeIcon icon={faSearch} className="w-5 h-5" />
               </div>
             </div>
+            {searchTerm.length > 0 && searchTerm.length < MIN_SEARCH_CHARS && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+                Type {MIN_SEARCH_CHARS - searchTerm.length} more character{MIN_SEARCH_CHARS - searchTerm.length !== 1 ? 's' : ''} to search
+              </p>
+            )}
 
             {/* Status Info */}
             {lastSync && (
@@ -233,9 +264,9 @@ export const ContactsSection = () => {
             {/* Header with Actions */}
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                {searchTerm 
-                  ? `Found ${filteredContacts.length} of ${contacts.length} contacts`
-                  : `Contacts (${contacts.length})`
+                {isSearchMode
+                  ? `${total} result${total !== 1 ? 's' : ''} for "${activeQuery}"`
+                  : `Contacts (${total})`
                 }
               </h3>
               <div className="flex items-center gap-2">
@@ -243,12 +274,12 @@ export const ContactsSection = () => {
                   onClick={handleGoogleLogin}
                   disabled={syncing}
                   className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    contacts.length > 0
+                    totalContacts > 0
                       ? ' text-white hover:bg-gray-700'
                       : 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {contacts.length > 0 ? (
+                  {totalContacts > 0 ? (
                     <>
                       <FontAwesomeIcon icon={faSync} className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                       {syncing ? 'Syncing...' : 'Sync'}
@@ -271,24 +302,41 @@ export const ContactsSection = () => {
             </div>
           </div>
 
+          {isSearchMode && total === 0 && !loading && (
+            <div className="py-8 text-center space-y-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No results for &ldquo;{activeQuery}&rdquo;
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Search requires contacts to be synced with the latest version.{' '}
+                <button
+                  onClick={handleGoogleLogin}
+                  className="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  Re-sync now
+                </button>
+                {' '}to enable search.
+              </p>
+            </div>
+          )}
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {currentContacts.map((contact) => (
+            {contacts.map((contact) => (
               <div key={contact.id} className="flex items-center gap-3 py-2">
                 {/* Avatar */}
                 <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
-                  {contact.photoUrlEncrypted ? (
+                  {contact.photoUrl ? (
                     <img 
-                      src={contact.photoUrlEncrypted} 
+                      src={contact.photoUrl} 
                       alt="" 
                       className="w-full h-full rounded-full object-cover" 
                       onError={(e) => { 
                         e.target.style.display = 'none'; 
-                        e.target.parentElement.innerHTML = `<span class="text-xs text-gray-600 dark:text-gray-400">${contact.nameEncrypted?.[0]?.toUpperCase() || '?'}</span>`;
+                        e.target.parentElement.innerHTML = `<span class="text-xs text-gray-600 dark:text-gray-400">${contact.name?.[0]?.toUpperCase() || '?'}</span>`;
                       }}
                     />
                   ) : (
                     <span className="text-xs text-gray-600 dark:text-gray-400">
-                      {contact.nameEncrypted?.[0]?.toUpperCase() || '?'}
+                      {contact.name?.[0]?.toUpperCase() || '?'}
                     </span>
                   )}
                 </div>
@@ -296,19 +344,19 @@ export const ContactsSection = () => {
                 {/* Contact Info */}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {contact.nameEncrypted || 'No name'}
+                    {contact.name || 'No name'}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {contact.phoneEncrypted || contact.emailEncrypted || 'No contact info'}
+                    {contact.phone || contact.email || 'No contact info'}
                   </div>
                 </div>
                 
                 {/* Actions */}
                 <div className="flex items-center gap-1">
                   {/* Copy phone if available */}
-                  {contact.phoneEncrypted && (
+                  {contact.phone && (
                     <button 
-                      onClick={() => handleCopy(contact.phoneEncrypted, `phone-${contact.id}`)}
+                      onClick={() => handleCopy(contact.phone, `phone-${contact.id}`)}
                       className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                       title="Copy phone"
                     >
@@ -321,9 +369,9 @@ export const ContactsSection = () => {
                   )}
                   
                   {/* Copy email if available and no phone */}
-                  {!contact.phoneEncrypted && contact.emailEncrypted && (
+                  {!contact.phone && contact.email && (
                     <button 
-                      onClick={() => handleCopy(contact.emailEncrypted, `email-${contact.id}`)}
+                      onClick={() => handleCopy(contact.email, `email-${contact.id}`)}
                       className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                       title="Copy email"
                     >
@@ -343,22 +391,19 @@ export const ContactsSection = () => {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-zinc-700">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {searchTerm 
-                  ? `Page ${currentPage} of ${totalPages} (${filteredContacts.length} results)`
-                  : `Page ${currentPage} of ${totalPages}`
-                }
+                Page {currentPage} of {totalPages} &mdash; {total} total
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={handlePrevPage}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || loading}
                   className="p-2 rounded-lg border border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <FontAwesomeIcon icon={faChevronLeft} className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleNextPage}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || loading}
                   className="p-2 rounded-lg border border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <FontAwesomeIcon icon={faChevronRight} className="w-4 h-4" />
@@ -369,7 +414,7 @@ export const ContactsSection = () => {
         </div>
       )}
 
-      {contacts.length === 0 && (
+      {totalContacts === 0 && !loading && !isSearchMode && (
         <div className="text-center py-12 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-700">
           <FontAwesomeIcon icon={faUsers} className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400 mb-4">
