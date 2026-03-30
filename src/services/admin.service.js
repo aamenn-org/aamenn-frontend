@@ -29,6 +29,11 @@ export const adminService = {
     return response.data;
   },
 
+  async setUserStorageLimit(userId, storageLimitGb) {
+    const response = await api.patch(`/admin/users/${userId}/storage-limit`, { storageLimitGb });
+    return response.data;
+  },
+
   async getStorageStats() {
     const response = await api.get('/admin/storage');
     return response.data;
