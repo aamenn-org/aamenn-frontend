@@ -161,10 +161,7 @@ const LoginPage = () => {
           {/* Google Sign-In */}
           <GoogleSignInButton
             onSuccess={(result) => {
-              if (result.requiresVaultSetup) {
-                // New Google user - need to set up Vault Password
-                window.location.href = '/folders?setupVault=true';
-              } else if (result.role === 'admin') {
+              if (result.role === 'admin') {
                 window.location.href = '/dashboard';
               } else {
                 window.location.href = '/folders';

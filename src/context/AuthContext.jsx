@@ -331,7 +331,7 @@ export const AuthProvider = ({ children }) => {
           );
         }
 
-        setUser({ email, role: role || USER_ROLES.USER });
+        setUser({ email, role: role || USER_ROLES.USER, hasSecuritySetup: !!(encryptedMasterKey && kekSalt) });
         setIsAuthenticated(true);
 
         // Fetch full profile in background to get avatarFileId etc.
@@ -439,6 +439,7 @@ export const AuthProvider = ({ children }) => {
         return {
           success: true,
           requiresVaultSetup,
+          role: role || USER_ROLES.USER,
           encryptedMasterKey: response.encryptedMasterKey,
           kekSalt: response.kekSalt,
           kdfParams: response.kdfParams,

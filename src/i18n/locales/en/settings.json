@@ -50,6 +50,7 @@
     "confirmTitle": "Are you sure you want to delete your account?",
     "confirmDescription": "Please enter your password to confirm account deletion. All your data will be permanently removed.",
     "passwordLabel": "Enter your password",
+    "passwordPlaceholder": "Enter your password",
     "deleteButton": "Delete My Account",
     "deleteSuccess": "Account deleted successfully",
     "deleteError": "Failed to delete account",

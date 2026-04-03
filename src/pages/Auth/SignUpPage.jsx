@@ -231,12 +231,8 @@ const SignUpPage = () => {
 
           {/* Google Sign-In */}
           <GoogleSignInButton
-            onSuccess={(result) => {
-              if (result.requiresVaultSetup) {
-                window.location.href = '/folders?setupVault=true';
-              } else {
-                window.location.href = '/folders';
-              }
+            onSuccess={() => {
+              window.location.href = '/folders';
             }}
             onError={(error) => setError(error)}
           />

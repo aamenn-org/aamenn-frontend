@@ -319,28 +319,6 @@ const Dashboard = () => {
     },
   });
 
-  // Mandatory vault setup check - redirect if vault not set up and not already on setup page
-  useEffect(() => {
-    // Wait for vault state to load before making decisions
-    if (vaultStateLoading) return;
-
-    const setupVault = searchParams.get('setupVault');
-    
-    // Check for vault setup parameter first
-    if (setupVault === 'true') {
-      // Remove the parameter from URL
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    // Only redirect if vault needs setup and not already on setup page
-    if (needsVaultSetup) {
-      // Redirect to vault setup page
-      window.location.href = '/folders?setupVault=true';
-      return;
-    }
-  }, [needsVaultSetup, searchParams, vaultStateLoading]);
-
   // Show onboarding for normal signup path:
   // Vault is already set up during registration so handleMasterKeyUnlocked never fires.
   // SignUpPage sets aamenn_pending_onboarding before redirecting here.
@@ -501,11 +479,6 @@ const Dashboard = () => {
     if (recoveryPhrase) {
       setRecoveryKeyPhrase(recoveryPhrase);
       setShowRecoveryKeyPrompt(true);
-    }
-
-    // Clean vault setup URL param without a full page reload
-    if (searchParams.has('setupVault')) {
-      window.history.replaceState({}, '', '/folders');
     }
 
     // Show onboarding for first-time vault setup (Google signup path)
