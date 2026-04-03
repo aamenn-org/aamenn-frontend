@@ -50,6 +50,7 @@
     "confirmTitle": "هل أنت متأكد من حذف حسابك؟",
     "confirmDescription": "يرجى إدخال كلمة المرور لتأكيد حذف الحساب. سيتم حذف جميع بياناتك نهائياً.",
     "passwordLabel": "أدخل كلمة المرور",
+    "passwordPlaceholder": "أدخل كلمة المرور",
     "deleteButton": "حذف حسابي",
     "deleteSuccess": "تم حذف الحساب بنجاح",
     "deleteError": "فشل في حذف الحساب",

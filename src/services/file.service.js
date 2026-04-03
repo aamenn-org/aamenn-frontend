@@ -231,11 +231,22 @@ export const fileService = {
   },
 
   /**
-   * Empty trash - permanently delete all trashed files
+   * Empty trash in batches — calls POST repeatedly, invoking the callback
+   * after each batch so the UI can remove files progressively.
+   * @param {(deletedIds: string[]) => void} onBatchDeleted - Called per batch with deleted IDs
    */
-  async emptyTrash() {
-    const response = await api.post('/files/trash/empty');
-    return response.data;
+  async emptyTrash(onBatchDeleted) {
+    let remaining = 1;
+    while (remaining > 0) {
+      const response = await api.post('/files/trash/empty');
+      const data = response.data;
+      remaining = data?.remaining ?? 0;
+      const deletedIds = data?.deletedIds ?? [];
+      if (deletedIds.length > 0 && onBatchDeleted) {
+        onBatchDeleted(deletedIds);
+      }
+      if (deletedIds.length === 0) break;
+    }
   },
 
   /**

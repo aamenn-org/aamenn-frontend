@@ -246,8 +246,9 @@ let fileData;
         });
       }
 
-      // Pass fileData directly — no .slice(0) copy needed (not mutated)
-      const contentHash = await cryptoService.computeSHA256(fileData);
+      // slice(0) creates a copy: computeSHA256 transfers the buffer to a worker
+      // (detaching it), so the original fileData must stay intact for encryptFile().
+      const contentHash = await cryptoService.computeSHA256(fileData.slice(0));
       updateUpload(id, { progress: 5 });
 
       // Duplicate check
@@ -257,12 +258,10 @@ let fileData;
           updateUpload(id, {
             status: UploadStatus.DUPLICATE,
             progress: 100,
+            bytesUploaded: file.size,
             error: 'File already uploaded (exists in your library)',
             existingFileId: dup.existingFile?.id,
           });
-          encryptingCountRef.current--;
-          processEncryptionQueue();
-          checkIfAllDone();
           return;
         }
       } catch {
@@ -861,8 +860,13 @@ let fileData;
 
   for (const u of uploadsArray) {
     progressSum += u.progress;
-    totalBytes += (u.totalBytes || u.size || 0);
-    totalBytesUploaded += (u.bytesUploaded || 0);
+    const uSize = u.size || 0;
+    totalBytes += uSize;
+    if (u.status === UploadStatus.COMPLETED || u.status === UploadStatus.DUPLICATE) {
+      totalBytesUploaded += uSize;
+    } else {
+      totalBytesUploaded += Math.min(u.bytesUploaded || 0, uSize);
+    }
 
     switch (u.status) {
       case UploadStatus.PENDING: queued++; break;

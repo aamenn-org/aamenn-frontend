@@ -264,7 +264,7 @@ const SecuritySection = () => {
                 </p>
               </div>
               <button
-                onClick={() => window.location.href = '/folders?setupVault=true'}
+                onClick={() => window.location.href = '/folders'}
                 className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
               >
                 Set Up Vault Password
@@ -312,9 +312,6 @@ const SecuritySection = () => {
             </p>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                {isOAuthUser ? 'Vault Password' : t('deleteAccount.passwordLabel')}
-              </label>
               <input
                 type="password"
                 value={deletePassword}

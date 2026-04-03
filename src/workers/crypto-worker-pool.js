@@ -404,7 +404,7 @@ class CryptoWorkerPool {
       'DECRYPT_FILE',
       { encryptedData, cipherFileKeyBase64, masterKeyBytes },
       [encryptedData],
-      null, // onProgress
+      null, 
       options
     );
     return result.decryptedData;
