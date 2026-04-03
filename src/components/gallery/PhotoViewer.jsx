@@ -10,27 +10,19 @@ import RenameModal from './RenameModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faTriangleExclamation, 
-  faPlay, 
   faMagnifyingGlassPlus, 
   faMagnifyingGlassMinus, 
-  faPause, 
-  faBackward, 
-  faForward, 
-  faVolumeXmark, 
-  faVolumeHigh, 
-  faMaximize, 
-  faMinimize, 
   faInfoCircle, 
   faEllipsisVertical,
   faDownload,
   faShare,
   faTrash,
   faPen,
-  faCopy,
   faXmark,
   faChevronLeft,
   faChevronRight,
-  faPlus
+  faPlus,
+  faVideo
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -73,15 +65,6 @@ const PhotoViewer = ({
   const [downloading, setDownloading] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
 
-  // Video-specific state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [volume, setVolume] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoRef = useRef(null);
   const containerRef = useRef(null);
 
   // UI visibility states for auto-hide behavior
@@ -89,7 +72,6 @@ const PhotoViewer = ({
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [showBottomOverlay, setShowBottomOverlay] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState(true);
-  const [showVideoControls, setShowVideoControls] = useState(true);
 
   // Menu and info panel states
   const [showMenu, setShowMenu] = useState(false);
@@ -152,26 +134,60 @@ const PhotoViewer = ({
   const rightArrowTimerRef = useRef(null);
   const bottomOverlayTimerRef = useRef(null);
   const closeButtonTimerRef = useRef(null);
-  const videoControlsTimerRef = useRef(null);
+
+  const clearAutoHideTimer = useCallback((timerRef) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const startAutoHideTimer = useCallback((timerRef, setVisible) => {
+    clearAutoHideTimer(timerRef);
+    timerRef.current = setTimeout(() => {
+      setVisible(false);
+    }, AUTO_HIDE_DELAY);
+  }, [clearAutoHideTimer]);
+
+  const handleMouseMove = useCallback((e) => {
+    const { clientY, currentTarget } = e;
+    const { height } = currentTarget.getBoundingClientRect();
+    const bottomZone = height * 0.75;
+
+    setShowCloseButton(true);
+    clearAutoHideTimer(closeButtonTimerRef);
+    startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
+
+    setShowLeftArrow(hasPrev);
+    clearAutoHideTimer(leftArrowTimerRef);
+    startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
+
+    setShowRightArrow(hasNext);
+    clearAutoHideTimer(rightArrowTimerRef);
+    startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
+
+    if (clientY > bottomZone) {
+      setShowBottomOverlay(true);
+      clearAutoHideTimer(bottomOverlayTimerRef);
+      startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
+    }
+  }, [hasPrev, hasNext, clearAutoHideTimer, startAutoHideTimer]);
+
+  const handleMouseLeave = useCallback(() => {
+    startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
+    startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
+    startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
+    startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
+  }, [startAutoHideTimer]);
+
+  const handleDeleteFile = useCallback(() => {
+    setShowMenu(false);
+    onDelete?.(file);
+  }, [onDelete, file]);
 
   // Track current file to prevent stale updates
   const currentFileIdRef = useRef(null);
   const fileDataRef = useRef(null);
-
-  // Get the best available cached image INSTANTLY (synchronous check)
-  const getBestCachedUrl = useCallback((fileId) => {
-    // Check L1 memory in order of preference: large > medium > small
-    const largeUrl = thumbnailCache.getLargeThumbnailFromMemory(fileId);
-    if (largeUrl) return { url: largeUrl, quality: 'large' };
-
-    const mediumUrl = thumbnailCache.getMediumFromMemory(fileId);
-    if (mediumUrl) return { url: mediumUrl, quality: 'medium' };
-
-    const smallUrl = thumbnailCache.getSmallThumbnailFromMemory(fileId);
-    if (smallUrl) return { url: smallUrl, quality: 'small' };
-
-    return { url: null, quality: 'none' };
-  }, []);
 
   // Get best cached for VIEWER ONLY (excludes small grid thumbnails)
   // This ensures preview never shows small, only medium->large upgrade
@@ -468,46 +484,6 @@ const PhotoViewer = ({
     }
   }, [getMasterKey, files, currentIndex]);
 
-  // Load video file
-  const loadVideo = useCallback(
-    async (targetFile, fileId) => {
-      const masterKey = getMasterKey();
-      if (!masterKey) {
-        setError('Unable to decrypt. Please log out and log in again.');
-        return;
-      }
-
-      try {
-        // Get file metadata
-        const fileData = await fileService.getFile(fileId);
-        fileDataRef.current = fileData;
-
-        // Check if we're still viewing the same file
-        if (currentFileIdRef.current !== fileId) return;
-
-        // Load full video
-        if (fileData.downloadUrl) {
-          const videoUrl = await thumbnailCache.getFullImage(
-            fileId,
-            fileData.downloadUrl,
-            masterKey,
-            fileData.cipherFileKey,  // Pass cipherFileKey for unified decryption
-            fileData.mimeType
-          );
-          if (currentFileIdRef.current === fileId) {
-            setDisplayUrl(videoUrl);
-            setQuality('large'); // Treat as large quality
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load video:', err);
-        if (currentFileIdRef.current === fileId) {
-          setError(err.message || 'Failed to load video');
-        }
-      }
-    },
-    [getMasterKey]
-  );
 
   // Main effect: Handle file changes INSTANTLY
   useEffect(() => {
@@ -520,36 +496,18 @@ const PhotoViewer = ({
     currentFileIdRef.current = fileId;
     setError(null);
 
-    // Reset video state when changing files
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setIsBuffering(false);
-
-    // Check if this is a video
-    const currentIsVideo = isVideo(file?.mimeType);
-
-    if (currentIsVideo) {
-      // For videos: check if already cached, otherwise show loading state
-      const cached = getBestCachedUrl(fileId);
-      if (cached.url) {
-        setDisplayUrl(cached.url);
-        setQuality(cached.quality);
-      } else {
-        setDisplayUrl(null);
-        setQuality('none');
-      }
-      loadVideo(file, fileId);
+    if (isVideoFile) {
+      // Videos: no preview, show unsupported state immediately
+      setDisplayUrl(null);
+      setQuality('none');
     } else {
       // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
       const cached = getBestCachedUrlForViewer(fileId);
       if (cached.url) {
-        // We have medium or large cached - show it IMMEDIATELY
         setDisplayUrl(cached.url);
         setQuality(cached.quality);
         console.log(`[PhotoViewer] Instant display from L1: ${cached.quality}`);
       } else {
-        // Only small or nothing in memory - show loading state until medium loads
         setDisplayUrl(null);
         setQuality('none');
         console.log('[PhotoViewer] No medium/large in L1, loading...');
@@ -561,8 +519,8 @@ const PhotoViewer = ({
 
     // Preload adjacent images aggressively for instant navigation
     // Medium first (faster, good enough for preview), then full
-    const mediumPreloadTimer = setTimeout(preloadMediumAdjacent, 50); // Start immediately
-    const fullPreloadTimer = setTimeout(preloadFullAdjacent, 200); // Then full quality
+    const mediumPreloadTimer = setTimeout(preloadMediumAdjacent, 50);
+    const fullPreloadTimer = setTimeout(preloadFullAdjacent, 200);
 
     return () => {
       clearTimeout(fullPreloadTimer);
@@ -575,7 +533,6 @@ const PhotoViewer = ({
     isOpen,
     getBestCachedUrlForViewer,
     loadImage,
-    loadVideo,
     preloadFullAdjacent,
     preloadMediumAdjacent,
   ]);
@@ -590,8 +547,7 @@ const PhotoViewer = ({
 
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      const extension = isVideoFile ? 'mp4' : 'jpg';
-      link.download = decryptedFileName || `media.${extension}`;
+      link.download = decryptedFileName || 'photo.jpg';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -603,104 +559,34 @@ const PhotoViewer = ({
     }
   };
 
-  // Video control functions
-  const togglePlay = useCallback(() => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
-  }, [isPlaying]);
-
-  const toggleMute = useCallback(() => {
-    if (!videoRef.current) return;
-    videoRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
-  }, [isMuted]);
-
-  const handleSeek = useCallback((e) => {
-    if (!videoRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    videoRef.current.currentTime = percentage * videoRef.current.duration;
-  }, []);
-
-  const handleVolumeChange = useCallback((e) => {
-    if (!videoRef.current) return;
-    const newVolume = parseFloat(e.target.value);
-    videoRef.current.volume = newVolume;
-    setVolume(newVolume);
-    setIsMuted(newVolume === 0);
-  }, []);
-
-  const toggleFullscreen = useCallback(async () => {
-    if (!containerRef.current) return;
-
+  const handleDownloadVideo = async () => {
+    setDownloading(true);
     try {
-      if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-      }
+      const masterKey = getMasterKey();
+      if (!masterKey) return;
+      const fileData = await fileService.getFile(file.fileId);
+      const videoUrl = await thumbnailCache.getFullImage(
+        file.fileId,
+        fileData.downloadUrl,
+        masterKey,
+        fileData.cipherFileKey,
+        fileData.mimeType
+      );
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = decryptedFileName || 'video';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
     } catch (err) {
-      console.error('Fullscreen error:', err);
+      console.error('Video download failed:', err);
+    } finally {
+      setDownloading(false);
     }
-  }, []);
-
-  const skipTime = useCallback((seconds) => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(
-      0,
-      Math.min(
-        videoRef.current.duration,
-        videoRef.current.currentTime + seconds
-      )
-    );
-  }, []);
-
-  // Video event handlers
-  const handleVideoPlay = useCallback(() => setIsPlaying(true), []);
-  const handleVideoPause = useCallback(() => setIsPlaying(false), []);
-  const handleVideoTimeUpdate = useCallback(() => {
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-    }
-  }, []);
-  const handleVideoLoadedMetadata = useCallback(() => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
-  }, []);
-  const handleVideoWaiting = useCallback(() => setIsBuffering(true), []);
-  const handleVideoPlaying = useCallback(() => setIsBuffering(false), []);
-  const handleVideoEnded = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  }, []);
-
-  // Handle click on video to toggle play (ente.io style)
-  const handleVideoClick = useCallback(
-    (e) => {
-      // Don't toggle if clicking on controls
-      if (e.target.closest('.video-controls')) return;
-      togglePlay();
-    },
-    [togglePlay]
-  );
-
-  // Handle fullscreen change events
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () =>
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  };
 
   const formatFileSize = (bytes) => {
     if (!bytes) return 'Unknown';
@@ -709,17 +595,6 @@ const PhotoViewer = ({
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  // Format date with full details for info panel
   const formatDateFull = (dateString) => {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
@@ -741,14 +616,12 @@ const PhotoViewer = ({
     });
   };
 
-  // Calculate megapixels from resolution
   const getMegapixels = (width, height) => {
     if (!width || !height) return null;
     const mp = (width * height) / 1000000;
     return mp >= 1 ? `${mp.toFixed(1)}MP` : `${(mp * 1000).toFixed(0)}K`;
   };
 
-  // Get file category based on mime type
   const getCategory = (mimeType) => {
     if (!mimeType) return null;
     if (mimeType.startsWith('image/')) return 'Photo';
@@ -756,194 +629,29 @@ const PhotoViewer = ({
     return null;
   };
 
-  // Handle delete action
-  const handleDeleteFile = async () => {
-    if (!file) return;
-    const fileId = file.fileId;
-
-    const confirmMessage = 'Move this file to trash?';
-    if (!window.confirm(confirmMessage)) return;
-
-    setShowMenu(false);
-    onDelete?.(fileId);
-  };
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setShowMenu(false);
-      }
-    };
-
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () =>
-        document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showMenu]);
-
-  // Auto-hide timer helpers
-  const startAutoHideTimer = useCallback((timerRef, setVisibility) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-    timerRef.current = setTimeout(() => {
-      setVisibility(false);
-    }, AUTO_HIDE_DELAY);
-  }, []);
-
-  const clearAutoHideTimer = useCallback((timerRef) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  // Mouse move handler for zone-based visibility
-  const handleMouseMove = useCallback(
-    (e) => {
-      const { clientX, clientY } = e;
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
-      // Left zone (15% of screen width)
-      const leftZone = windowWidth * 0.15;
-      // Right zone (15% of screen width)
-      const rightZone = windowWidth * 0.85;
-      // Bottom zone (20% of screen height)
-      const bottomZone = windowHeight * 0.8;
-      // Top zone for close button (10% of screen height)
-      const topZone = windowHeight * 0.1;
-
-      // Handle left arrow visibility
-      if (clientX < leftZone && hasPrev) {
-        setShowLeftArrow(true);
-        clearAutoHideTimer(leftArrowTimerRef);
-        startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
-      }
-
-      // Handle right arrow visibility
-      if (clientX > rightZone && hasNext) {
-        setShowRightArrow(true);
-        clearAutoHideTimer(rightArrowTimerRef);
-        startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
-      }
-
-      // Handle bottom overlay visibility (includes video controls)
-      if (clientY > bottomZone) {
-        setShowBottomOverlay(true);
-        setShowVideoControls(true);
-        clearAutoHideTimer(bottomOverlayTimerRef);
-        clearAutoHideTimer(videoControlsTimerRef);
-        startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
-        startAutoHideTimer(videoControlsTimerRef, setShowVideoControls);
-      }
-
-      // Handle close button visibility (top area or any movement)
-      if (clientY < topZone) {
-        setShowCloseButton(true);
-        clearAutoHideTimer(closeButtonTimerRef);
-        startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
-      }
-    },
-    [hasPrev, hasNext, startAutoHideTimer, clearAutoHideTimer]
-  );
-
-  // Mouse leave handler - start all hide timers
-  const handleMouseLeave = useCallback(() => {
-    startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
-    startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
-    startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
-    startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
-    startAutoHideTimer(videoControlsTimerRef, setShowVideoControls);
-  }, [startAutoHideTimer]);
-
-  // Show controls initially then auto-hide
-  useEffect(() => {
-    if (isOpen) {
-      // Show all controls initially
-      setShowLeftArrow(hasPrev);
-      setShowRightArrow(hasNext);
-      setShowBottomOverlay(true);
-      setShowCloseButton(true);
-      setShowVideoControls(true);
-
-      // Start auto-hide timers
-      startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
-      startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
-      startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
-      startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
-      startAutoHideTimer(videoControlsTimerRef, setShowVideoControls);
-    }
-
-    return () => {
-      clearAutoHideTimer(leftArrowTimerRef);
-      clearAutoHideTimer(rightArrowTimerRef);
-      clearAutoHideTimer(bottomOverlayTimerRef);
-      clearAutoHideTimer(closeButtonTimerRef);
-      clearAutoHideTimer(videoControlsTimerRef);
-    };
-  }, [isOpen, hasPrev, hasNext, startAutoHideTimer, clearAutoHideTimer]);
-
-  // Handle keyboard navigation (with video shortcuts)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!isOpen) return;
 
-      // Show controls briefly on any key press
       setShowLeftArrow(hasPrev);
       setShowRightArrow(hasNext);
       setShowBottomOverlay(true);
       setShowCloseButton(true);
-      setShowVideoControls(true);
 
-      // Restart auto-hide timers
       startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
       startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
       startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
       startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
-      startAutoHideTimer(videoControlsTimerRef, setShowVideoControls);
 
       switch (e.key) {
         case 'Escape':
           onClose();
           break;
         case 'ArrowLeft':
-          if (isVideoFile && videoRef.current) {
-            e.preventDefault();
-            skipTime(-10);
-          } else if (hasPrev) {
-            onPrev();
-          }
+          if (hasPrev) onPrev();
           break;
         case 'ArrowRight':
-          if (isVideoFile && videoRef.current) {
-            e.preventDefault();
-            skipTime(10);
-          } else if (hasNext) {
-            onNext();
-          }
-          break;
-        case ' ':
-          if (isVideoFile) {
-            e.preventDefault();
-            togglePlay();
-          }
-          break;
-        case 'm':
-        case 'M':
-          if (isVideoFile) {
-            e.preventDefault();
-            toggleMute();
-          }
-          break;
-        case 'f':
-        case 'F':
-          if (isVideoFile) {
-            e.preventDefault();
-            toggleFullscreen();
-          }
+          if (hasNext) onNext();
           break;
         default:
           break;
@@ -960,16 +668,10 @@ const PhotoViewer = ({
     hasNext,
     hasPrev,
     startAutoHideTimer,
-    isVideoFile,
-    skipTime,
-    togglePlay,
-    toggleMute,
-    toggleFullscreen,
   ]);
 
   if (!isOpen) return null;
 
-  // Determine loading state
   const isLoading = !displayUrl;
   const isFullQuality = quality === 'large';
 
@@ -989,59 +691,28 @@ const PhotoViewer = ({
             <p>{error}</p>
           </div>
         ) : isVideoFile ? (
-          /* Video Player */
-          <>
-            {/* Loading spinner for video */}
-            {!displayUrl && (
-              <div className="flex flex-col items-center justify-center text-gray-400">
-                <div className="animate-spin rounded-full h-12 w-12 border-2 border-white border-t-transparent mb-4"></div>
-                <p>Loading video...</p>
-              </div>
-            )}
-
-            {/* Video element */}
-            {displayUrl && (
-              <div
-                className="relative w-full h-full flex items-center justify-center cursor-pointer"
-                style={{ direction: 'ltr' }}
-                onClick={handleVideoClick}
-              >
-                <video
-                  ref={videoRef}
-                  src={displayUrl}
-                  className="max-w-full max-h-full object-contain"
-                  playsInline
-                  onPlay={handleVideoPlay}
-                  onPause={handleVideoPause}
-                  onTimeUpdate={handleVideoTimeUpdate}
-                  onLoadedMetadata={handleVideoLoadedMetadata}
-                  onWaiting={handleVideoWaiting}
-                  onPlaying={handleVideoPlaying}
-                  onEnded={handleVideoEnded}
-                />
-
-                {/* Buffering indicator */}
-                {isBuffering && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="animate-spin rounded-full h-16 w-16 border-4 border-white/30 border-t-white"></div>
-                  </div>
-                )}
-
-                {/* Big play button when paused */}
-                {!isPlaying && !isBuffering && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-20 h-20 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm transition-transform hover:scale-110">
-                      <FontAwesomeIcon icon={faPlay} className="w-10 h-10 text-white ml-1" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
+          /* Video — preview not supported */
+          <div className="flex flex-col items-center justify-center gap-5 text-gray-300 px-6 text-center">
+            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
+              <FontAwesomeIcon icon={faVideo} className="w-12 h-12 text-white/70" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-white">Video preview is not supported</p>
+              <p className="text-sm text-gray-400">You can download this video to watch it.</p>
+            </div>
+            <button
+              onClick={handleDownloadVideo}
+              disabled={downloading}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+              {downloading ? 'Downloading...' : 'Download Video'}
+            </button>
+          </div>
         ) : (
           /* Image Display */
           <>
-            {/* Empty placeholder - no blurhash, no spinner */}
+            {/* Empty placeholder */}
             {isLoading && (
               <div className="flex items-center justify-center w-full h-full">
                 {/* Just wait for image - black background */}
@@ -1139,114 +810,6 @@ const PhotoViewer = ({
         )}
       </div>
 
-      {/* Video Controls - Modern minimal design */}
-      {isVideoFile && displayUrl && (
-        <div
-          className={`video-controls absolute bottom-0 left-0 right-0 z-30 transition-all duration-300 ${
-            showVideoControls
-              ? 'opacity-100 translate-y-0'
-              : 'opacity-0 translate-y-4 pointer-events-none'
-          }`}
-        >
-          <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-12 pb-4 px-4">
-            {/* Progress bar */}
-            <div
-              className="w-full h-1 bg-white/30 rounded-full cursor-pointer mb-4 group"
-              onClick={handleSeek}
-            >
-              <div
-                className="h-full bg-white rounded-full relative transition-all"
-                style={{
-                  width: `${
-                    duration > 0 ? (currentTime / duration) * 100 : 0
-                  }%`,
-                }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </div>
-
-            {/* Control buttons */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                {/* Play/Pause */}
-                <button
-                  onClick={togglePlay}
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                >
-                  {isPlaying ? (
-                    <FontAwesomeIcon icon={faPause} className="w-6 h-6 text-white" />
-                  ) : (
-                    <FontAwesomeIcon icon={faPlay} className="w-6 h-6 text-white" />
-                  )}
-                </button>
-
-                {/* Skip backward */}
-                <button
-                  onClick={() => skipTime(-10)}
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title={t('video.rewind', 'Rewind 10s')}
-                >
-                  <FontAwesomeIcon icon={faBackward} className="w-5 h-5 text-white" />
-                </button>
-
-                {/* Skip forward */}
-                <button
-                  onClick={() => skipTime(10)}
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title={t('video.forward', 'Forward 10s')}
-                >
-                  <FontAwesomeIcon icon={faForward} className="w-5 h-5 text-white" />
-                </button>
-
-                {/* Volume */}
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={toggleMute}
-                    className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  >
-                    {isMuted || volume === 0 ? (
-                      <FontAwesomeIcon icon={faVolumeXmark} className="w-5 h-5 text-white" />
-                    ) : (
-                      <FontAwesomeIcon icon={faVolumeHigh} className="w-5 h-5 text-white" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={isMuted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    className="w-20 h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
-                  />
-                </div>
-
-                {/* Time display */}
-                <span className="text-white text-sm font-medium">
-                  {formatVideoDuration(currentTime)} /{' '}
-                  {formatVideoDuration(duration)}
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-4">
-                {/* Fullscreen */}
-                <button
-                  onClick={toggleFullscreen}
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors"
-                  title={t('video.fullscreen', 'Fullscreen (F)')}
-                >
-                  {isFullscreen ? (
-                    <FontAwesomeIcon icon={faMinimize} className="w-5 h-5 text-white" />
-                  ) : (
-                    <FontAwesomeIcon icon={faMaximize} className="w-5 h-5 text-white" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Close button - top right overlay */}
       <div
