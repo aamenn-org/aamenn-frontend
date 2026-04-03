@@ -239,6 +239,16 @@ export const fileService = {
   },
 
   /**
+   * Empty trash one batch at a time (up to 25 files per call).
+   * Returns { deletedIds: string[], remaining: number }.
+   * Call in a loop until remaining === 0.
+   */
+  async emptyTrashBatch() {
+    const response = await api.post('/files/trash/empty-batch');
+    return response.data;
+  },
+
+  /**
    * Update file metadata
    * @param {string} fileId - File UUID
    * @param {Object} updates - Properties to update

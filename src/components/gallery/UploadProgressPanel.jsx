@@ -59,11 +59,12 @@ const STATUS_DOT = {
   [UploadStatus.COMPLETED]: 'bg-green-500',
   [UploadStatus.FAILED]: 'bg-red-500',
   [UploadStatus.INTERRUPTED]: 'bg-red-400',
-  [UploadStatus.DUPLICATE]: 'bg-gray-400',
+  [UploadStatus.DUPLICATE]: 'bg-green-500',
 };
 
 const STATUS_BAR = {
   [UploadStatus.COMPLETED]: 'bg-green-500',
+  [UploadStatus.DUPLICATE]: 'bg-green-500',
   [UploadStatus.FAILED]: 'bg-red-500',
   [UploadStatus.INTERRUPTED]: 'bg-red-400',
   [UploadStatus.PAUSED]: 'bg-orange-500',
@@ -133,7 +134,7 @@ const UploadFileRow = ({ upload, onPause, onResume, onCancel }) => {
             <FontAwesomeIcon icon={faXmark} className="w-2.5 h-2.5" />
           </button>
         )}
-        {upload.status === UploadStatus.COMPLETED && (
+        {(upload.status === UploadStatus.COMPLETED || upload.status === UploadStatus.DUPLICATE) && (
           <span className="p-1 text-green-500">
             <FontAwesomeIcon icon={faCheck} className="w-2.5 h-2.5" />
           </span>
@@ -168,6 +169,7 @@ const UploadProgressPanel = ({
     paused = 0,
     completed = 0,
     failed = 0,
+    duplicate = 0,
     totalBytes = 0,
     totalBytesUploaded = 0,
     aggregateSpeed = 0,
@@ -285,7 +287,7 @@ const UploadProgressPanel = ({
           icon={isExpanded ? faChevronUp : faChevronDown}
           className="w-2.5 h-2.5"
         />
-        {completed} of {total} files
+        {completed + duplicate} of {total} files
         {paused > 0 && <span className="text-orange-500 ml-1">({paused} paused)</span>}
         {failed > 0 && <span className="text-red-500 ml-1">({failed} failed)</span>}
       </button>

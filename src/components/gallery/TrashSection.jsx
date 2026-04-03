@@ -127,20 +127,51 @@ const TrashSection = ({ onViewFile, gridSize }) => {
     }
   };
 
+  const [emptyingTrash, setEmptyingTrash] = useState(false);
+  const [emptyProgress, setEmptyProgress] = useState({ deleted: 0, total: 0 });
+
   const handleEmptyTrash = async () => {
     if (files.length === 0) return;
 
-    const confirmMessage = `Permanently delete all ${files.length} files in trash? This action cannot be undone.`;
+    const totalToDelete = pagination.total > 0 ? pagination.total : files.length;
+    const confirmMessage = `Permanently delete all ${totalToDelete} file${totalToDelete !== 1 ? 's' : ''} in trash? This action cannot be undone.`;
 
     if (!window.confirm(confirmMessage)) return;
 
+    setEmptyingTrash(true);
+    setEmptyProgress({ deleted: 0, total: totalToDelete });
+    setSelectedFiles([]);
+
     try {
-      await fileService.emptyTrash();
-      setSelectedFiles([]);
-      await fetchTrash(1, false);
+      let remaining = totalToDelete;
+
+      while (remaining > 0) {
+        const result = await fileService.emptyTrashBatch();
+
+        if (result.deletedIds && result.deletedIds.length > 0) {
+          const deletedSet = new Set(result.deletedIds);
+          setFiles((prev) => prev.filter((f) => !deletedSet.has(f.fileId || f.id)));
+          setEmptyProgress((prev) => ({
+            ...prev,
+            deleted: prev.deleted + result.deletedIds.length,
+          }));
+        }
+
+        remaining = result.remaining;
+
+        if (result.deletedIds.length === 0) {
+          break;
+        }
+      }
+
+      setPagination((prev) => ({ ...prev, total: 0, totalPages: 0, hasMore: false }));
     } catch (error) {
       console.error('Failed to empty trash:', error);
       alert('Failed to empty trash. Please try again.');
+      await fetchTrash(1, false);
+    } finally {
+      setEmptyingTrash(false);
+      setEmptyProgress({ deleted: 0, total: 0 });
     }
   };
 
@@ -203,14 +234,16 @@ const TrashSection = ({ onViewFile, gridSize }) => {
             <>
               <button
                 onClick={handleRestore}
-                className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors rounded-lg"
+                disabled={emptyingTrash}
+                className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors rounded-lg"
               >
                 <FontAwesomeIcon icon={faArrowRotateLeft} className="w-4 h-4 mr-2" />
                 {t('restore', 'Restore')}
               </button>
               <button
                 onClick={handleDeletePermanently}
-                className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors rounded-lg"
+                disabled={emptyingTrash}
+                className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors rounded-lg"
               >
                 <FontAwesomeIcon icon={faTrashCan} className="w-4 h-4 mr-2" />
                 {t('deleteForever', 'Delete Forever')}
@@ -221,9 +254,12 @@ const TrashSection = ({ onViewFile, gridSize }) => {
           {files.length > 0 && (
             <button
               onClick={handleEmptyTrash}
-              className="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors rounded-lg"
+              disabled={emptyingTrash}
+              className="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors rounded-lg"
             >
-              {t('emptyTrash', 'Empty Trash')}
+              {emptyingTrash
+                ? `Deleting… ${emptyProgress.deleted} / ${emptyProgress.total}`
+                : t('emptyTrash', 'Empty Trash')}
             </button>
           )}
         </div>
