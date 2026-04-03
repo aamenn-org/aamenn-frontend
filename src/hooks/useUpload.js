@@ -246,8 +246,9 @@ let fileData;
         });
       }
 
-      // Pass fileData directly — no .slice(0) copy needed (not mutated)
-      const contentHash = await cryptoService.computeSHA256(fileData);
+      // slice(0) creates a copy: computeSHA256 transfers the buffer to a worker
+      // (detaching it), so the original fileData must stay intact for encryptFile().
+      const contentHash = await cryptoService.computeSHA256(fileData.slice(0));
       updateUpload(id, { progress: 5 });
 
       // Duplicate check

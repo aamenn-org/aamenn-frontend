@@ -179,6 +179,7 @@ const UploadProgressPanel = ({
   const hasUploads = total > 0;
   const isComplete = hasUploads && active === 0 && queued === 0 && hashing === 0 && paused === 0;
   const byteProgress = totalBytes > 0 ? Math.min(Math.round((totalBytesUploaded / totalBytes) * 100), 100) : 0;
+  const fileProgress = hasUploads ? Math.round(((completed + duplicate) / total) * 100) : 0;
 
   if (!hasUploads) return null;
 
@@ -197,12 +198,12 @@ const UploadProgressPanel = ({
                 cx="20" cy="20" r="16"
                 stroke={isComplete ? '#10b981' : '#3b82f6'}
                 strokeWidth="4" fill="none"
-                strokeDasharray={`${byteProgress} 100`}
+                strokeDasharray={`${fileProgress} 100`}
                 strokeLinecap="round"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-xs font-medium dark:text-white">
-              {byteProgress}%
+              {fileProgress}%
             </span>
           </div>
           <div className="text-sm">
@@ -268,12 +269,12 @@ const UploadProgressPanel = ({
         </div>
       </div>
 
-      {/* Overall progress bar (byte-based) */}
+      {/* Overall progress bar (file-count-based: N completed / total) */}
       <div className="px-4 py-2">
         <div className="w-full bg-gray-200 dark:bg-zinc-700 rounded-full h-1.5">
           <div
             className={`h-1.5 rounded-full transition-all duration-300 ${isComplete ? 'bg-green-500' : 'bg-blue-500'}`}
-            style={{ width: `${byteProgress}%` }}
+            style={{ width: `${fileProgress}%` }}
           />
         </div>
       </div>
