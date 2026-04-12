@@ -28,7 +28,7 @@ const RETRY_DELAYS = [2000, 4000, 8000]; // exponential backoff
  * @param {number}       opts.initialChunkSize— initial chunk size in bytes
  * @param {Set<number>}  [opts.skipParts]     — parts already uploaded (for resume)
  * @param {AbortSignal}  [opts.signal]        — abort signal for pause/cancel
- * @param {function}     [opts.onChunkProgress] — (bytesLoadedThisChunk, bytesTotalThisChunk) => void
+ * @param {function}     [opts.onChunkProgress] — (partNumber, bytesLoadedThisChunk, bytesTotalThisChunk) => void
  * @param {function}     [opts.onChunkComplete] — (partNumber, sha1) => void
  * @param {function}     [opts.onTotalProgress] — (totalBytesUploaded) => void
  * @returns {Promise<string[]>} — ordered SHA-1 array for all parts
@@ -118,7 +118,7 @@ export async function uploadChunked(opts) {
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onChunkProgress) {
-          onChunkProgress(e.loaded, e.total);
+          onChunkProgress(partNumber, e.loaded, e.total);
         }
       };
 

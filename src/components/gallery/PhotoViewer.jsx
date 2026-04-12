@@ -538,20 +538,42 @@ const PhotoViewer = ({
   ]);
 
   const handleDownload = async () => {
-    if (!displayUrl) return;
-
     setDownloading(true);
     try {
-      const response = await fetch(displayUrl);
-      const blob = await response.blob();
+      let blobUrl;
+
+      if (displayUrl) {
+        // Image path: displayUrl is already a decrypted blob URL
+        const response = await fetch(displayUrl);
+        const blob = await response.blob();
+        blobUrl = URL.createObjectURL(blob);
+      } else {
+        // Fallback (videos / files without displayUrl): download + decrypt original
+        const masterKey = getMasterKey();
+        if (!masterKey) {
+          console.error('Download failed: no master key');
+          return;
+        }
+        const fileData = fileDataRef.current || await fileService.getFile(file.fileId);
+        const fullUrl = await thumbnailCache.getFullImage(
+          file.fileId,
+          fileData.downloadUrl,
+          masterKey,
+          fileData.cipherFileKey,
+          fileData.mimeType
+        );
+        const response = await fetch(fullUrl);
+        const blob = await response.blob();
+        blobUrl = URL.createObjectURL(blob);
+      }
 
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = decryptedFileName || 'photo.jpg';
+      link.href = blobUrl;
+      link.download = decryptedFileName || 'file';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Download failed:', err);
     } finally {
@@ -861,7 +883,7 @@ const PhotoViewer = ({
                   setShowMenu(false);
                   handleDownload();
                 }}
-                disabled={!displayUrl || downloading}
+                disabled={downloading}
                 className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {downloading ? (

@@ -471,81 +471,138 @@ let fileData;
     const {
       id, file, encryptedBlob, fileNameEncrypted, cipherFileKey,
       thumbnailData, contentHash, folderId,
+      // Resume fields (set only when resuming a paused upload):
+      _resumeSessionId,
+      _resumeSkipParts,
+      _resumeChunkSize,
     } = encryptedItem;
 
+    const isResume = !!_resumeSessionId;
     const speedTracker = new SpeedTracker();
     const abortController = new AbortController();
-    controlsRef.current.set(id, { abortController, speedTracker, isPaused: false, serverSessionId: null });
+
+    // Preserve encryptedBlob / thumbnailData already on ctrl (resume puts them there)
+    const existingCtrl = controlsRef.current.get(id) || {};
+    controlsRef.current.set(id, {
+      ...existingCtrl,
+      abortController,
+      speedTracker,
+      isPaused: false,
+      serverSessionId: _resumeSessionId || null,
+    });
 
     try {
       updateUpload(id, { status: UploadStatus.UPLOADING, progress: 50 });
 
-      const initialChunkSize = chooseInitialChunkSize(encryptedBlob.size);
-      const totalParts = calculateTotalParts(encryptedBlob.size, initialChunkSize);
+      let serverSessionId;
+      let initialChunkSize;
+      let totalParts;
+      let resumeSkipParts = _resumeSkipParts || new Set();
+      let b2FileId;
 
-      // Start session on backend
-      const session = await fileService.startChunkedUpload({
-        fileNameEncrypted,
-        cipherFileKey,
-        mimeType: file.type || null,
-        totalBytes: encryptedBlob.size,
-        chunkSizeBytes: initialChunkSize,
-        totalParts,
-        contentHash: contentHash || undefined,
-        folderId: folderId || undefined,
-        width: thumbnailData?.width || undefined,
-        height: thumbnailData?.height || undefined,
-        duration: thumbnailData?.duration || undefined,
-      });
+      if (isResume) {
+        // ── RESUME existing session ──────────────────────────
+        serverSessionId = _resumeSessionId;
+        initialChunkSize = _resumeChunkSize;
+        totalParts = calculateTotalParts(encryptedBlob.size, initialChunkSize);
+        b2FileId = null; // not needed — backend resolves from session
+      } else {
+        // ── NEW session ──────────────────────────────────────
+        initialChunkSize = chooseInitialChunkSize(encryptedBlob.size);
+        totalParts = calculateTotalParts(encryptedBlob.size, initialChunkSize);
 
-      const serverSessionId = session.uploadId;
-      controlsRef.current.get(id).serverSessionId = serverSessionId;
+        const session = await fileService.startChunkedUpload({
+          fileNameEncrypted,
+          cipherFileKey,
+          mimeType: file.type || null,
+          totalBytes: encryptedBlob.size,
+          chunkSizeBytes: initialChunkSize,
+          totalParts,
+          contentHash: contentHash || undefined,
+          folderId: folderId || undefined,
+          width: thumbnailData?.width || undefined,
+          height: thumbnailData?.height || undefined,
+          duration: thumbnailData?.duration || undefined,
+        });
+
+        serverSessionId = session.uploadId;
+        b2FileId = session.b2FileId;
+      }
+
+      // Store resume-critical data in controlsRef (survives pause)
+      const ctrl = controlsRef.current.get(id);
+      ctrl.serverSessionId = serverSessionId;
+      ctrl.encryptedBlob = encryptedBlob;
+      ctrl.initialChunkSize = initialChunkSize;
+      ctrl.thumbnailData = thumbnailData;
 
       updateUpload(id, {
         chunksTotal: totalParts,
-        chunksCompleted: 0,
+        chunksCompleted: resumeSkipParts.size,
         totalBytes: encryptedBlob.size,
         bytesUploaded: 0,
         serverSessionId,
       });
 
       // Persist to IndexedDB for resume
-      await uploadPersistence.saveSession(id, {
-        serverSessionId,
-        fileName: file.name,
-        fileSize: file.size,
-        totalParts,
-        chunkSizeBytes: initialChunkSize,
-        completedParts: [],
-        status: 'active',
-      });
+      if (!isResume) {
+        await uploadPersistence.saveSession(id, {
+          serverSessionId,
+          fileName: file.name,
+          fileSize: file.size,
+          totalParts,
+          chunkSizeBytes: initialChunkSize,
+          completedParts: [],
+          status: 'active',
+        });
+      }
 
-      let completedCount = 0;
+      let completedCount = resumeSkipParts.size;
+      // Track per-chunk in-flight progress for accurate parallel progress
+      const chunkProgressMap = new Map(); // partNumber → bytesLoaded
+      let completedBytes = 0; // bytes from fully-completed chunks
+      // Pre-count bytes from skipped (already-uploaded) parts
+      for (const pn of resumeSkipParts) {
+        const start = (pn - 1) * initialChunkSize;
+        const end = Math.min(start + initialChunkSize, encryptedBlob.size);
+        completedBytes += (end - start);
+      }
 
       const sha1Array = await uploadChunked({
         serverSessionId,
-        b2FileId: session.b2FileId,
+        b2FileId: b2FileId || '',
         encryptedBlob,
         totalParts,
         initialChunkSize,
+        skipParts: resumeSkipParts,
         signal: abortController.signal,
-        onChunkProgress: (loaded, total) => {
-          const prevBytes = completedCount * initialChunkSize;
-          const currentBytes = Math.min(loaded, total);
-          speedTracker.addSample(prevBytes + currentBytes);
+        onChunkProgress: (partNumber, loaded, total) => {
+          chunkProgressMap.set(partNumber, Math.min(loaded, total));
 
-          const totalUp = prevBytes + currentBytes;
-          const remaining = encryptedBlob.size - totalUp;
-          const pct = 50 + Math.round((totalUp / encryptedBlob.size) * 50);
+          // Sum: completed bytes + all in-flight chunks' partial progress
+          let inFlightBytes = 0;
+          for (const bytes of chunkProgressMap.values()) {
+            inFlightBytes += bytes;
+          }
+          const totalUp = completedBytes + inFlightBytes;
+          speedTracker.addSample(totalUp);
+
+          const remaining = Math.max(0, encryptedBlob.size - totalUp);
+          const pct = 50 + Math.round((Math.min(totalUp, encryptedBlob.size) / encryptedBlob.size) * 50);
 
           throttledUpdate(id, {
-            progress: pct,
-            bytesUploaded: totalUp,
+            progress: Math.min(pct, 99), // cap at 99 until truly complete
+            bytesUploaded: Math.min(totalUp, encryptedBlob.size),
             speed: speedTracker.getSpeedBps(),
             eta: speedTracker.getEtaSeconds(remaining),
           });
         },
         onChunkComplete: (partNumber) => {
+          // Move this chunk's bytes from in-flight to completed
+          const chunkBytes = chunkProgressMap.get(partNumber) || 0;
+          completedBytes += chunkBytes;
+          chunkProgressMap.delete(partNumber);
+
           completedCount++;
           updateUpload(id, { chunksCompleted: completedCount });
           uploadPersistence.saveSession(id, {
@@ -562,6 +619,19 @@ let fileData;
           // Additional aggregate update if needed
         },
       });
+
+      // For resume: we need SHA1s for ALL parts (including skipped ones).
+      // uploadChunked returns nulls for skipped parts — fill them from server.
+      if (isResume && _resumeSkipParts?.size > 0) {
+        try {
+          const status = await fileService.getUploadStatus(serverSessionId);
+          for (const cp of status.completedParts) {
+            if (sha1Array[cp.partNumber - 1] === null) {
+              sha1Array[cp.partNumber - 1] = cp.sha1;
+            }
+          }
+        } catch { /* best effort — backend also has them */ }
+      }
 
       // Complete: finish large file on backend + create File record
       const completeData = { partSha1Array: sha1Array };
@@ -674,63 +744,65 @@ let fileData;
     const ctrl = controlsRef.current.get(uploadId);
     if (!upload || !ctrl || upload.status !== UploadStatus.PAUSED) return;
 
-    // Create fresh abort controller
+    // Create fresh abort controller (old one was aborted on pause)
     ctrl.abortController = new AbortController();
     ctrl.isPaused = false;
     ctrl.speedTracker.reset();
 
-    // For chunked uploads: re-enqueue with remaining chunks
+    // For chunked uploads: resume with remaining chunks
     if (upload.serverSessionId) {
+      // Verify encrypted blob is still in memory (lost on tab refresh)
+      const encryptedBlob = ctrl.encryptedBlob;
+      if (!encryptedBlob) {
+        updateUpload(uploadId, {
+          status: UploadStatus.FAILED,
+          error: 'Encrypted data lost (page was refreshed). Cannot resume.',
+        });
+        return;
+      }
+
       updateUpload(uploadId, { status: UploadStatus.UPLOADING });
 
-      // Get server-confirmed state
       try {
+        // Get server-confirmed completed parts
         const status = await fileService.getUploadStatus(upload.serverSessionId);
         const confirmedParts = new Set(status.completedParts.map((p) => p.partNumber));
 
-        // Re-start the chunked upload with skipParts
-        uploadingCountRef.current++;
+        // Build resume item with stored data from controlsRef
         const encryptedItem = {
           id: uploadId,
           file: upload.file,
-          encryptedBlob: upload.file, // Will need re-encryption — see note below
-          fileNameEncrypted: '', // Already stored on server session
+          encryptedBlob,
+          fileNameEncrypted: '',
           cipherFileKey: '',
-          thumbnailData: null,
+          thumbnailData: ctrl.thumbnailData || null,
           contentHash: null,
           folderId: null,
-          serverSessionId: upload.serverSessionId,
-          resumeSkipParts: confirmedParts,
+          // Resume fields consumed by processChunkedUpload:
+          _resumeSessionId: upload.serverSessionId,
+          _resumeSkipParts: confirmedParts,
+          _resumeChunkSize: ctrl.initialChunkSize || status.chunkSizeBytes,
         };
 
-        // For resume, we'd need the encrypted blob still in memory.
-        // If the blob is gone (tab was refreshed), we can't resume from this hook.
-        // The full resume-after-refresh flow is handled by useResumeUploads.
-        // Here we only handle pause/resume within the same session where the blob is still in memory.
-        if (!upload.file) {
-          updateUpload(uploadId, { status: UploadStatus.FAILED, error: 'File reference lost. Cannot resume.' });
-          uploadingCountRef.current--;
-          checkIfAllDone();
-          return;
-        }
-
-        // Re-queue for processing
-        updateUpload(uploadId, {
-          status: UploadStatus.UPLOADING,
-          chunksCompleted: confirmedParts.size,
-        });
+        // Actually re-start the chunked upload
+        uploadingCountRef.current++;
+        setIsUploading(true);
+        processChunkedUpload(encryptedItem);
       } catch (err) {
-        updateUpload(uploadId, { status: UploadStatus.FAILED, error: 'Failed to resume: ' + err.message });
+        updateUpload(uploadId, {
+          status: UploadStatus.FAILED,
+          error: 'Failed to resume: ' + err.message,
+        });
       }
     } else {
-      // Small file: re-encrypt and re-upload
+      // Small file: re-encrypt and re-upload from scratch
       const uploadInfo = { ...upload, status: UploadStatus.PENDING, progress: 0 };
       queueRef.current.push(uploadInfo);
       updateUpload(uploadId, { status: UploadStatus.PENDING, progress: 0 });
       setIsUploading(true);
       processEncryptionQueue();
     }
-  }, [uploads, updateUpload, processEncryptionQueue, checkIfAllDone]);
+  }, [uploads, updateUpload, processEncryptionQueue, processChunkedUpload]);
 
   const cancelUpload = useCallback(async (uploadId) => {
     const ctrl = controlsRef.current.get(uploadId);
@@ -860,7 +932,8 @@ let fileData;
 
   for (const u of uploadsArray) {
     progressSum += u.progress;
-    const uSize = u.size || 0;
+    // Use totalBytes (encrypted size) when available for consistent units with bytesUploaded
+    const uSize = u.totalBytes || u.size || 0;
     totalBytes += uSize;
     if (u.status === UploadStatus.COMPLETED || u.status === UploadStatus.DUPLICATE) {
       totalBytesUploaded += uSize;
