@@ -25,10 +25,6 @@ import PhotoCard from './PhotoCard';
 const GRID_CLASSES = {
   small:
     'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8',
-  medium:
-    'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
-  large:
-    'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4',
 };
 
 /**
@@ -112,11 +108,11 @@ const VirtualizedPhotoGrid = ({
   hasMore,
   onLoadMore,
   emptyMessage = 'No photos yet',
-  gridSize = 'medium',
+  gridSize = 'small',
 }) => {
   const { t } = useTranslation('photos');
   const loadMoreRef = useRef(null);
-  const gridClasses = GRID_CLASSES[gridSize] || GRID_CLASSES.medium;
+  const gridClasses = GRID_CLASSES[gridSize] || GRID_CLASSES.small;
 
   // Infinite scroll: load more when reaching bottom
   useEffect(() => {

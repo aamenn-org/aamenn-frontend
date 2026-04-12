@@ -35,7 +35,6 @@ import {
   SyncingIndicator,
   PhotoViewer,
   UnlockModal,
-  GridSizeControl,
   UploadProgressPanel,
   VirtualizedPhotoGrid,
   VaultSetupModal,
@@ -121,17 +120,6 @@ const Dashboard = () => {
 
   // Onboarding modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // Grid size preference (stored in localStorage)
-  const [gridSize, setGridSize] = useState(() => {
-    return localStorage.getItem('gallery-grid-size') || 'medium';
-  });
-
-  // Handle grid size change with persistence
-  const handleGridSizeChange = (size) => {
-    setGridSize(size);
-    localStorage.setItem('gallery-grid-size', size);
-  };
 
   // Loading states
   const [loadingMore, setLoadingMore] = useState(false);
@@ -792,10 +780,6 @@ const Dashboard = () => {
                   <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
                   Upload
                 </button>
-                <GridSizeControl
-                  size={gridSize}
-                  onSizeChange={handleGridSizeChange}
-                />
               </div>
             )}
           </div>
@@ -893,7 +877,7 @@ const Dashboard = () => {
                   loading={loading || loadingMore}
                   hasMore={folderPagination.hasMore}
                   onLoadMore={loadMoreFolderFiles}
-                  gridSize={gridSize}
+                  gridSize="small"
                   emptyMessage="No files in this folder"
                 />
               ) : null}
@@ -941,7 +925,7 @@ const Dashboard = () => {
                   loading={allFilesLoading}
                   hasMore={allFilesPagination.hasMore}
                   onLoadMore={loadMoreAllFiles}
-                  gridSize={gridSize}
+                  gridSize="small"
                   emptyMessage="No photos yet"
                 />
                 </SelectionArea>
@@ -987,7 +971,7 @@ const Dashboard = () => {
                   loading={allFilesLoading}
                   hasMore={allFilesPagination.hasMore}
                   onLoadMore={loadMoreAllFiles}
-                  gridSize={gridSize}
+                  gridSize="small"
                   emptyMessage="No files yet"
                 />
                 </SelectionArea>
@@ -1000,7 +984,7 @@ const Dashboard = () => {
           )}
 
           {activeTab === 'trash' && (
-            <TrashSection onViewFile={handleViewFile} gridSize={gridSize} />
+            <TrashSection onViewFile={handleViewFile} gridSize="small" />
           )}
 
           {activeTab === 'contacts' && (
