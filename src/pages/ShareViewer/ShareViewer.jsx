@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { thumbnailCache } from '../../services/cache/thumbnail-cache';
+import { thumbnailCache, fileService, cryptoService } from '../../services';
 import { useShareViewer } from "../../hooks/index.js";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -128,14 +128,36 @@ const FilePreviewOverlay = ({ file, shareKey, encryptedFileKey, onClose }) => {
       });
   }, [file.fileId, file.thumbMediumUrl, shareKey, encryptedFileKey]);
 
-  const handleDownload = () => {
-    if (!blobUrl) return;
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = 'shared-file';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async () => {
+    if (!file.downloadUrl || !shareKey || !encryptedFileKey) return;
+    
+    try {
+      // Download original encrypted file directly from B2 (no cache)
+      const encryptedData = await fileService.downloadFileContent(file.downloadUrl);
+      
+      // Decrypt to get the original file
+      const decryptedData = await cryptoService.decryptFile(
+        encryptedData,
+        encryptedFileKey,
+        shareKey
+      );
+      
+      // Create blob from original decrypted data
+      const blob = new Blob([decryptedData], { type: file.mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      // Use extension that matches the original MIME type
+      const extension = file.mimeType?.split('/')[1] || 'bin';
+      link.download = `shared-file.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Shared file download failed:', err);
+    }
   };
 
   return (
