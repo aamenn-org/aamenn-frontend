@@ -282,7 +282,7 @@ const PhotoCard = ({
     >
       {/* Document file card - show specific Font Awesome icon */}
       {isDocFile ? (
-        <div className="w-full h-full bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
+        <div className="w-full h-full bg-gray-100 dark:bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
           <FontAwesomeIcon 
             icon={
               fileMime.includes('pdf') ? faFilePdf :
@@ -291,13 +291,13 @@ const PhotoCard = ({
               faFile
             } 
             className={`text-4xl ${
-              fileMime.includes('pdf') ? 'text-red-400' :
-              fileMime.includes('word') || fileMime.includes('docx') ? 'text-blue-400' :
-              fileMime.includes('text') || fileMime.includes('txt') ? 'text-gray-300' :
-              'text-gray-400'
+              fileMime.includes('pdf') ? 'text-red-500 dark:text-red-400' :
+              fileMime.includes('word') || fileMime.includes('docx') ? 'text-blue-500 dark:text-blue-400' :
+              fileMime.includes('text') || fileMime.includes('txt') ? 'text-gray-500 dark:text-gray-300' :
+              'text-gray-500 dark:text-gray-400'
             }`} 
           />
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             {fileType === 'document' ? (
               fileMime.includes('pdf') ? 'PDF' :
               fileMime.includes('word') || fileMime.includes('docx') ? 'DOCX' :
@@ -308,7 +308,7 @@ const PhotoCard = ({
             )}
           </span>
           {decryptedFileName && (
-            <span className="text-xs text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
+            <span className="text-xs text-gray-600 dark:text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
               {decryptedFileName}
             </span>
           )}

@@ -6,10 +6,6 @@ import { faImage } from '@fortawesome/free-solid-svg-icons';
 const GRID_SIZES = {
   small:
     'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8',
-  medium:
-    'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
-  large:
-    'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4',
 };
 
 const PhotoGrid = ({
@@ -20,9 +16,9 @@ const PhotoGrid = ({
   onFavoriteToggle,
   loading,
   emptyMessage = 'No photos yet',
-  gridSize = 'medium',
+  gridSize = 'small',
 }) => {
-  const gridClasses = GRID_SIZES[gridSize] || GRID_SIZES.medium;
+  const gridClasses = GRID_SIZES[gridSize] || GRID_SIZES.small;
 
   if (loading) {
     return (
