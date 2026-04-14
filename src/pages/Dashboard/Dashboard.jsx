@@ -719,6 +719,10 @@ const Dashboard = () => {
       <DashboardNavbar />
 
       <main className="flex-1 pt-14">
+        <SelectionArea
+          onSelect={selection.applyLassoChange}
+          onClear={selection.clearSelection}
+        >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
           {/* Header - without Upload button on mobile */}
           <GalleryHeader
@@ -800,11 +804,6 @@ const Dashboard = () => {
                 </div>
               )}
 
-<SelectionArea
-                onSelect={selection.applyLassoChange}
-                onClear={selection.clearSelection}
-              >
-
 {/* Child Folders Grid */}
 {childFolders.length > 0 && (
   <div
@@ -882,8 +881,6 @@ const Dashboard = () => {
                 />
               ) : null}
 
-              </SelectionArea>
-
               <SyncingIndicator isSyncing={syncing} />
             </div>
           )}
@@ -912,10 +909,6 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <SelectionArea
-                  onSelect={selection.applyLassoChange}
-                  onClear={selection.clearSelection}
-                >
                 <VirtualizedPhotoGrid
                   files={photoFiles}
                   selectedFiles={selectedFiles}
@@ -928,7 +921,6 @@ const Dashboard = () => {
                   gridSize="small"
                   emptyMessage="No photos yet"
                 />
-                </SelectionArea>
               )}
 
               <SyncingIndicator isSyncing={syncing} />
@@ -958,10 +950,6 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <SelectionArea
-                  onSelect={selection.applyLassoChange}
-                  onClear={selection.clearSelection}
-                >
                 <VirtualizedPhotoGrid
                   files={documentFiles}
                   selectedFiles={selectedFiles}
@@ -974,7 +962,6 @@ const Dashboard = () => {
                   gridSize="small"
                   emptyMessage="No files yet"
                 />
-                </SelectionArea>
               )}
             </div>
           )}
@@ -991,6 +978,7 @@ const Dashboard = () => {
             <ContactsSection />
           )}
         </div>
+        </SelectionArea>
       </main>
 
       {/* Upload Modal */}
