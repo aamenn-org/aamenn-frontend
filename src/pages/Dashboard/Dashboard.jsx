@@ -586,8 +586,9 @@ const Dashboard = () => {
   };
 
   // Handle delete single file from PhotoViewer - move to trash
-  const handleDeleteSingle = async (fileId) => {
+  const handleDeleteSingle = async (file) => {
     try {
+      const fileId = file.fileId || file.id;
       await fileService.moveToTrash(fileId);
       setViewerOpen(false);
       setFolderFiles((prev) => prev.filter((f) => (f.fileId || f.id) !== fileId));
