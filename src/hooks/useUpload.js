@@ -376,7 +376,7 @@ let fileData;
             if (e.total) {
               // Map FormData transfer progress onto the encrypted blob size.
               // e.loaded / e.total is the true transfer fraction, but e.loaded itself is
-              // FormData bytes (file + thumbnails + metadata fields) which is always
+              // FormData bytes (file  + thumbnails + metadata fields) which is always
               // larger than encryptedBlob.size. Using raw e.loaded as bytesUploaded
               // causes it to exceed totalBytes during the upload, then snap back DOWN
               // to encryptedBlob.size on completion — creating a visible regression and
