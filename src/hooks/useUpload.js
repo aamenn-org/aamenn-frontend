@@ -44,7 +44,7 @@ const MAX_CONCURRENT_ENCRYPT = IS_MOBILE ? 1 : CPU_CORES;
 // Desktop: up to 8 parallel uploads
 const MAX_CONCURRENT_PROXY_UPLOAD = IS_MOBILE ? 2 : Math.min(CPU_CORES, 8);
 
-const CHUNKED_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+const CHUNKED_THRESHOLD = 25 * 1024 * 1024; // 25 MB — above this, use direct-to-B2 chunked upload
 
 const RETRY_CONFIG = {
   maxRetries: 6,                // more retries on mobile network drops
