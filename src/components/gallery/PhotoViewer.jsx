@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { fileService } from '../../services';
+import { fileService, cryptoService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
@@ -542,30 +542,27 @@ const PhotoViewer = ({
     try {
       let blobUrl;
 
-      if (displayUrl) {
-        // Image path: displayUrl is already a decrypted blob URL
-        const response = await fetch(displayUrl);
-        const blob = await response.blob();
-        blobUrl = URL.createObjectURL(blob);
-      } else {
-        // Fallback (videos / files without displayUrl): download + decrypt original
-        const masterKey = getMasterKey();
-        if (!masterKey) {
-          console.error('Download failed: no master key');
-          return;
-        }
-        const fileData = fileDataRef.current || await fileService.getFile(file.fileId);
-        const fullUrl = await thumbnailCache.getFullImage(
-          file.fileId,
-          fileData.downloadUrl,
-          masterKey,
-          fileData.cipherFileKey,
-          fileData.mimeType
-        );
-        const response = await fetch(fullUrl);
-        const blob = await response.blob();
-        blobUrl = URL.createObjectURL(blob);
+      // Download the original file directly, bypassing all cache
+      const masterKey = getMasterKey();
+      if (!masterKey) {
+        console.error('Download failed: no master key');
+        return;
       }
+      const fileData = fileDataRef.current || await fileService.getFile(file.fileId);
+      
+      // Download original encrypted file directly from B2 (no cache)
+      const encryptedData = await fileService.downloadFileContent(fileData.downloadUrl);
+      
+      // Decrypt to get the original file
+      const decryptedData = await cryptoService.decryptFile(
+        encryptedData,
+        fileData.cipherFileKey,
+        masterKey
+      );
+      
+      // Create blob from original decrypted data
+      const blob = new Blob([decryptedData], { type: fileData.mimeType });
+      blobUrl = URL.createObjectURL(blob);
 
       const link = document.createElement('a');
       link.href = blobUrl;
