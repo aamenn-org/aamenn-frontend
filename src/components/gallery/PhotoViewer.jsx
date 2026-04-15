@@ -62,6 +62,11 @@ const PhotoViewer = ({
   // Image/Video URLs - progressive quality
   const [displayUrl, setDisplayUrl] = useState(null);
   const [quality, setQuality] = useState('none'); // none | small | medium | large
+  // qualityRef mirrors quality state so loadImage can read current quality
+  // without being in its useCallback dep array (avoids infinite re-render loop)
+  const qualityRef = useRef('none');
+  useEffect(() => { qualityRef.current = quality; }, [quality]);
+
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
@@ -225,6 +230,7 @@ const PhotoViewer = ({
 
         if (isSvgMime) {
           // SVG: skip JPEG thumbnail paths entirely — fetch and decrypt the original
+          console.log(`[PhotoViewer] SVG loadImage: mimeType=${fileData.mimeType} downloadUrl=${!!fileData.downloadUrl} cipherFileKey=${!!fileData.cipherFileKey}`);
           if (fileData.downloadUrl) {
             const svgUrl = await thumbnailCache.getFullImage(
               fileId,
@@ -233,16 +239,20 @@ const PhotoViewer = ({
               fileData.cipherFileKey,
               'image/svg+xml'
             );
+            console.log(`[PhotoViewer] SVG getFullImage result: ${svgUrl ? 'OK blob URL' : 'NULL'}`);
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(svgUrl);
               setQuality('large');
             }
+          } else {
+            console.warn(`[PhotoViewer] SVG has no downloadUrl — cannot preview: ${fileId}`);
           }
         } else {
           // Step 2: Load medium thumbnail (if not already at medium/large quality)
+          const currentQuality = qualityRef.current;
           if (
-            quality !== 'medium' &&
-            quality !== 'large' &&
+            currentQuality !== 'medium' &&
+            currentQuality !== 'large' &&
             fileData.thumbMediumUrl
           ) {
             try {
@@ -252,7 +262,7 @@ const PhotoViewer = ({
                 masterKey,
                 fileData.cipherFileKey
               );
-              if (currentFileIdRef.current === fileId && quality !== 'large') {
+              if (currentFileIdRef.current === fileId && qualityRef.current !== 'large') {
                 setDisplayUrl(mediumUrl);
                 setQuality('medium');
 
@@ -303,7 +313,7 @@ const PhotoViewer = ({
         }
       }
     },
-    [getMasterKey, quality]
+    [getMasterKey]
   );
 
   // Track preloaded file IDs to avoid re-requesting (persists across renders)
@@ -515,10 +525,13 @@ const PhotoViewer = ({
       // Videos: no preview, show unsupported state immediately
       setDisplayUrl(null);
       setQuality('none');
+      console.log(`[PhotoViewer] Video file — preview not supported: ${fileId}`);
     } else if (isSvgFile) {
-      // SVGs: skip thumbnail cache check — always load from downloadUrl
-      setDisplayUrl(null);
-      setQuality('none');
+      // SVGs: skip L1 thumbnail cache (no JPEG thumbnails exist for SVG).
+      // Do NOT call setQuality/setDisplayUrl before loadImage — that would change
+      // `quality` state, which is a dep of `loadImage` useCallback, triggering
+      // an infinite re-render loop.
+      console.log(`[PhotoViewer] SVG file detected — loading via downloadUrl path: ${fileId}`);
       loadImage(file, fileId);
     } else {
       // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
@@ -549,7 +562,6 @@ const PhotoViewer = ({
     file?.id,
     file?.mimeType,
     isOpen,
-    isSvgFile,
     getBestCachedUrlForViewer,
     loadImage,
     preloadFullAdjacent,
