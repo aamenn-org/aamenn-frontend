@@ -4,7 +4,7 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { fileService, cryptoService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
-import { isVideo, formatVideoDuration } from '../../utils/thumbnail';
+import { isVideo, isSvg, formatVideoDuration } from '../../utils/thumbnail';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
 import RenameModal from './RenameModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -57,6 +57,7 @@ const PhotoViewer = ({
 
   // Determine if this is a video file
   const isVideoFile = isVideo(file?.mimeType);
+  const isSvgFile = isSvg(file?.mimeType);
 
   // Image/Video URLs - progressive quality
   const [displayUrl, setDisplayUrl] = useState(null);
@@ -220,65 +221,79 @@ const PhotoViewer = ({
         // Check if we're still viewing the same file
         if (currentFileIdRef.current !== fileId) return;
 
-        // Step 2: Load medium thumbnail (if not already at medium/large quality)
-        if (
-          quality !== 'medium' &&
-          quality !== 'large' &&
-          fileData.thumbMediumUrl
-        ) {
-          try {
-            const mediumUrl = await thumbnailCache.getMediumThumbnail(
-              fileId,
-              fileData.thumbMediumUrl,
-              masterKey,
-              fileData.cipherFileKey  // Pass cipherFileKey for unified decryption
-            );
-            if (currentFileIdRef.current === fileId && quality !== 'large') {
-              setDisplayUrl(mediumUrl);
-              setQuality('medium');
-              
-              // Performance: Decode image immediately for instant rendering
-              // This prevents jank when browser decodes on first paint
-              const img = new Image();
-              img.src = mediumUrl;
-              img.decode().catch(() => {}); // Fire and forget
-            }
-          } catch (err) {
-            console.warn('Failed to load medium:', err);
-          }
-        }
+        const isSvgMime = isSvg(fileData.mimeType);
 
-        // Step 3: Load large thumbnail (preferred for viewer)
-        // Fallback to original if large thumbnail not available (older files)
-        if (fileData.thumbLargeUrl) {
-          const largeUrl = await thumbnailCache.getLargeThumbnail(
-            fileId,
-            fileData.thumbLargeUrl,
-            masterKey,
-            fileData.cipherFileKey  // Pass cipherFileKey for unified decryption
-          );
-          if (currentFileIdRef.current === fileId) {
-            setDisplayUrl(largeUrl);
-            setQuality('large');
-            
-            // Performance: Decode large image for instant rendering
-            const img = new Image();
-            img.src = largeUrl;
-            img.decode().catch(() => {}); // Fire and forget
+        if (isSvgMime) {
+          // SVG: skip JPEG thumbnail paths entirely — fetch and decrypt the original
+          if (fileData.downloadUrl) {
+            const svgUrl = await thumbnailCache.getFullImage(
+              fileId,
+              fileData.downloadUrl,
+              masterKey,
+              fileData.cipherFileKey,
+              'image/svg+xml'
+            );
+            if (currentFileIdRef.current === fileId) {
+              setDisplayUrl(svgUrl);
+              setQuality('large');
+            }
           }
-        } else if (fileData.downloadUrl) {
-          // Fallback to original for older files without large thumbnail
-          console.log('[PhotoViewer] No large thumbnail, falling back to original');
-          const fullUrl = await thumbnailCache.getFullImage(
-            fileId,
-            fileData.downloadUrl,
-            masterKey,
-            fileData.cipherFileKey,  // Pass cipherFileKey for unified decryption
-            fileData.mimeType
-          );
-          if (currentFileIdRef.current === fileId) {
-            setDisplayUrl(fullUrl);
-            setQuality('large'); // Treat as large quality
+        } else {
+          // Step 2: Load medium thumbnail (if not already at medium/large quality)
+          if (
+            quality !== 'medium' &&
+            quality !== 'large' &&
+            fileData.thumbMediumUrl
+          ) {
+            try {
+              const mediumUrl = await thumbnailCache.getMediumThumbnail(
+                fileId,
+                fileData.thumbMediumUrl,
+                masterKey,
+                fileData.cipherFileKey
+              );
+              if (currentFileIdRef.current === fileId && quality !== 'large') {
+                setDisplayUrl(mediumUrl);
+                setQuality('medium');
+
+                const img = new Image();
+                img.src = mediumUrl;
+                img.decode().catch(() => {});
+              }
+            } catch (err) {
+              console.warn('Failed to load medium:', err);
+            }
+          }
+
+          // Step 3: Load large thumbnail (preferred for viewer)
+          // Fallback to original if large thumbnail not available (older files)
+          if (fileData.thumbLargeUrl) {
+            const largeUrl = await thumbnailCache.getLargeThumbnail(
+              fileId,
+              fileData.thumbLargeUrl,
+              masterKey,
+              fileData.cipherFileKey
+            );
+            if (currentFileIdRef.current === fileId) {
+              setDisplayUrl(largeUrl);
+              setQuality('large');
+
+              const img = new Image();
+              img.src = largeUrl;
+              img.decode().catch(() => {});
+            }
+          } else if (fileData.downloadUrl) {
+            const fullUrl = await thumbnailCache.getFullImage(
+              fileId,
+              fileData.downloadUrl,
+              masterKey,
+              fileData.cipherFileKey,
+              fileData.mimeType
+            );
+            if (currentFileIdRef.current === fileId) {
+              setDisplayUrl(fullUrl);
+              setQuality('large');
+            }
           }
         }
       } catch (err) {
@@ -500,17 +515,20 @@ const PhotoViewer = ({
       // Videos: no preview, show unsupported state immediately
       setDisplayUrl(null);
       setQuality('none');
+    } else if (isSvgFile) {
+      // SVGs: skip thumbnail cache check — always load from downloadUrl
+      setDisplayUrl(null);
+      setQuality('none');
+      loadImage(file, fileId);
     } else {
       // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
       const cached = getBestCachedUrlForViewer(fileId);
       if (cached.url) {
         setDisplayUrl(cached.url);
         setQuality(cached.quality);
-        console.log(`[PhotoViewer] Instant display from L1: ${cached.quality}`);
       } else {
         setDisplayUrl(null);
         setQuality('none');
-        console.log('[PhotoViewer] No medium/large in L1, loading...');
       }
 
       // Start loading better quality in background
@@ -531,6 +549,7 @@ const PhotoViewer = ({
     file?.id,
     file?.mimeType,
     isOpen,
+    isSvgFile,
     getBestCachedUrlForViewer,
     loadImage,
     preloadFullAdjacent,

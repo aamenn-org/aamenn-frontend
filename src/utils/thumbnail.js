@@ -603,8 +603,18 @@ export function isImageSupported(mimeType) {
     'image/png',
     'image/webp',
     'image/gif',
+    'image/svg+xml',
   ];
   return supportedTypes.includes(mimeType?.toLowerCase());
+}
+
+/**
+ * Check if a file is an SVG image
+ * @param mimeType - The file's MIME type
+ * @returns boolean
+ */
+export function isSvg(mimeType) {
+  return mimeType?.toLowerCase() === 'image/svg+xml';
 }
 
 /**
