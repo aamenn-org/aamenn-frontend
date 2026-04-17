@@ -16,7 +16,6 @@ import {
 } from './pages';
 import { AdminDashboard } from './pages/Admin';
 import { ShareViewer } from './pages/ShareViewer';
-import AuthStatusBridge from './pages/AuthStatusBridge';
 import TermsOfService from './pages/TermsOfService';
 import config from './config';
 
@@ -91,7 +90,6 @@ function AppRoutes() {
       {/* Public Routes */}
       <Route path="/share/:slug" element={<ShareViewer />} />
       <Route path="/terms" element={<TermsOfService />} />
-      <Route path="/auth-status-bridge" element={<AuthStatusBridge />} />
       <Route
         path="/login"
         element={

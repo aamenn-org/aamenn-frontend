@@ -4,6 +4,17 @@
  * Both api.js and auth.service.js delegate here to avoid duplication.
  */
 
+const AUTH_COOKIE_NAME = 'aamenn_logged_in';
+const AUTH_COOKIE_DOMAIN = '.aamenn.com';
+
+function setAuthCookie() {
+  document.cookie = `${AUTH_COOKIE_NAME}=1; domain=${AUTH_COOKIE_DOMAIN}; path=/; max-age=31536000; secure; samesite=lax`;
+}
+
+function clearAuthCookie() {
+  document.cookie = `${AUTH_COOKIE_NAME}=; domain=${AUTH_COOKIE_DOMAIN}; path=/; max-age=0; secure; samesite=lax`;
+}
+
 const TOKEN_KEYS = {
   ACCESS: 'accessToken',
   REFRESH: 'refreshToken',
@@ -34,6 +45,7 @@ export function storeTokens({ accessToken, refreshToken, rememberMe }) {
   const storage = rememberMe ? localStorage : sessionStorage;
   storage.setItem(TOKEN_KEYS.ACCESS, accessToken);
   storage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
+  setAuthCookie();
 }
 
 /**
@@ -48,6 +60,7 @@ export function refreshStoredTokens({ accessToken, refreshToken }) {
   const storage = inSessionStorage ? sessionStorage : localStorage;
   storage.setItem(TOKEN_KEYS.ACCESS, accessToken);
   storage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
+  setAuthCookie();
 }
 
 /**
@@ -58,6 +71,7 @@ export function clearTokens() {
   localStorage.removeItem(TOKEN_KEYS.REFRESH);
   sessionStorage.removeItem(TOKEN_KEYS.ACCESS);
   sessionStorage.removeItem(TOKEN_KEYS.REFRESH);
+  clearAuthCookie();
 }
 
 /**
