@@ -6,8 +6,6 @@ import { fileService, folderService } from '../../services';
 import { getDragState, clearDragState } from '../../utils/dragState';
 import { useUpload } from '../../hooks/useUpload';
 import { getFileType, FILE_HANDLERS } from '../../utils/thumbnail';
-import { DashboardNavbar } from '../../components/layout';
-import { StorageBar } from '../../components/ui';
 import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 import { ShareModal, OnboardingModal } from '../../components/modals';
@@ -28,7 +26,6 @@ import {
 import { encryptFilename } from '../../utils/crypto';
 import {
   GalleryHeader,
-  GalleryTabs,
   FavoritesSection,
   TrashSection,
   UploadModal,
@@ -40,11 +37,13 @@ import {
   VaultSetupModal,
   ContactsSection,
   FolderCard,
-  Breadcrumbs,
   FolderPickerModal,
   RenameModal,
   SelectionArea,
 } from '../../components/gallery';
+import Sidebar from '../../components/sidebar/Sidebar';
+import ContentTopBar from '../../components/topbar/ContentTopBar';
+import FileListView from '../../components/fileList/FileListView';
 
 const Dashboard = () => {
   const { hasMasterKey, setMasterKey, getMasterKey, user, setUser } = useAuth();
@@ -80,6 +79,9 @@ const Dashboard = () => {
   const [allFilesPagination, setAllFilesPagination] = useState({
     page: 1, limit: 100, total: 0, totalPages: 0, hasMore: true,
   });
+
+  // Favorites tab — files reported back from FavoritesSection for the viewer
+  const [favoriteFiles, setFavoriteFiles] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -424,9 +426,13 @@ const Dashboard = () => {
   // Viewer file lists depend on which tab is active
   const viewerPhotoFiles = activeTab === 'folders'
     ? folderFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
+    : activeTab === 'favorites'
+    ? favoriteFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
     : photoFiles;
   const viewerDocumentFiles = activeTab === 'folders'
     ? folderFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
+    : activeTab === 'favorites'
+    ? favoriteFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
     : documentFiles;
 
   // Handle file selection (checkbox click — always toggles)
@@ -674,6 +680,15 @@ const Dashboard = () => {
     selection.toggle(`folder:${folder.folderId}`, { ctrl: true });
   }, [selection]);
 
+  // Sidebar open state (mobile)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // View mode: 'list' | 'grid'
+  const [viewMode, setViewMode] = useState('list');
+
+  // Search query (client-side filter on current directory contents)
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Rename a single folder (opens RenameModal)
   const handleFolderRenameSubmit = async (newName) => {
     if (!renamingFolder || !hasMasterKey()) return;
@@ -716,16 +731,38 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 flex flex-col">
-      <DashboardNavbar />
+    <div className="h-screen bg-white dark:bg-zinc-900 flex overflow-hidden">
+      {/* Body: sidebar + main content, full height */}
+      <div className="flex flex-1 overflow-hidden">
 
-      <main className="flex-1 pt-14">
-        <SelectionArea
-          onSelect={selection.applyLassoChange}
-          onClear={selection.clearSelection}
-        >
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
-          {/* Header - without Upload button on mobile */}
+        {/* Left Sidebar */}
+        <Sidebar
+          activeSection={activeTab}
+          currentFolderId={currentFolderId}
+          onNavigateFolder={navigateToFolder}
+          onSectionChange={handleTabChange}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+
+        {/* Main content area */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-zinc-900">
+          {/* Top bar: breadcrumb, search, new button, view toggle */}
+          <ContentTopBar
+            activeSection={activeTab}
+            breadcrumbs={activeTab === 'folders' ? breadcrumbs : []}
+            onNavigate={navigateToFolder}
+            onSearch={setSearchQuery}
+            searchValue={searchQuery}
+            onNewFolder={() => setShowCreateFolderModal(true)}
+            onUpload={() => setShowUploadModal(true)}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            hasMasterKey={hasMasterKey()}
+            onSidebarToggle={() => setSidebarOpen((v) => !v)}
+          />
+
+          {/* Floating selection action bar */}
           <GalleryHeader
             selectedCount={selectedFiles.length + (activeTab === 'folders' ? selectedFolders.length : 0)}
             selectedFilesCount={selectedFiles.length}
@@ -734,253 +771,174 @@ const Dashboard = () => {
             onAddToAlbum={handleMoveToFolderBulk}
             onShare={handleShare}
             onClearSelection={selection.clearSelection}
-            hideUploadOnMobile={true}
           />
 
-          {/* Mobile: Tabs dropdown with Upload button */}
-          <div className="flex items-center justify-between gap-2 mb-4 md:hidden">
-            <div className="flex-1">
-              <GalleryTabs activeTab={activeTab} onTabChange={handleTabChange} />
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-hidden min-h-0">
+          <SelectionArea
+            onSelect={selection.applyLassoChange}
+            onClear={selection.clearSelection}
+          >
+            <div className="h-full overflow-hidden">
+
+              {/* ── Folders Tab ── */}
               {activeTab === 'folders' && (
-                <button
-                  onClick={() => setShowCreateFolderModal(true)}
-                  disabled={!hasMasterKey()}
-                  className="inline-flex items-center px-3 py-2 bg-zinc-300 text-zinc-900 text-xs font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
-                >
-                  <FontAwesomeIcon icon={faFolderPlus} className="w-3 h-3 mr-1" />
-                  New
-                </button>
-              )}
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="inline-flex items-center px-3 py-2 bg-zinc-300 text-zinc-900 text-xs font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
-              >
-                <FontAwesomeIcon icon={faCloudUpload} className="w-3 h-3 mr-1" />
-                Upload
-              </button>
-            </div>
-          </div>
-
-          {/* Desktop: Tabs with action buttons */}
-          <div className="hidden md:flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-0 mb-4 md:mb-6">
-            <GalleryTabs activeTab={activeTab} onTabChange={handleTabChange} />
-            {(activeTab === 'folders' || activeTab === 'photos' || activeTab === 'files') && (
-              <div className="flex items-center gap-2">
-                {activeTab === 'folders' && (
-                  <button
-                    onClick={() => setShowCreateFolderModal(true)}
-                    disabled={!hasMasterKey()}
-                    className="inline-flex items-center px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50 rounded-lg"
-                  >
-                    <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4 mr-2" />
-                    New Folder
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium hover:bg-zinc-200 transition-colors whitespace-nowrap flex-shrink-0 rounded-lg"
-                >
-                  <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 mr-2" />
-                  Upload
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Folders Tab - Unified folder workspace */}
-          {activeTab === 'folders' && (
-            <div className="w-full">
-
-
-              {/* Breadcrumbs — also serve as drag targets to move items to parent folders */}
-              {breadcrumbs.length > 0 && (
-                <div data-no-select className="mb-4">
-                  <Breadcrumbs
-                    breadcrumbs={breadcrumbs}
-                    onNavigate={navigateToFolder}
-                    onDropOnBreadcrumb={handleDropOnBreadcrumb}
+                viewMode === 'list' ? (
+                  <FileListView
+                    folders={childFolders}
+                    files={folderFiles}
+                    searchQuery={searchQuery}
+                    selectedFiles={selectedFiles}
+                    selectedFolders={selectedFolders}
+                    onSelectFile={handleSelectFile}
+                    onSelectFolder={handleFolderSelect}
+                    onViewFile={handleViewFile}
+                    onOpenFolder={navigateToFolder}
+                    onFavoriteToggle={handleFavoriteToggle}
+                    onDropOnFolder={handleDropOnFolder}
+                    dragOverFolderId={dragOverFolderId}
+                    onFolderDragOver={(id) => setDragOverFolderId(id)}
+                    loading={loading}
+                    loadingMore={loadingMore}
+                    hasMore={folderPagination.hasMore}
+                    onLoadMore={loadMoreFolderFiles}
+                    emptyMessage={currentFolderId ? 'This folder is empty' : 'No files yet'}
+                    emptyIcon={faFolderOpen}
                   />
-                </div>
+                ) : (
+                  /* Grid fallback for folder view */
+                  <div className="p-4 overflow-y-auto h-full">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 mb-4">
+                      {childFolders.map((folder) => (
+                        <FolderCard
+                          key={folder.folderId}
+                          folder={folder}
+                          onOpen={() => navigateToFolder(folder.folderId)}
+                          isDragOver={dragOverFolderId === folder.folderId}
+                          onDragOver={() => setDragOverFolderId(folder.folderId)}
+                          onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
+                          isSelected={selectedFolders.includes(folder.folderId)}
+                          onSelect={handleFolderSelect}
+                        />
+                      ))}
+                    </div>
+                    <VirtualizedPhotoGrid
+                      files={folderFiles}
+                      selectedFiles={selectedFiles}
+                      onSelectFile={handleSelectFile}
+                      onViewFile={handleViewFile}
+                      onFavoriteToggle={handleFavoriteToggle}
+                      loading={loading || loadingMore}
+                      hasMore={folderPagination.hasMore}
+                      onLoadMore={loadMoreFolderFiles}
+                      gridSize="small"
+                    />
+                  </div>
+                )
               )}
 
-{/* Child Folders Grid */}
-{childFolders.length > 0 && (
-  <div
-    className="mb-4"
-    onDragLeave={(e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) {
-        setDragOverFolderId(null);
-      }
-    }}
-    onDragEnd={() => setDragOverFolderId(null)}
-  >
-    {/* Mobile: single-column list | sm+: multi-column grid */}
-    <div className="grid grid-cols-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1">
-      {childFolders.map((folder) => (
-        <FolderCard
-          key={folder.folderId}
-          folder={folder}
-          onOpen={() => navigateToFolder(folder.folderId)}
-          isDragOver={dragOverFolderId === folder.folderId}
-          onDragOver={() => setDragOverFolderId(folder.folderId)}
-          onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
-          isSelected={selectedFolders.includes(folder.folderId)}
-          onSelect={handleFolderSelect}
-          listMode={window.innerWidth < 640} // true on mobile (<sm breakpoint)
-        />
-      ))}
-    </div>
-  </div>
-)}
+              {/* ── Photos Tab ── */}
+              {activeTab === 'photos' && (
+                viewMode === 'list' ? (
+                  <FileListView
+                    folders={[]}
+                    files={photoFiles}
+                    searchQuery={searchQuery}
+                    selectedFiles={selectedFiles}
+                    selectedFolders={[]}
+                    onSelectFile={handleSelectFile}
+                    onViewFile={handleViewFile}
+                    onFavoriteToggle={handleFavoriteToggle}
+                    loading={allFilesLoading}
+                    hasMore={allFilesPagination.hasMore}
+                    onLoadMore={loadMoreAllFiles}
+                    emptyMessage="No photos yet"
+                    emptyIcon={faImage}
+                  />
+                ) : (
+                  <div className="p-4 overflow-y-auto h-full">
+                    <VirtualizedPhotoGrid
+                      files={photoFiles}
+                      selectedFiles={selectedFiles}
+                      onSelectFile={handleSelectFile}
+                      onViewFile={handleViewFile}
+                      onFavoriteToggle={handleFavoriteToggle}
+                      loading={allFilesLoading}
+                      hasMore={allFilesPagination.hasMore}
+                      onLoadMore={loadMoreAllFiles}
+                      gridSize="small"
+                      emptyMessage="No photos yet"
+                    />
+                  </div>
+                )
+              )}
 
-              {/* Files in current folder */}
-              {folderFiles.length === 0 && childFolders.length === 0 && !loading ? (
-                <div data-no-select className="flex flex-col items-center justify-center py-20">
-                  <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-                    <FontAwesomeIcon icon={faFolderOpen} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
+              {/* ── Files Tab ── */}
+              {activeTab === 'files' && (
+                viewMode === 'list' ? (
+                  <FileListView
+                    folders={[]}
+                    files={documentFiles}
+                    searchQuery={searchQuery}
+                    selectedFiles={selectedFiles}
+                    selectedFolders={[]}
+                    onSelectFile={handleSelectFile}
+                    onViewFile={handleViewFile}
+                    onFavoriteToggle={handleFavoriteToggle}
+                    loading={allFilesLoading}
+                    hasMore={allFilesPagination.hasMore}
+                    onLoadMore={loadMoreAllFiles}
+                    emptyMessage="No files yet"
+                    emptyIcon={faFile}
+                  />
+                ) : (
+                  <div className="p-4 overflow-y-auto h-full">
+                    <VirtualizedPhotoGrid
+                      files={documentFiles}
+                      selectedFiles={selectedFiles}
+                      onSelectFile={handleSelectFile}
+                      onViewFile={handleViewFile}
+                      onFavoriteToggle={handleFavoriteToggle}
+                      loading={allFilesLoading}
+                      hasMore={allFilesPagination.hasMore}
+                      onLoadMore={loadMoreAllFiles}
+                      gridSize="small"
+                      emptyMessage="No files yet"
+                    />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    {currentFolderId ? 'This folder is empty' : 'No files yet'}
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-                    {currentFolderId
-                      ? 'Upload files or create subfolders to organize your content.'
-                      : 'Your encrypted vault is empty. Upload files or create folders to get started.'}
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowUploadModal(true)}
-                      className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
-                    >
-                      <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
-                      Upload Files
-                    </button>
-                    <button
-                      onClick={() => setShowCreateFolderModal(true)}
-                      disabled={!hasMasterKey()}
-                      className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
-                    >
-                      <FontAwesomeIcon icon={faFolderPlus} className="w-5 h-5 mr-2" />
-                      New Folder
-                    </button>
-                  </div>
-                </div>
-              ) : folderFiles.length > 0 ? (
-                <VirtualizedPhotoGrid
-                  files={folderFiles}
-                  selectedFiles={selectedFiles}
-                  onSelectFile={handleSelectFile}
+                )
+              )}
+
+              {/* ── Favorites Tab ── */}
+              {activeTab === 'favorites' && (
+                <FavoritesSection
                   onViewFile={handleViewFile}
-                  onFavoriteToggle={handleFavoriteToggle}
-                  loading={loading || loadingMore}
-                  hasMore={folderPagination.hasMore}
-                  onLoadMore={loadMoreFolderFiles}
-                  gridSize="small"
-                  emptyMessage="No files in this folder"
-                />
-              ) : null}
-
-              <SyncingIndicator isSyncing={syncing} />
-            </div>
-          )}
-
-          {/* Photos Tab - Images only */}
-          {activeTab === 'photos' && (
-            <div className="w-full">
-              {photoFiles.length === 0 && !allFilesLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-                    <FontAwesomeIcon icon={faImage} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    No photos yet
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-                    Your encrypted photo vault is empty. Upload your first
-                    photos to get started.
-                  </p>
-                  <button
-                    onClick={() => setShowUploadModal(true)}
-                    className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
-                    Upload Photos
-                  </button>
-                </div>
-              ) : (
-                <VirtualizedPhotoGrid
-                  files={photoFiles}
-                  selectedFiles={selectedFiles}
-                  onSelectFile={handleSelectFile}
-                  onViewFile={handleViewFile}
-                  onFavoriteToggle={handleFavoriteToggle}
-                  loading={allFilesLoading}
-                  hasMore={allFilesPagination.hasMore}
-                  onLoadMore={loadMoreAllFiles}
-                  gridSize="small"
-                  emptyMessage="No photos yet"
+                  onFilesLoaded={setFavoriteFiles}
+                  searchQuery={searchQuery}
                 />
               )}
 
-              <SyncingIndicator isSyncing={syncing} />
-            </div>
-          )}
-
-          {/* Files Tab - Documents (PDF, DOCX, TXT) */}
-          {activeTab === 'files' && (
-            <div className="w-full">
-              {documentFiles.length === 0 && !allFilesLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-                    <FontAwesomeIcon icon={faFile} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    No files yet
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-                    Upload PDF, Word, or text documents to preview them securely.
-                  </p>
-                  <button
-                    onClick={() => setShowUploadModal(true)}
-                    className="inline-flex items-center px-6 py-3 bg-zinc-300 text-zinc-900 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
-                  >
-                    <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-2" />
-                    Upload Files
-                  </button>
+              {/* ── Trash Tab ── */}
+              {activeTab === 'trash' && (
+                <div className="p-4 overflow-y-auto h-full">
+                  <TrashSection onViewFile={handleViewFile} gridSize="small" />
                 </div>
-              ) : (
-                <VirtualizedPhotoGrid
-                  files={documentFiles}
-                  selectedFiles={selectedFiles}
-                  onSelectFile={handleSelectFile}
-                  onViewFile={handleViewFile}
-                  onFavoriteToggle={handleFavoriteToggle}
-                  loading={allFilesLoading}
-                  hasMore={allFilesPagination.hasMore}
-                  onLoadMore={loadMoreAllFiles}
-                  gridSize="small"
-                  emptyMessage="No files yet"
-                />
               )}
+
+              {/* ── Contacts Tab ── */}
+              {activeTab === 'contacts' && (
+                <div className="p-4 overflow-y-auto h-full">
+                  <ContactsSection />
+                </div>
+              )}
+
             </div>
-          )}
+          </SelectionArea>
+          </div>
 
-          {activeTab === 'favorites' && (
-            <FavoritesSection onViewFile={handleViewFile} />
-          )}
-
-          {activeTab === 'trash' && (
-            <TrashSection onViewFile={handleViewFile} gridSize="small" />
-          )}
-
-          {activeTab === 'contacts' && (
-            <ContactsSection />
-          )}
-        </div>
-        </SelectionArea>
-      </main>
+          <SyncingIndicator isSyncing={syncing} />
+        </main>
+      </div>
 
       {/* Upload Modal */}
       <UploadModal

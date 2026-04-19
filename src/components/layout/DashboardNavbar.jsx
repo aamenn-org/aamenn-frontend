@@ -9,24 +9,16 @@ import {
   faMoon, 
   faCog,
   faSignOutAlt,
-  faUser
+  faBars,
 } from '@fortawesome/free-solid-svg-icons';
-import { StorageBar } from '../ui';
 
-const DashboardNavbar = () => {
+const DashboardNavbar = ({ onSidebarToggle }) => {
   const { user, logout, avatarUrl } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { t } = useTranslation('common');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
-  const [storageTrigger, setStorageTrigger] = useState(0);
-
-  // Simple storage trigger - increment periodically or on file operations
-  useEffect(() => {
-    const interval = setInterval(() => setStorageTrigger(prev => prev + 1), 30000); // every 30s
-    return () => clearInterval(interval);
-  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -47,21 +39,29 @@ const DashboardNavbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#1e3a5f] text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="px-4">
         <div className="flex justify-between items-center h-14">
-          {/* Logo */}
-          <Link to="/folders" className="flex items-center space-x-2">
-            <div className="w-7 h-7 flex items-center justify-center">
-              <img src="/logo3.png" alt="" />
-            </div>
-            <span className="text-lg font-bold">AAMENN</span>
-          </Link>
+          {/* Left: Hamburger (mobile) + Logo */}
+          <div className="flex items-center gap-2">
+            {/* Mobile sidebar toggle */}
+            <button
+              onClick={onSidebarToggle}
+              className="md:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              <FontAwesomeIcon icon={faBars} className="w-4 h-4" />
+            </button>
 
-          {/* Right Section - Storage Bar + User Menu */}
+            <Link to="/folders" className="flex items-center space-x-2">
+              <div className="w-7 h-7 flex items-center justify-center">
+                <img src="/logo3.png" alt="" />
+              </div>
+              <span className="text-lg font-bold">AAMENN</span>
+            </Link>
+          </div>
+
+          {/* Right Section - User Menu */}
           <div className="flex items-center gap-3">
-            {/* Storage Bar */}
-            <StorageBar refreshTrigger={storageTrigger} inline />
-            
             {/* User Menu */}
             <div className="relative" ref={menuRef}>
             <button
