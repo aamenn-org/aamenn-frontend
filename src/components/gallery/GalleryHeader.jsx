@@ -39,22 +39,6 @@ const GalleryHeader = ({
 
   return (
     <>
-      {/* Top bar: storage info + action buttons */}
-      <div className="flex items-center justify-between gap-3 mb-2 md:mb-6">
-        <div className="flex-1">{storageBar}</div>
-        <div className="flex items-center gap-2">
-          {showNewFolder && onNewFolder && (
-            <button
-              onClick={onNewFolder}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-300 text-zinc-900 text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors whitespace-nowrap"
-            >
-              <FontAwesomeIcon icon={faFolderPlus} className="w-4 h-4" />
-              <span className="hidden sm:inline">New Folder</span>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Floating bottom action bar — slides up when items are selected */}
       <div
         data-no-select

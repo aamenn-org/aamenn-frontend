@@ -6,7 +6,7 @@
 @layer base {
   body {
     @apply bg-white text-gray-900 antialiased;
-    font-family: 'Changa', system-ui, -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
   }
 
   /* Dark mode base styles - applied when html has dark class */
@@ -137,6 +137,10 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .viselect-container {
   position: relative;
   z-index: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Viselect clipping element (direct child div injected by the library) */

@@ -62,7 +62,7 @@ const SelectionArea = ({ children, onSelect, onClear }) => {
   }, [onClear]);
 
   return (
-    <div onClick={handleClick}>
+    <div onClick={handleClick} className="h-full flex flex-col">
       <ViSelectArea
         onBeforeStart={handleBeforeStart}
         onStart={handleStart}
@@ -71,7 +71,7 @@ const SelectionArea = ({ children, onSelect, onClear }) => {
         selectables="[data-select-id]"
         behaviour={{ overlap: 'keep', scrolling: { speedDivider: 10 } }}
         features={{ deselectOnBlur: false, touch: false }}
-        className="viselect-container"
+        className="viselect-container h-full flex flex-col"
       >
         {children}
       </ViSelectArea>
