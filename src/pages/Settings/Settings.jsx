@@ -6,15 +6,22 @@ import {
   SecuritySection,
   AppearanceSection,
   StorageSection,
+  SubscriptionSection,
 } from './sections';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faLock, faDatabase, faPalette } from '@fortawesome/free-solid-svg-icons';
-
+import {
+  faUser,
+  faLock,
+  faDatabase,
+  faPalette,
+  faCreditCard,
+} from '@fortawesome/free-solid-svg-icons';
 
 const SECTIONS = {
   profile: 'profile',
   security: 'security',
   storage: 'storage',
+  subscription: 'subscription',
   appearance: 'appearance',
 };
 
@@ -31,6 +38,11 @@ const Settings = () => {
     },
     { id: SECTIONS.storage, icon: faDatabase, label: t('sections.storage') },
     {
+      id: SECTIONS.subscription,
+      icon: faCreditCard,
+      label: t('sections.subscription', 'Subscription'),
+    },
+    {
       id: SECTIONS.appearance,
       icon: faPalette,
       label: t('sections.appearance'),
@@ -45,6 +57,8 @@ const Settings = () => {
         return <SecuritySection />;
       case SECTIONS.storage:
         return <StorageSection />;
+      case SECTIONS.subscription:
+        return <SubscriptionSection />;
       case SECTIONS.appearance:
         return <AppearanceSection />;
       default:

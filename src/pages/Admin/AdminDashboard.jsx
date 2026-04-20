@@ -13,6 +13,7 @@ import {
   faBars,
   faXmark,
   faBell,
+  faTag,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
@@ -20,6 +21,7 @@ import Overview from './Overview';
 import UsersPage from './Users';
 import Storage from './Storage';
 import SystemHealth from './SystemHealth';
+import Plans from './Plans';
 
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
@@ -58,10 +60,11 @@ const AdminDashboard = () => {
     { path: '/dashboard/users', label: 'Users', icon: faUsers },
     { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
     { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
+    { path: '/dashboard/plans', label: 'Plans', icon: faTag },
   ];
 
   const criticalAlerts = alerts.filter(
-    (a) => a.type === 'error' || a.type === 'warning'
+    (a) => a.type === 'error' || a.type === 'warning',
   );
 
   return (
@@ -148,7 +151,10 @@ const AdminDashboard = () => {
             {/* Alerts indicator */}
             {criticalAlerts.length > 0 && (
               <div className="relative">
-                <FontAwesomeIcon icon={faBell} className="text-orange-500 w-6 h-6" />
+                <FontAwesomeIcon
+                  icon={faBell}
+                  className="text-orange-500 w-6 h-6"
+                />
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
                   {criticalAlerts.length}
                 </span>
@@ -161,13 +167,18 @@ const AdminDashboard = () => {
         {criticalAlerts.length > 0 && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 px-4 lg:px-6 py-3">
             <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
-              <FontAwesomeIcon icon={faTriangleExclamation} className="w-[18px] h-[18px] flex-shrink-0" />
+              <FontAwesomeIcon
+                icon={faTriangleExclamation}
+                className="w-[18px] h-[18px] flex-shrink-0"
+              />
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                 <span className="font-medium">
                   {criticalAlerts.length} active alert
                   {criticalAlerts.length > 1 ? 's' : ''}
                 </span>
-                <span className="text-sm truncate">- {criticalAlerts[0]?.message}</span>
+                <span className="text-sm truncate">
+                  - {criticalAlerts[0]?.message}
+                </span>
               </div>
             </div>
           </div>
@@ -180,6 +191,7 @@ const AdminDashboard = () => {
             <Route path="users" element={<UsersPage />} />
             <Route path="storage" element={<Storage />} />
             <Route path="health" element={<SystemHealth />} />
+            <Route path="plans" element={<Plans />} />
           </Routes>
         </div>
       </main>

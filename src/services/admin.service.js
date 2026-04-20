@@ -15,7 +15,11 @@ export const adminService = {
    * @deprecated Use getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit }) instead
    */
   async getTopUsersByStorage(limit = 10) {
-    const res = await this.getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit });
+    const res = await this.getUsers({
+      sortBy: 'storage',
+      sortOrder: 'DESC',
+      limit,
+    });
     return Array.isArray(res) ? res : res?.users || [];
   },
 
@@ -30,7 +34,9 @@ export const adminService = {
   },
 
   async setUserStorageLimit(userId, storageLimitGb) {
-    const response = await api.patch(`/admin/users/${userId}/storage-limit`, { storageLimitGb });
+    const response = await api.patch(`/admin/users/${userId}/storage-limit`, {
+      storageLimitGb,
+    });
     return response.data;
   },
 
@@ -46,6 +52,16 @@ export const adminService = {
 
   async getAlerts() {
     const response = await api.get('/admin/alerts');
+    return response.data;
+  },
+
+  async getPlans() {
+    const response = await api.get('/admin/plans');
+    return response.data;
+  },
+
+  async updatePlan(planId, data) {
+    const response = await api.patch(`/admin/plans/${planId}`, data);
     return response.data;
   },
 };
