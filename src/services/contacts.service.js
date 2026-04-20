@@ -70,6 +70,144 @@ function mapGooglePerson(person) {
   };
 }
 
+/**
+ * Parse a Google Contacts CSV file into flat contact objects.
+ * Handles the standard Google Contacts export format with columns like:
+ * First Name, Middle Name, Last Name, Nickname, Organization Name,
+ * E-mail 1 - Value, Phone 1 - Value, etc.
+ */
+function parseGoogleCSV(csvText) {
+  // Strip UTF-8 BOM if present
+  const text = csvText.replace(/^\uFEFF/, '');
+  const lines = parseCSVLines(text);
+  if (lines.length < 2) return [];
+
+  const headers = lines[0];
+  const contacts = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i];
+    if (cols.length < 2) continue;
+
+    const get = (name) => {
+      const idx = headers.indexOf(name);
+      return idx >= 0 ? (cols[idx] || '').trim() : '';
+    };
+
+    // Build full name from parts
+    const parts = [get('First Name'), get('Middle Name'), get('Last Name')].filter(Boolean);
+    const name = parts.join(' ') || undefined;
+
+    // Collect all phone numbers (Phone 1, Phone 2, ...)
+    const phones = [];
+    for (let p = 1; p <= 10; p++) {
+      const val = get(`Phone ${p} - Value`);
+      if (val) phones.push(val.split(':::').map(s => s.trim()).filter(Boolean).join(', '));
+    }
+
+    // Collect all emails
+    const emails = [];
+    for (let e = 1; e <= 10; e++) {
+      const val = get(`E-mail ${e} - Value`);
+      if (val) emails.push(val);
+    }
+
+    // Collect all websites
+    const urls = [];
+    for (let w = 1; w <= 5; w++) {
+      const val = get(`Website ${w} - Value`);
+      if (val) urls.push(val);
+    }
+
+    const phone = phones.join(', ') || undefined;
+    const email = emails.join(', ') || undefined;
+
+    // Skip rows that have no useful data
+    if (!name && !phone && !email) continue;
+
+    contacts.push({
+      googleContactId: undefined, // CSV imports don't have a Google resource ID
+      name,
+      nickname: get('Nickname') || undefined,
+      phone,
+      email,
+      address: undefined,
+      organization: get('Organization Name') || undefined,
+      occupation: get('Organization Title') || undefined,
+      birthday: get('Birthday') || undefined,
+      bio: get('Notes') || undefined,
+      urls: urls.join(', ') || undefined,
+      photoUrl: undefined,
+    });
+  }
+
+  return contacts;
+}
+
+/**
+ * RFC 4180 compliant CSV line parser. Handles quoted fields, embedded
+ * commas, newlines inside quotes, and escaped quotes ("").
+ */
+function parseCSVLines(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < text.length && text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+        } else {
+          inQuotes = false;
+          i++;
+        }
+      } else {
+        field += ch;
+        i++;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+        i++;
+      } else if (ch === '\t' || ch === ',') {
+        row.push(field);
+        field = '';
+        i++;
+      } else if (ch === '\r') {
+        row.push(field);
+        field = '';
+        rows.push(row);
+        row = [];
+        i++;
+        if (i < text.length && text[i] === '\n') i++;
+      } else if (ch === '\n') {
+        row.push(field);
+        field = '';
+        rows.push(row);
+        row = [];
+        i++;
+      } else {
+        field += ch;
+        i++;
+      }
+    }
+  }
+
+  // Last field/row
+  if (field || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
 export const contactsService = {
   /**
    * Zero-knowledge contact sync:
@@ -120,6 +258,40 @@ export const contactsService = {
   async deleteAllContacts() {
     const response = await api.delete('/contacts');
     return response.data;
+  },
+
+  /**
+   * Import contacts from a Google Contacts CSV file.
+   * Same zero-knowledge flow as Google sync: parse → encrypt → POST.
+   *
+   * @param {File} file        - The CSV file selected by the user
+   * @param {CryptoKey} masterKey - User's AES-GCM master key
+   * @returns {Promise<{imported: number}>}
+   */
+  async importCSV(file, masterKey) {
+    if (!masterKey) throw new Error('Master key not available. Please unlock your vault first.');
+
+    const csvText = await file.text();
+    const plainContacts = parseGoogleCSV(csvText);
+
+    if (plainContacts.length === 0) {
+      throw new Error('No valid contacts found in the CSV file. Make sure it is a Google Contacts export.');
+    }
+
+    const searchKey = await deriveContactSearchKey(masterKey);
+
+    const encrypted = await Promise.all(
+      plainContacts.map(async (plain) => {
+        const [encryptedFields, searchTokens] = await Promise.all([
+          encryptContact(plain, masterKey),
+          computeContactSearchTokens(plain.name, plain.phone, plain.email, searchKey),
+        ]);
+        return { ...encryptedFields, searchTokens };
+      })
+    );
+
+    const response = await api.post('/contacts/sync', { contacts: encrypted });
+    return { ...response.data, imported: plainContacts.length };
   },
 };
 
