@@ -91,6 +91,7 @@ export const ContactsSection = () => {
       setSearchTerm('');
       setActiveQuery('');
       setCurrentPage(1);
+      await loadPage(1, '');
     } catch (err) {
       setError(err.message || err.response?.data?.message || 'Failed to sync contacts');
     } finally {
