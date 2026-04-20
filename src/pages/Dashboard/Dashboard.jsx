@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { useAuth } from '../../context';
 import { useVaultState, useSelection } from '../../hooks';
 import { fileService, folderService } from '../../services';
@@ -10,9 +15,9 @@ import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 import { ShareModal, OnboardingModal } from '../../components/modals';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faImage, 
-  faPlus, 
+import {
+  faImage,
+  faPlus,
   faTriangleExclamation,
   faFile,
   faFolderPlus,
@@ -21,7 +26,7 @@ import {
   faPen,
   faShare,
   faXmark,
-  faCloudUpload
+  faCloudUpload,
 } from '@fortawesome/free-solid-svg-icons';
 import { encryptFilename } from '../../utils/crypto';
 import {
@@ -55,12 +60,17 @@ const Dashboard = () => {
 
   // Derive active tab from URL path
   const path = location.pathname;
-  const activeTab = path.startsWith('/files') ? 'files'
-    : path.startsWith('/folders') ? 'folders'
-    : path.startsWith('/favorites') ? 'favorites'
-    : path.startsWith('/trash') ? 'trash'
-    : path.startsWith('/contacts') ? 'contacts'
-    : 'photos';
+  const activeTab = path.startsWith('/files')
+    ? 'files'
+    : path.startsWith('/folders')
+      ? 'folders'
+      : path.startsWith('/favorites')
+        ? 'favorites'
+        : path.startsWith('/trash')
+          ? 'trash'
+          : path.startsWith('/contacts')
+            ? 'contacts'
+            : 'photos';
 
   // Folder ID comes from URL param (null = root)
   const currentFolderId = urlFolderId || null;
@@ -70,18 +80,29 @@ const Dashboard = () => {
   const [childFolders, setChildFolders] = useState([]);
   const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [folderPagination, setFolderPagination] = useState({
-    page: 1, limit: 100, total: 0, totalPages: 0, hasMore: true,
+    page: 1,
+    limit: 100,
+    total: 0,
+    totalPages: 0,
+    hasMore: true,
   });
 
   // All-files state (Photos + Files tabs — all files regardless of folder)
   const [allFiles, setAllFiles] = useState([]);
   const [allFilesLoading, setAllFilesLoading] = useState(false);
   const [allFilesPagination, setAllFilesPagination] = useState({
-    page: 1, limit: 100, total: 0, totalPages: 0, hasMore: true,
+    page: 1,
+    limit: 100,
+    total: 0,
+    totalPages: 0,
+    hasMore: true,
   });
 
   // Favorites tab — files reported back from FavoritesSection for the viewer
   const [favoriteFiles, setFavoriteFiles] = useState([]);
+
+  // Trash tab — files reported back from TrashSection for selectableItems
+  const [trashFiles, setTrashFiles] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -155,7 +176,10 @@ const Dashboard = () => {
         } else {
           setFolderFiles((prev) => {
             const existingIds = new Set(prev.map((f) => f.fileId || f.id));
-            return [...prev, ...filesData.filter((f) => !existingIds.has(f.fileId || f.id))];
+            return [
+              ...prev,
+              ...filesData.filter((f) => !existingIds.has(f.fileId || f.id)),
+            ];
           });
         }
 
@@ -167,61 +191,75 @@ const Dashboard = () => {
           hasMore: page < (paginationData.totalPages || 1),
         }));
       } catch (error) {
-        if (error.response?.status !== 401) console.error('Failed to fetch library:', error);
-        if (!append) { setFolderFiles([]); setChildFolders([]); }
+        if (error.response?.status !== 401)
+          console.error('Failed to fetch library:', error);
+        if (!append) {
+          setFolderFiles([]);
+          setChildFolders([]);
+        }
       } finally {
         setLoading(false);
         setLoadingMore(false);
         isLoadingRef.current = false;
       }
     },
-    []
+    [],
   );
 
   // Fetch ALL user files (no folder filter) — used by Photos + Files tabs
-  const fetchAllFiles = useCallback(
-    async (page = 1, append = false) => {
-      if (isAllFilesLoadingRef.current) return;
-      isAllFilesLoadingRef.current = true;
+  const fetchAllFiles = useCallback(async (page = 1, append = false) => {
+    if (isAllFilesLoadingRef.current) return;
+    isAllFilesLoadingRef.current = true;
 
-      try {
-        if (!append) setAllFilesLoading(true);
+    try {
+      if (!append) setAllFilesLoading(true);
 
-        const response = await fileService.listFiles({ page, limit: 100 });
-        const filesData = response?.files || [];
-        const total = response?.pagination?.total || 0;
-        const totalPages = response?.pagination?.totalPages || 1;
+      const response = await fileService.listFiles({ page, limit: 100 });
+      const filesData = response?.files || [];
+      const total = response?.pagination?.total || 0;
+      const totalPages = response?.pagination?.totalPages || 1;
 
-        if (!append) {
-          setAllFiles(filesData);
-        } else {
-          setAllFiles((prev) => {
-            const existingIds = new Set(prev.map((f) => f.fileId || f.id));
-            return [...prev, ...filesData.filter((f) => !existingIds.has(f.fileId || f.id))];
-          });
-        }
-
-        setAllFilesPagination((prev) => ({
-          ...prev, page, total, totalPages,
-          hasMore: page < totalPages,
-        }));
-      } catch (error) {
-        if (error.response?.status !== 401) console.error('Failed to fetch all files:', error);
-        if (!append) setAllFiles([]);
-      } finally {
-        setAllFilesLoading(false);
-        isAllFilesLoadingRef.current = false;
+      if (!append) {
+        setAllFiles(filesData);
+      } else {
+        setAllFiles((prev) => {
+          const existingIds = new Set(prev.map((f) => f.fileId || f.id));
+          return [
+            ...prev,
+            ...filesData.filter((f) => !existingIds.has(f.fileId || f.id)),
+          ];
+        });
       }
-    },
-    []
-  );
+
+      setAllFilesPagination((prev) => ({
+        ...prev,
+        page,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      }));
+    } catch (error) {
+      if (error.response?.status !== 401)
+        console.error('Failed to fetch all files:', error);
+      if (!append) setAllFiles([]);
+    } finally {
+      setAllFilesLoading(false);
+      isAllFilesLoadingRef.current = false;
+    }
+  }, []);
 
   // Load more files for Folders tab
   const loadMoreFolderFiles = useCallback(() => {
     if (folderPagination.hasMore && !loadingMore && !isLoadingRef.current) {
       fetchLibrary(currentFolderId, folderPagination.page + 1, true);
     }
-  }, [folderPagination.page, folderPagination.hasMore, loadingMore, fetchLibrary, currentFolderId]);
+  }, [
+    folderPagination.page,
+    folderPagination.hasMore,
+    loadingMore,
+    fetchLibrary,
+    currentFolderId,
+  ]);
 
   // Load more files for Photos / Files tabs
   const loadMoreAllFiles = useCallback(() => {
@@ -236,7 +274,10 @@ const Dashboard = () => {
     setCreatingFolder(true);
     try {
       const masterKey = getMasterKey();
-      const nameEncrypted = await encryptFilename(newFolderName.trim(), masterKey);
+      const nameEncrypted = await encryptFilename(
+        newFolderName.trim(),
+        masterKey,
+      );
       await folderService.createFolder({
         nameEncrypted,
         parentFolderId: currentFolderId || undefined,
@@ -262,7 +303,10 @@ const Dashboard = () => {
     try {
       if (data.type === 'folder') {
         if (data.folderId === targetFolder.folderId) return;
-        await folderService.moveFolderToFolder(data.folderId, targetFolder.folderId);
+        await folderService.moveFolderToFolder(
+          data.folderId,
+          targetFolder.folderId,
+        );
       } else if (data.type === 'files') {
         const fileIds = data.fileIds.length > 0 ? data.fileIds : selectedFiles;
         if (fileIds.length === 0) return;
@@ -319,20 +363,20 @@ const Dashboard = () => {
       hasMasterKey: hasMasterKey(),
       pending: localStorage.getItem('aamenn_pending_onboarding'),
       completed: localStorage.getItem('aamenn_onboarding_completed'),
-      showRecoveryKeyPrompt
+      showRecoveryKeyPrompt,
     });
-    
+
     if (vaultStateLoading || needsVaultSetup) return;
     if (!hasMasterKey()) return;
-    
+
     // Wait until recovery key flow is complete
     if (showRecoveryKeyPrompt) return;
-    
+
     const pending = localStorage.getItem('aamenn_pending_onboarding');
     const completed = localStorage.getItem('aamenn_onboarding_completed');
-    
+
     console.log('🔍 Final check:', { pending, completed });
-    
+
     // Show onboarding if pending flag exists (new user signup)
     // This overrides any previous completed flag for this session
     if (pending) {
@@ -353,7 +397,14 @@ const Dashboard = () => {
     } else if (activeTab === 'folders') {
       fetchLibrary(currentFolderId, 1, false);
     }
-  }, [activeTab, currentFolderId, needsVaultSetup, vaultStateLoading, fetchLibrary, fetchAllFiles]);
+  }, [
+    activeTab,
+    currentFolderId,
+    needsVaultSetup,
+    vaultStateLoading,
+    fetchLibrary,
+    fetchAllFiles,
+  ]);
 
   // Check for recovery key in URL params and show download prompt
   useEffect(() => {
@@ -367,9 +418,13 @@ const Dashboard = () => {
   }, [searchParams]);
 
   // Photos tab: ALL photos across ALL folders
-  const photoFiles = allFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal);
+  const photoFiles = allFiles.filter(
+    (f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+  );
   // Files tab: ALL documents across ALL folders
-  const documentFiles = allFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal);
+  const documentFiles = allFiles.filter(
+    (f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+  );
 
   // Build ordered ID list for the active tab (used by useSelection for range-select)
   const selectableItems = useMemo(() => {
@@ -379,22 +434,39 @@ const Dashboard = () => {
         ...folderFiles.map((f) => ({ id: `file:${f.fileId}` })),
       ];
     }
-    if (activeTab === 'photos') return photoFiles.map((f) => ({ id: `file:${f.fileId}` }));
-    if (activeTab === 'files') return documentFiles.map((f) => ({ id: `file:${f.fileId}` }));
+    if (activeTab === 'photos')
+      return photoFiles.map((f) => ({ id: `file:${f.fileId}` }));
+    if (activeTab === 'files')
+      return documentFiles.map((f) => ({ id: `file:${f.fileId}` }));
+    if (activeTab === 'favorites')
+      return favoriteFiles.map((f) => ({ id: `file:${f.fileId || f.id}` }));
+    if (activeTab === 'trash')
+      return trashFiles.map((f) => ({ id: `file:${f.fileId || f.id}` }));
     return [];
-  }, [activeTab, childFolders, folderFiles, photoFiles, documentFiles]);
+  }, [
+    activeTab,
+    childFolders,
+    folderFiles,
+    photoFiles,
+    documentFiles,
+    favoriteFiles,
+    trashFiles,
+  ]);
 
   const selection = useSelection(selectableItems);
 
   // Navigate into a folder — updates URL which triggers useEffect to fetch
-  const navigateToFolder = useCallback((folderId) => {
-    selection.clearSelection();
-    if (folderId) {
-      navigate(`/folders/${folderId}`);
-    } else {
-      navigate('/folders');
-    }
-  }, [navigate, selection.clearSelection]);
+  const navigateToFolder = useCallback(
+    (folderId) => {
+      selection.clearSelection();
+      if (folderId) {
+        navigate(`/folders/${folderId}`);
+      } else {
+        navigate('/folders');
+      }
+    },
+    [navigate, selection.clearSelection],
+  );
 
   // Aliases — keep the rest of the unchanged
   const selectedFiles = selection.selectedFileIds;
@@ -415,7 +487,10 @@ const Dashboard = () => {
         selection.clearSelection();
         return;
       }
-      if (e.key === 'Delete' && (selectedFiles.length > 0 || selectedFolders.length > 0)) {
+      if (
+        e.key === 'Delete' &&
+        (selectedFiles.length > 0 || selectedFolders.length > 0)
+      ) {
         handleDeleteSelected();
       }
     };
@@ -424,31 +499,44 @@ const Dashboard = () => {
   }, [selection, selectedFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Viewer file lists depend on which tab is active
-  const viewerPhotoFiles = activeTab === 'folders'
-    ? folderFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
-    : activeTab === 'favorites'
-    ? favoriteFiles.filter((f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
-    : photoFiles;
-  const viewerDocumentFiles = activeTab === 'folders'
-    ? folderFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
-    : activeTab === 'favorites'
-    ? favoriteFiles.filter((f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal)
-    : documentFiles;
+  const viewerPhotoFiles =
+    activeTab === 'folders'
+      ? folderFiles.filter(
+          (f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+        )
+      : activeTab === 'favorites'
+        ? favoriteFiles.filter(
+            (f) => !FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+          )
+        : photoFiles;
+  const viewerDocumentFiles =
+    activeTab === 'folders'
+      ? folderFiles.filter(
+          (f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+        )
+      : activeTab === 'favorites'
+        ? favoriteFiles.filter(
+            (f) => FILE_HANDLERS[getFileType(f.mimeType)].usesPreviewModal,
+          )
+        : documentFiles;
 
   // Handle file selection (checkbox click — always toggles)
-  const handleSelectFile = useCallback((file) => {
-    selection.toggle(`file:${file.fileId}`, { ctrl: true });
-  }, [selection]);
+  const handleSelectFile = useCallback(
+    (file) => {
+      selection.toggle(`file:${file.fileId}`, { ctrl: true });
+    },
+    [selection],
+  );
 
   // Handle file view - route to appropriate viewer
   const handleViewFile = (file) => {
     const fileType = getFileType(file.mimeType);
     const handler = FILE_HANDLERS[fileType];
 
-    const targetList = handler.usesPreviewModal ? viewerDocumentFiles : viewerPhotoFiles;
-    const index = targetList.findIndex(
-      (f) => f.fileId === file.fileId
-    );
+    const targetList = handler.usesPreviewModal
+      ? viewerDocumentFiles
+      : viewerPhotoFiles;
+    const index = targetList.findIndex((f) => f.fileId === file.fileId);
 
     if (index !== -1) {
       setCurrentFileIndex(index);
@@ -476,7 +564,9 @@ const Dashboard = () => {
     }
 
     // Show onboarding for first-time vault setup (Google signup path)
-    const hasSeenOnboarding = localStorage.getItem('aamenn_onboarding_completed');
+    const hasSeenOnboarding = localStorage.getItem(
+      'aamenn_onboarding_completed',
+    );
     if (!hasSeenOnboarding) {
       setShowOnboarding(true);
     }
@@ -488,11 +578,11 @@ const Dashboard = () => {
       const mimeType = file.mimeType;
       const fileType = getFileType(mimeType);
       const handler = FILE_HANDLERS[fileType];
-      
-      const targetList = handler.usesPreviewModal ? viewerDocumentFiles : viewerPhotoFiles;
-      const index = targetList.findIndex(
-        (f) => f.fileId === file.fileId
-      );
+
+      const targetList = handler.usesPreviewModal
+        ? viewerDocumentFiles
+        : viewerPhotoFiles;
+      const index = targetList.findIndex((f) => f.fileId === file.fileId);
       if (index !== -1) {
         setCurrentFileIndex(index);
         if (handler.usesPreviewModal) {
@@ -508,7 +598,9 @@ const Dashboard = () => {
   // happens in the background and is tracked by UploadProgressPanel.
   const handleUpload = async (files) => {
     if (!getMasterKey()) {
-      throw new Error('Session expired. Please unlock your vault before uploading.');
+      throw new Error(
+        'Session expired. Please unlock your vault before uploading.',
+      );
     }
     setIsUploadPanelMinimized(false);
     await uploadFilesWithEncryption(files, { folderId: currentFolderId });
@@ -516,11 +608,13 @@ const Dashboard = () => {
 
   // Handle share single file from PhotoViewer
   const handleShareSingle = (file) => {
-    setShareItems([{
-      fileId: file.fileId || file.id,
-      cipherFileKey: file.cipherFileKey,
-      fileNameEncrypted: file.fileNameEncrypted,
-    }]);
+    setShareItems([
+      {
+        fileId: file.fileId || file.id,
+        cipherFileKey: file.cipherFileKey,
+        fileNameEncrypted: file.fileNameEncrypted,
+      },
+    ]);
 
     setShowShareModal(true);
   };
@@ -531,7 +625,7 @@ const Dashboard = () => {
     if (!hasFiles && !hasFolders) return;
 
     const sourceList = activeTab === 'folders' ? folderFiles : allFiles;
- 
+
     const fileItems = sourceList
       .filter((f) => selectedFiles.includes(f.fileId || f.id))
       .map((f) => ({
@@ -539,7 +633,6 @@ const Dashboard = () => {
         cipherFileKey: f.cipherFileKey,
         fileNameEncrypted: f.fileNameEncrypted,
       }));
-
 
     let folderItems = [];
     if (hasFolders && hasMasterKey()) {
@@ -553,11 +646,11 @@ const Dashboard = () => {
             nameEncrypted: folder.nameEncrypted,
             files: result.files || [],
           };
-        })
+        }),
       );
       folderItems = resolved.filter((f) => f !== null);
     }
- 
+
     if (fileItems.length === 0 && folderItems.length === 0) return;
     setShareItems([...fileItems, ...folderItems]);
 
@@ -570,20 +663,34 @@ const Dashboard = () => {
     if (totalCount === 0) return;
 
     const parts = [];
-    if (selectedFiles.length > 0) parts.push(`${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`);
-    if (selectedFolders.length > 0) parts.push(`${selectedFolders.length} folder${selectedFolders.length > 1 ? 's' : ''}`);
+    if (selectedFiles.length > 0)
+      parts.push(
+        `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`,
+      );
+    if (selectedFolders.length > 0)
+      parts.push(
+        `${selectedFolders.length} folder${selectedFolders.length > 1 ? 's' : ''}`,
+      );
     if (!window.confirm(`Move ${parts.join(' and ')} to trash?`)) return;
 
     try {
       if (selectedFiles.length > 0) {
         await fileService.moveToTrashBulk(selectedFiles);
         const deletedIds = new Set(selectedFiles);
-        setFolderFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
-        setAllFiles((prev) => prev.filter((f) => !deletedIds.has(f.fileId || f.id)));
+        setFolderFiles((prev) =>
+          prev.filter((f) => !deletedIds.has(f.fileId || f.id)),
+        );
+        setAllFiles((prev) =>
+          prev.filter((f) => !deletedIds.has(f.fileId || f.id)),
+        );
       }
       if (selectedFolders.length > 0) {
-        await Promise.all(selectedFolders.map((id) => folderService.deleteFolder(id)));
-        setChildFolders((prev) => prev.filter((f) => !selectedFolders.includes(f.folderId)));
+        await Promise.all(
+          selectedFolders.map((id) => folderService.deleteFolder(id)),
+        );
+        setChildFolders((prev) =>
+          prev.filter((f) => !selectedFolders.includes(f.folderId)),
+        );
       }
       selection.clearSelection();
     } catch (error) {
@@ -597,7 +704,9 @@ const Dashboard = () => {
       const fileId = file.fileId || file.id;
       await fileService.moveToTrash(fileId);
       setViewerOpen(false);
-      setFolderFiles((prev) => prev.filter((f) => (f.fileId || f.id) !== fileId));
+      setFolderFiles((prev) =>
+        prev.filter((f) => (f.fileId || f.id) !== fileId),
+      );
       setAllFiles((prev) => prev.filter((f) => (f.fileId || f.id) !== fileId));
     } catch (error) {
       console.error('Failed to move file to trash:', error);
@@ -606,7 +715,8 @@ const Dashboard = () => {
 
   // Handle favorite toggle
   const handleFavoriteToggle = (fileId, isFavorite) => {
-    const update = (f) => (f.fileId || f.id) === fileId ? { ...f, isFavorite } : f;
+    const update = (f) =>
+      (f.fileId || f.id) === fileId ? { ...f, isFavorite } : f;
     setFolderFiles((prev) => prev.map(update));
     setAllFiles((prev) => prev.map(update));
   };
@@ -615,8 +725,12 @@ const Dashboard = () => {
   const handleTabChange = (tab) => {
     selection.clearSelection();
     const routes = {
-      photos: '/photos', files: '/files', folders: '/folders',
-      favorites: '/favorites', trash: '/trash', contacts: '/contacts',
+      photos: '/photos',
+      files: '/files',
+      folders: '/folders',
+      favorites: '/favorites',
+      trash: '/trash',
+      contacts: '/contacts',
     };
     navigate(routes[tab] || '/folders');
   };
@@ -657,15 +771,19 @@ const Dashboard = () => {
       if (selectedFiles.length > 0) {
         await folderService.moveFilesToFolder(selectedFiles, targetFolderId);
         const movedFileIds = new Set(selectedFiles);
-        setFolderFiles((prev) => prev.filter((f) => !movedFileIds.has(f.fileId || f.id)));
-        setAllFiles((prev) => prev.filter((f) => !movedFileIds.has(f.fileId || f.id)));
+        setFolderFiles((prev) =>
+          prev.filter((f) => !movedFileIds.has(f.fileId || f.id)),
+        );
+        setAllFiles((prev) =>
+          prev.filter((f) => !movedFileIds.has(f.fileId || f.id)),
+        );
       }
       // Move folders — prevent moving a folder into itself
       if (selectedFolders.length > 0) {
         await Promise.all(
           selectedFolders
             .filter((id) => id !== targetFolderId)
-            .map((id) => folderService.moveFolderToFolder(id, targetFolderId))
+            .map((id) => folderService.moveFolderToFolder(id, targetFolderId)),
         );
       }
       selection.clearSelection();
@@ -676,9 +794,12 @@ const Dashboard = () => {
   };
 
   // Toggle folder selection (checkbox click — always toggles)
-  const handleFolderSelect = useCallback((folder) => {
-    selection.toggle(`folder:${folder.folderId}`, { ctrl: true });
-  }, [selection]);
+  const handleFolderSelect = useCallback(
+    (folder) => {
+      selection.toggle(`folder:${folder.folderId}`, { ctrl: true });
+    },
+    [selection],
+  );
 
   // Sidebar open state (mobile)
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -696,7 +817,9 @@ const Dashboard = () => {
     try {
       const masterKey = getMasterKey();
       const nameEncrypted = await encryptFilename(newName.trim(), masterKey);
-      await folderService.updateFolder(renamingFolder.folderId, { nameEncrypted });
+      await folderService.updateFolder(renamingFolder.folderId, {
+        nameEncrypted,
+      });
       await fetchLibrary(currentFolderId, 1, false);
       selection.clearSelection();
     } finally {
@@ -734,7 +857,6 @@ const Dashboard = () => {
     <div className="h-screen bg-white dark:bg-zinc-900 flex overflow-hidden">
       {/* Body: sidebar + main content, full height */}
       <div className="flex flex-1 overflow-hidden">
-
         {/* Left Sidebar */}
         <Sidebar
           activeSection={activeTab}
@@ -762,178 +884,200 @@ const Dashboard = () => {
             onSidebarToggle={() => setSidebarOpen((v) => !v)}
           />
 
-          {/* Floating selection action bar */}
-          <GalleryHeader
-            selectedCount={selectedFiles.length + (activeTab === 'folders' ? selectedFolders.length : 0)}
-            selectedFilesCount={selectedFiles.length}
-            selectedFoldersCount={activeTab === 'folders' ? selectedFolders.length : 0}
-            onDelete={handleDeleteSelected}
-            onAddToAlbum={handleMoveToFolderBulk}
-            onShare={handleShare}
-            onClearSelection={selection.clearSelection}
-          />
+          {/* Floating selection action bar — hidden on trash tab (trash has its own) */}
+          {activeTab !== 'trash' && (
+            <GalleryHeader
+              selectedCount={
+                selectedFiles.length +
+                (activeTab === 'folders' ? selectedFolders.length : 0)
+              }
+              selectedFilesCount={selectedFiles.length}
+              selectedFoldersCount={
+                activeTab === 'folders' ? selectedFolders.length : 0
+              }
+              onDelete={handleDeleteSelected}
+              onAddToAlbum={handleMoveToFolderBulk}
+              onShare={handleShare}
+              onClearSelection={selection.clearSelection}
+            />
+          )}
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-hidden min-h-0">
-          <SelectionArea
-            onSelect={selection.applyLassoChange}
-            onClear={selection.clearSelection}
-          >
-            <div className="h-full overflow-hidden">
-
-              {/* ── Folders Tab ── */}
-              {activeTab === 'folders' && (
-                viewMode === 'list' ? (
-                  <FileListView
-                    folders={childFolders}
-                    files={folderFiles}
-                    searchQuery={searchQuery}
-                    selectedFiles={selectedFiles}
-                    selectedFolders={selectedFolders}
-                    onSelectFile={handleSelectFile}
-                    onSelectFolder={handleFolderSelect}
-                    onViewFile={handleViewFile}
-                    onOpenFolder={navigateToFolder}
-                    onFavoriteToggle={handleFavoriteToggle}
-                    onDropOnFolder={handleDropOnFolder}
-                    dragOverFolderId={dragOverFolderId}
-                    onFolderDragOver={(id) => setDragOverFolderId(id)}
-                    loading={loading}
-                    loadingMore={loadingMore}
-                    hasMore={folderPagination.hasMore}
-                    onLoadMore={loadMoreFolderFiles}
-                    emptyMessage={currentFolderId ? 'This folder is empty' : 'No files yet'}
-                    emptyIcon={faFolderOpen}
-                  />
-                ) : (
-                  /* Grid fallback for folder view */
-                  <div className="p-4 overflow-y-auto h-full">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 mb-4">
-                      {childFolders.map((folder) => (
-                        <FolderCard
-                          key={folder.folderId}
-                          folder={folder}
-                          onOpen={() => navigateToFolder(folder.folderId)}
-                          isDragOver={dragOverFolderId === folder.folderId}
-                          onDragOver={() => setDragOverFolderId(folder.folderId)}
-                          onDrop={(targetFolder) => handleDropOnFolder(targetFolder)}
-                          isSelected={selectedFolders.includes(folder.folderId)}
-                          onSelect={handleFolderSelect}
-                        />
-                      ))}
-                    </div>
-                    <VirtualizedPhotoGrid
+            <SelectionArea
+              onSelect={selection.applyLassoChange}
+              onClear={selection.clearSelection}
+            >
+              <div className="h-full overflow-hidden">
+                {/* ── Folders Tab ── */}
+                {activeTab === 'folders' &&
+                  (viewMode === 'list' ? (
+                    <FileListView
+                      folders={childFolders}
                       files={folderFiles}
+                      searchQuery={searchQuery}
                       selectedFiles={selectedFiles}
+                      selectedFolders={selectedFolders}
                       onSelectFile={handleSelectFile}
+                      onSelectFolder={handleFolderSelect}
                       onViewFile={handleViewFile}
+                      onOpenFolder={navigateToFolder}
                       onFavoriteToggle={handleFavoriteToggle}
-                      loading={loading || loadingMore}
+                      onDropOnFolder={handleDropOnFolder}
+                      dragOverFolderId={dragOverFolderId}
+                      onFolderDragOver={(id) => setDragOverFolderId(id)}
+                      loading={loading}
+                      loadingMore={loadingMore}
                       hasMore={folderPagination.hasMore}
                       onLoadMore={loadMoreFolderFiles}
-                      gridSize="small"
+                      emptyMessage={
+                        currentFolderId
+                          ? 'This folder is empty'
+                          : 'No files yet'
+                      }
+                      emptyIcon={faFolderOpen}
                     />
-                  </div>
-                )
-              )}
+                  ) : (
+                    /* Grid fallback for folder view */
+                    <div className="p-4 overflow-y-auto h-full">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 mb-4">
+                        {childFolders.map((folder) => (
+                          <FolderCard
+                            key={folder.folderId}
+                            folder={folder}
+                            onOpen={() => navigateToFolder(folder.folderId)}
+                            isDragOver={dragOverFolderId === folder.folderId}
+                            onDragOver={() =>
+                              setDragOverFolderId(folder.folderId)
+                            }
+                            onDrop={(targetFolder) =>
+                              handleDropOnFolder(targetFolder)
+                            }
+                            isSelected={selectedFolders.includes(
+                              folder.folderId,
+                            )}
+                            onSelect={handleFolderSelect}
+                          />
+                        ))}
+                      </div>
+                      <VirtualizedPhotoGrid
+                        files={folderFiles}
+                        selectedFiles={selectedFiles}
+                        onSelectFile={handleSelectFile}
+                        onViewFile={handleViewFile}
+                        onFavoriteToggle={handleFavoriteToggle}
+                        loading={loading || loadingMore}
+                        hasMore={folderPagination.hasMore}
+                        onLoadMore={loadMoreFolderFiles}
+                        gridSize="small"
+                      />
+                    </div>
+                  ))}
 
-              {/* ── Photos Tab ── */}
-              {activeTab === 'photos' && (
-                viewMode === 'list' ? (
-                  <FileListView
-                    folders={[]}
-                    files={photoFiles}
-                    searchQuery={searchQuery}
-                    selectedFiles={selectedFiles}
-                    selectedFolders={[]}
-                    onSelectFile={handleSelectFile}
-                    onViewFile={handleViewFile}
-                    onFavoriteToggle={handleFavoriteToggle}
-                    loading={allFilesLoading}
-                    hasMore={allFilesPagination.hasMore}
-                    onLoadMore={loadMoreAllFiles}
-                    emptyMessage="No photos yet"
-                    emptyIcon={faImage}
-                  />
-                ) : (
-                  <div className="p-4 overflow-y-auto h-full">
-                    <VirtualizedPhotoGrid
+                {/* ── Photos Tab ── */}
+                {activeTab === 'photos' &&
+                  (viewMode === 'list' ? (
+                    <FileListView
+                      folders={[]}
                       files={photoFiles}
+                      searchQuery={searchQuery}
                       selectedFiles={selectedFiles}
+                      selectedFolders={[]}
                       onSelectFile={handleSelectFile}
                       onViewFile={handleViewFile}
                       onFavoriteToggle={handleFavoriteToggle}
                       loading={allFilesLoading}
                       hasMore={allFilesPagination.hasMore}
                       onLoadMore={loadMoreAllFiles}
-                      gridSize="small"
                       emptyMessage="No photos yet"
+                      emptyIcon={faImage}
                     />
-                  </div>
-                )
-              )}
+                  ) : (
+                    <div className="p-4 overflow-y-auto h-full">
+                      <VirtualizedPhotoGrid
+                        files={photoFiles}
+                        selectedFiles={selectedFiles}
+                        onSelectFile={handleSelectFile}
+                        onViewFile={handleViewFile}
+                        onFavoriteToggle={handleFavoriteToggle}
+                        loading={allFilesLoading}
+                        hasMore={allFilesPagination.hasMore}
+                        onLoadMore={loadMoreAllFiles}
+                        gridSize="small"
+                        emptyMessage="No photos yet"
+                      />
+                    </div>
+                  ))}
 
-              {/* ── Files Tab ── */}
-              {activeTab === 'files' && (
-                viewMode === 'list' ? (
-                  <FileListView
-                    folders={[]}
-                    files={documentFiles}
-                    searchQuery={searchQuery}
-                    selectedFiles={selectedFiles}
-                    selectedFolders={[]}
-                    onSelectFile={handleSelectFile}
+                {/* ── Files Tab ── */}
+                {activeTab === 'files' &&
+                  (viewMode === 'list' ? (
+                    <FileListView
+                      folders={[]}
+                      files={documentFiles}
+                      searchQuery={searchQuery}
+                      selectedFiles={selectedFiles}
+                      selectedFolders={[]}
+                      onSelectFile={handleSelectFile}
+                      onViewFile={handleViewFile}
+                      onFavoriteToggle={handleFavoriteToggle}
+                      loading={allFilesLoading}
+                      hasMore={allFilesPagination.hasMore}
+                      onLoadMore={loadMoreAllFiles}
+                      emptyMessage="No files yet"
+                      emptyIcon={faFile}
+                    />
+                  ) : (
+                    <div className="p-4 overflow-y-auto h-full">
+                      <VirtualizedPhotoGrid
+                        files={documentFiles}
+                        selectedFiles={selectedFiles}
+                        onSelectFile={handleSelectFile}
+                        onViewFile={handleViewFile}
+                        onFavoriteToggle={handleFavoriteToggle}
+                        loading={allFilesLoading}
+                        hasMore={allFilesPagination.hasMore}
+                        onLoadMore={loadMoreAllFiles}
+                        gridSize="small"
+                        emptyMessage="No files yet"
+                      />
+                    </div>
+                  ))}
+
+                {/* ── Favorites Tab ── */}
+                {activeTab === 'favorites' && (
+                  <FavoritesSection
                     onViewFile={handleViewFile}
                     onFavoriteToggle={handleFavoriteToggle}
-                    loading={allFilesLoading}
-                    hasMore={allFilesPagination.hasMore}
-                    onLoadMore={loadMoreAllFiles}
-                    emptyMessage="No files yet"
-                    emptyIcon={faFile}
+                    onFilesLoaded={setFavoriteFiles}
+                    searchQuery={searchQuery}
+                    viewMode={viewMode}
+                    selectedFiles={selectedFiles}
+                    onSelectFile={handleSelectFile}
                   />
-                ) : (
+                )}
+
+                {/* ── Trash Tab ── */}
+                {activeTab === 'trash' && (
+                  <TrashSection
+                    onViewFile={handleViewFile}
+                    gridSize="small"
+                    viewMode={viewMode}
+                    selectedFiles={selectedFiles}
+                    onSelectFile={handleSelectFile}
+                    onFilesLoaded={setTrashFiles}
+                    onClearSelection={selection.clearSelection}
+                  />
+                )}
+
+                {/* ── Contacts Tab ── */}
+                {activeTab === 'contacts' && (
                   <div className="p-4 overflow-y-auto h-full">
-                    <VirtualizedPhotoGrid
-                      files={documentFiles}
-                      selectedFiles={selectedFiles}
-                      onSelectFile={handleSelectFile}
-                      onViewFile={handleViewFile}
-                      onFavoriteToggle={handleFavoriteToggle}
-                      loading={allFilesLoading}
-                      hasMore={allFilesPagination.hasMore}
-                      onLoadMore={loadMoreAllFiles}
-                      gridSize="small"
-                      emptyMessage="No files yet"
-                    />
+                    <ContactsSection />
                   </div>
-                )
-              )}
-
-              {/* ── Favorites Tab ── */}
-              {activeTab === 'favorites' && (
-                <FavoritesSection
-                  onViewFile={handleViewFile}
-                  onFilesLoaded={setFavoriteFiles}
-                  searchQuery={searchQuery}
-                />
-              )}
-
-              {/* ── Trash Tab ── */}
-              {activeTab === 'trash' && (
-                <div className="p-4 overflow-y-auto h-full">
-                  <TrashSection onViewFile={handleViewFile} gridSize="small" />
-                </div>
-              )}
-
-              {/* ── Contacts Tab ── */}
-              {activeTab === 'contacts' && (
-                <div className="p-4 overflow-y-auto h-full">
-                  <ContactsSection />
-                </div>
-              )}
-
-            </div>
-          </SelectionArea>
+                )}
+              </div>
+            </SelectionArea>
           </div>
 
           <SyncingIndicator isSyncing={syncing} />
@@ -992,7 +1136,11 @@ const Dashboard = () => {
           files={viewerPhotoFiles}
           isOpen={viewerOpen}
           onClose={() => setViewerOpen(false)}
-          onNext={() => setCurrentFileIndex((i) => Math.min(i + 1, viewerPhotoFiles.length - 1))}
+          onNext={() =>
+            setCurrentFileIndex((i) =>
+              Math.min(i + 1, viewerPhotoFiles.length - 1),
+            )
+          }
           onPrev={() => setCurrentFileIndex((i) => Math.max(i - 1, 0))}
           hasNext={currentFileIndex < viewerPhotoFiles.length - 1}
           hasPrev={currentFileIndex > 0}
@@ -1011,7 +1159,11 @@ const Dashboard = () => {
           files={viewerDocumentFiles}
           isOpen={documentViewerOpen}
           onClose={() => setDocumentViewerOpen(false)}
-          onNext={() => setCurrentFileIndex((i) => Math.min(i + 1, viewerDocumentFiles.length - 1))}
+          onNext={() =>
+            setCurrentFileIndex((i) =>
+              Math.min(i + 1, viewerDocumentFiles.length - 1),
+            )
+          }
           onPrev={() => setCurrentFileIndex((i) => Math.max(i - 1, 0))}
           hasNext={currentFileIndex < viewerDocumentFiles.length - 1}
           hasPrev={currentFileIndex > 0}
@@ -1023,13 +1175,17 @@ const Dashboard = () => {
       {!hasMasterKey() && !needsVaultSetup && (
         <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-zinc-900 border border-amber-500/30 rounded-lg p-4 shadow-lg z-50">
           <div className="flex items-start">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="w-5 h-5 text-amber-500 mt-0.5 mr-3 flex-shrink-0" />
+            <FontAwesomeIcon
+              icon={faTriangleExclamation}
+              className="w-5 h-5 text-amber-500 mt-0.5 mr-3 flex-shrink-0"
+            />
             <div className="flex-1">
               <h4 className="text-sm font-medium text-amber-400">
                 Vault Locked
               </h4>
               <p className="text-sm text-gray-400 mt-1">
-                Enter your Vault Password to view and manage your encrypted photos.
+                Enter your Vault Password to view and manage your encrypted
+                photos.
               </p>
               <button
                 onClick={() => setShowUnlockModal(true)}
@@ -1052,7 +1208,6 @@ const Dashboard = () => {
         onUnlocked={handleMasterKeyUnlocked}
       />
 
-      
       {/* Share Modal */}
       <ShareModal
         isOpen={showShareModal}
@@ -1065,7 +1220,7 @@ const Dashboard = () => {
 
       {/* Folder Picker Modal */}
       <FolderPickerModal
-        key={showFolderPickerModal ? currentFolderId ?? 'root' : 'closed'}
+        key={showFolderPickerModal ? (currentFolderId ?? 'root') : 'closed'}
         isOpen={showFolderPickerModal}
         onClose={() => setShowFolderPickerModal(false)}
         onMoveToFolder={handleFolderPickerMove}
@@ -1076,8 +1231,13 @@ const Dashboard = () => {
       {/* Rename Folder Modal */}
       <RenameModal
         isOpen={!!renamingFolder}
-        onClose={() => { setRenamingFolder(null); setIsRenamingFolder(false); }}
-        currentName={renamingFolder?.decryptedName || renamingFolder?.nameEncrypted || ''}
+        onClose={() => {
+          setRenamingFolder(null);
+          setIsRenamingFolder(false);
+        }}
+        currentName={
+          renamingFolder?.decryptedName || renamingFolder?.nameEncrypted || ''
+        }
         onRename={handleFolderRenameSubmit}
         isRenaming={isRenamingFolder}
         label="Folder"
@@ -1092,7 +1252,9 @@ const Dashboard = () => {
             setShowRecoveryKeyPrompt(false);
             // Check if onboarding should be shown after recovery key
             const pending = localStorage.getItem('aamenn_pending_onboarding');
-            const completed = localStorage.getItem('aamenn_onboarding_completed');
+            const completed = localStorage.getItem(
+              'aamenn_onboarding_completed',
+            );
             console.log('🔑 After recovery key check:', { pending, completed });
             if (pending) {
               console.log('✅ Showing onboarding after recovery key!');

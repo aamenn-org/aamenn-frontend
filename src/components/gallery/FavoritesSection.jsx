@@ -2,14 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fileService } from '../../services';
 import FileListView from '../fileList/FileListView';
+import VirtualizedPhotoGrid from './VirtualizedPhotoGrid';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faHeart } from '@fortawesome/free-solid-svg-icons';
 
-const FavoritesSection = ({ onViewFile, onFavoriteToggle, onFilesLoaded, searchQuery = '' }) => {
+const FavoritesSection = ({
+  onViewFile,
+  onFavoriteToggle,
+  onFilesLoaded,
+  searchQuery = '',
+  viewMode = 'list',
+  selectedFiles = [],
+  onSelectFile,
+}) => {
   const { t } = useTranslation('photos');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const fetchFavorites = useCallback(async () => {
     try {
@@ -32,10 +40,7 @@ const FavoritesSection = ({ onViewFile, onFavoriteToggle, onFilesLoaded, searchQ
   }, [fetchFavorites]);
 
   const handleSelectFile = (file) => {
-    const fileId = file.fileId || file.id;
-    setSelectedFiles((prev) =>
-      prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]
-    );
+    onSelectFile?.(file);
   };
 
   const handleFavoriteToggle = (fileId, isFavorite) => {
@@ -46,6 +51,24 @@ const FavoritesSection = ({ onViewFile, onFavoriteToggle, onFilesLoaded, searchQ
     }
     onFavoriteToggle?.(fileId, isFavorite);
   };
+
+  if (viewMode === 'grid') {
+    return (
+      <div className="p-4 overflow-y-auto h-full">
+        <VirtualizedPhotoGrid
+          files={files}
+          selectedFiles={selectedFiles}
+          onSelectFile={handleSelectFile}
+          onViewFile={onViewFile}
+          onFavoriteToggle={handleFavoriteToggle}
+          loading={loading}
+          hasMore={false}
+          emptyMessage={t('favorites.empty.title', 'No favorites yet')}
+          gridSize="small"
+        />
+      </div>
+    );
+  }
 
   return (
     <FileListView
