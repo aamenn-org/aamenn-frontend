@@ -4,7 +4,7 @@ import { contactsService } from '../../services';
 import { decryptContact } from '../../utils/crypto';
 import { useAuth } from '../../context/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUsers, faTrash, faSync, faDownload, faChevronLeft, faChevronRight, faSearch, faClipboard, faEnvelope } from '@fortawesome/free-solid-svg-icons';
+import { faUsers, faTrash, faSync, faDownload, faUpload, faChevronLeft, faChevronRight, faSearch, faClipboard, faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import { faGoogle as faGoogleBrand } from '@fortawesome/free-brands-svg-icons';
 
 const PAGE_LIMIT = 20;
@@ -19,8 +19,10 @@ export const ContactsSection = () => {
   const [totalContacts, setTotalContacts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [error, setError] = useState(null);
+  const csvInputRef = useRef(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedField, setCopiedField] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,6 +101,33 @@ export const ContactsSection = () => {
     }
   };
 
+  const handleCSVImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+
+    const masterKey = getMasterKey();
+    if (!masterKey) {
+      setError('Master key not available. Please re-login before importing.');
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    try {
+      const result = await contactsService.importCSV(file, masterKey);
+      setLastSync(new Date());
+      setSearchTerm('');
+      setActiveQuery('');
+      setCurrentPage(1);
+      await loadPage(1, '');
+    } catch (err) {
+      setError(err.message || 'Failed to import CSV contacts');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const googleLogin = useGoogleLogin({
     onSuccess: handleSyncSuccess,
     onError: () => setError('Google authentication failed'),
@@ -120,11 +149,35 @@ export const ContactsSection = () => {
     }
   };
 
-  const handleExportCSV = () => {
-    if (contacts.length === 0) return;
+  const handleExportCSV = async () => {
+    if (totalContacts === 0) return;
+
+    try {
+      setError(null);
+      const masterKey = getMasterKey();
+      if (!masterKey) {
+        setError('Master key not available. Please re-login to export contacts.');
+        return;
+      }
+
+      // Fetch ALL contacts, not just the current page
+      const allContacts = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const result = await contactsService.getContacts(page, 100);
+        const decrypted = await Promise.all(
+          result.data.map(c => decryptContact(c, masterKey))
+        );
+        allContacts.push(...decrypted);
+        totalPages = result.totalPages;
+        page++;
+      } while (page <= totalPages);
+
+      if (allContacts.length === 0) return;
 
     const headers = ['Name', 'Nickname', 'Phone', 'Email', 'Address', 'Organization', 'Occupation', 'Birthday', 'Bio', 'URLs', 'Photo URL'];
-    const rows = contacts.map(contact => [
+    const rows = allContacts.map(contact => [
       contact.name || '',
       contact.nickname || '',
       contact.phone || '',
@@ -162,6 +215,10 @@ export const ContactsSection = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export contacts:', err);
+      setError('Failed to export contacts');
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -208,6 +265,15 @@ export const ContactsSection = () => {
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input - always rendered so ref works in empty state too */}
+      <input
+        ref={csvInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleCSVImport}
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -272,8 +338,17 @@ export const ContactsSection = () => {
               </h3>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => csvInputRef.current?.click()}
+                  disabled={importing || syncing}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Import from Google Contacts CSV"
+                >
+                  <FontAwesomeIcon icon={faUpload} className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
+                  {importing ? 'Importing...' : 'Import CSV'}
+                </button>
+                <button
                   onClick={handleGoogleLogin}
-                  disabled={syncing}
+                  disabled={syncing || importing}
                   className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     totalContacts > 0
                       ? ' text-white hover:bg-gray-700'
@@ -419,16 +494,26 @@ export const ContactsSection = () => {
         <div className="text-center py-12 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-700">
           <FontAwesomeIcon icon={faUsers} className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            No contacts synced yet. Connect your Google account to get started.
+            No contacts synced yet. Connect your Google account or import a CSV file to get started.
           </p>
-          <button
-            onClick={handleGoogleLogin}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mx-auto"
-          >
-            <FontAwesomeIcon icon={faGoogleBrand} className="w-4 h-4" />
-            {syncing ? 'Syncing...' : 'Connect Google'}
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={handleGoogleLogin}
+              disabled={syncing || importing}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FontAwesomeIcon icon={faGoogleBrand} className="w-4 h-4" />
+              {syncing ? 'Syncing...' : 'Connect Google'}
+            </button>
+            <button
+              onClick={() => csvInputRef.current?.click()}
+              disabled={importing || syncing}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FontAwesomeIcon icon={faUpload} className="w-4 h-4" />
+              {importing ? 'Importing...' : 'Import CSV'}
+            </button>
+          </div>
         </div>
       )}
     </div>
