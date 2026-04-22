@@ -18,16 +18,7 @@ import {
 // ─── Pure helpers (no component state) ──────────────────────────────────────
 
 function isAcceptedType(file) {
-  if (!file.type) return false;
-  if (
-    file.type.startsWith('image/') ||
-    file.type.startsWith('video/') ||
-    file.type.startsWith('text/')
-  ) return true;
-  return (
-    file.type === 'application/pdf' ||
-    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  );
+  return !!file.name;
 }
 
 // Stable identity key for a File object — avoids using object reference as Map key
@@ -40,7 +31,8 @@ function formatBytes(bytes) {
   if (!bytes || bytes <= 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -48,7 +40,11 @@ function getFileIcon(mimeType) {
   if (mimeType.startsWith('image/')) return faImage;
   if (mimeType.startsWith('video/')) return faFileVideo;
   if (mimeType === 'application/pdf') return faFilePdf;
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return faFileWord;
+  if (
+    mimeType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  )
+    return faFileWord;
   if (mimeType.startsWith('text/')) return faFileLines;
   return faFile;
 }
@@ -123,7 +119,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
 
       setFiles((prev) => {
         const existingKeys = new Set(prev.map(stableFileKey));
-        const deduped = accepted.filter((f) => f.size > 0 && !existingKeys.has(stableFileKey(f)));
+        const deduped = accepted.filter(
+          (f) => f.size > 0 && !existingKeys.has(stableFileKey(f)),
+        );
         deduped.forEach((f) => generatePreview(f, stableFileKey(f)));
         return [...prev, ...deduped];
       });
@@ -181,7 +179,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
       // handles state reset. Actual encryption + upload progress is shown by UploadProgressPanel.
       onClose();
     } catch (err) {
-      setError(err?.message || t('upload.error', 'Upload failed. Please try again.'));
+      setError(
+        err?.message || t('upload.error', 'Upload failed. Please try again.'),
+      );
       setQueuing(false);
     }
   }, [files, queuing, onUpload, onClose, t]);
@@ -211,7 +211,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             disabled={queuing}
             className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50"
           >
-            <FontAwesomeIcon icon={faXmark} className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <FontAwesomeIcon
+              icon={faXmark}
+              className="w-5 h-5 text-gray-500 dark:text-gray-400"
+            />
           </button>
         </div>
 
@@ -219,9 +222,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         <div
           className={`
             border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-            ${isDragging
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-              : 'border-gray-200 dark:border-zinc-600 hover:border-gray-300 dark:hover:border-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700/50'
+            ${
+              isDragging
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-zinc-600 hover:border-gray-300 dark:hover:border-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700/50'
             }
           `}
           onDragOver={handleDragOver}
@@ -230,19 +234,27 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
           onClick={() => fileInputRef.current?.click()}
         >
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <FontAwesomeIcon icon={faCloudUpload} className="w-6 h-6 text-blue-500" />
+            <FontAwesomeIcon
+              icon={faCloudUpload}
+              className="w-6 h-6 text-blue-500"
+            />
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
-            {t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
+            {t(
+              'upload.dragDrop',
+              'Drag and drop your files here, or click to browse',
+            )}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {t('upload.supported', 'Supported: Images, Videos, PDF, DOCX, TXT')}
+            {t(
+              'upload.supported',
+              'All file types supported · Images & videos include previews',
+            )}
           </p>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,video/*,.pdf,.docx,.txt,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={handleFileSelect}
           />
@@ -251,7 +263,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Inline error */}
         {error && (
           <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-            <FontAwesomeIcon icon={faCircleExclamation} className="w-4 h-4 shrink-0" />
+            <FontAwesomeIcon
+              icon={faCircleExclamation}
+              className="w-4 h-4 shrink-0"
+            />
             <span>{error}</span>
           </div>
         )}
@@ -298,7 +313,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
                     disabled={queuing}
                     className="p-1 hover:bg-gray-200 dark:hover:bg-zinc-600 rounded transition-colors ml-2 flex-shrink-0 disabled:opacity-50"
                   >
-                    <FontAwesomeIcon icon={faTrash} className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <FontAwesomeIcon
+                      icon={faTrash}
+                      className="w-4 h-4 text-gray-500 dark:text-gray-400"
+                    />
                   </button>
                 </div>
               );
@@ -309,7 +327,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Total size summary (only meaningful when multiple files selected) */}
         {files.length > 1 && (
           <p className="mt-2 text-xs text-right text-gray-500 dark:text-gray-400">
-            {t('upload.totalSize', 'Total: {{size}}', { size: formatBytes(totalSize) })}
+            {t('upload.totalSize', 'Total: {{size}}', {
+              size: formatBytes(totalSize),
+            })}
           </p>
         )}
 
@@ -328,11 +348,16 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             className="px-4 py-2 bg-blue-500 text-white font-medium hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {queuing && (
-              <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
+              <FontAwesomeIcon
+                icon={faSpinner}
+                className="w-4 h-4 animate-spin"
+              />
             )}
             {queuing
               ? t('upload.queuing', 'Adding...')
-              : t('upload.uploadFiles', 'Upload {{count}} file', { count: files.length })}
+              : t('upload.uploadFiles', 'Upload {{count}} file', {
+                  count: files.length,
+                })}
           </button>
         </div>
       </div>

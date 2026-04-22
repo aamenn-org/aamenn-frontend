@@ -2,18 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context';
 import { fileService } from '../../services';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
+import { isDocumentPreviewable } from '../../utils/thumbnail';
 import { useDecryptedBlobUrl } from '../../hooks/useDecryptedBlobUrl';
 import DocumentPreview from './DocumentPreview';
 import RenameModal from '../gallery/RenameModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faFile, 
-  faPen, 
-  faDownload, 
-  faXmark, 
-  faTriangleExclamation, 
-  faChevronLeft, 
-  faChevronRight 
+import {
+  faFile,
+  faPen,
+  faDownload,
+  faXmark,
+  faTriangleExclamation,
+  faChevronLeft,
+  faChevronRight,
+  faFileZipper,
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -48,7 +50,10 @@ const FilePreviewModal = ({
         return;
       }
       try {
-        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        const name = await decryptFilename(
+          file.fileNameEncrypted,
+          getMasterKey(),
+        );
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[FilePreviewModal] Failed to decrypt filename:', err);
@@ -72,14 +77,14 @@ const FilePreviewModal = ({
     try {
       const masterKey = getMasterKey();
       const encryptedName = await encryptFilename(newName, masterKey);
-      
+
       await fileService.updateFile(fileId, {
         fileNameEncrypted: encryptedName,
       });
 
       // Update local state
       setDecryptedFileName(newName);
-      
+
       // Update file object
       if (file) {
         file.fileNameEncrypted = encryptedName;
@@ -114,13 +119,20 @@ const FilePreviewModal = ({
     loadMetadata();
   }, [isOpen, fileId]);
 
-  // Decrypt and create blob URL
-  const { blobUrl, loading: decryptLoading, error: decryptError, retry } = useDecryptedBlobUrl({
+  const canPreview = isDocumentPreviewable(mimeType);
+
+  // Decrypt and create blob URL — only for types that can actually be previewed
+  const {
+    blobUrl,
+    loading: decryptLoading,
+    error: decryptError,
+    retry,
+  } = useDecryptedBlobUrl({
     downloadUrl: fileData?.downloadUrl,
     cipherFileKey: fileData?.cipherFileKey,
     masterKey: getMasterKey(),
     mimeType: mimeType,
-    enabled: isOpen && !!fileData,
+    enabled: isOpen && !!fileData && canPreview,
   });
 
   // Keyboard navigation
@@ -143,7 +155,7 @@ const FilePreviewModal = ({
 
   if (!isOpen) return null;
 
-  const loading = loadingMetadata || decryptLoading;
+  const loading = canPreview && (loadingMetadata || decryptLoading);
   const error = metadataError || decryptError;
 
   return (
@@ -153,7 +165,10 @@ const FilePreviewModal = ({
         <div className="flex items-center justify-between px-4 py-3">
           {/* File info */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <FontAwesomeIcon icon={faFile} className="w-5 h-5 text-gray-400 flex-shrink-0" />
+            <FontAwesomeIcon
+              icon={faFile}
+              className="w-5 h-5 text-gray-400 flex-shrink-0"
+            />
             <div className="flex-1 min-w-0">
               <h2 className="text-white font-medium truncate">{fileName}</h2>
               {files.length > 1 && (
@@ -201,14 +216,37 @@ const FilePreviewModal = ({
 
       {/* Content */}
       <div className="absolute inset-0 pt-16">
-        {loading ? (
+        {!canPreview ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-300 px-6 text-center">
+            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
+              <FontAwesomeIcon
+                icon={faFileZipper}
+                className="w-12 h-12 text-white/70"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-white">
+                No preview available
+              </p>
+              <p className="text-sm text-gray-400">
+                This file type cannot be previewed in the browser.
+              </p>
+              {mimeType && mimeType !== 'application/octet-stream' && (
+                <p className="text-xs text-gray-500">{mimeType}</p>
+              )}
+            </div>
+          </div>
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-300">
             <div className="animate-spin rounded-full h-12 w-12 border-2 border-white border-t-transparent mb-4"></div>
             <p>Loading document...</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-300">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="w-16 h-16 text-red-400 mb-4" />
+            <FontAwesomeIcon
+              icon={faTriangleExclamation}
+              className="w-16 h-16 text-red-400 mb-4"
+            />
             <p className="text-red-400 mb-2">Failed to load document</p>
             <p className="text-sm text-gray-400 mb-4">{error}</p>
             <button

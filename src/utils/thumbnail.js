@@ -2,7 +2,9 @@ import { encode } from 'blurhash';
 import { isSafari } from './browser.js';
 import { THUMBNAIL_SIZES, THUMBNAIL_QUALITY } from '../constants/thumbnails.js';
 
-const IS_MOBILE_THUMBNAIL = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const IS_MOBILE_THUMBNAIL = /Android|iPhone|iPad|iPod|Mobile/i.test(
+  navigator.userAgent,
+);
 const WORKER_TASK_TIMEOUT_MS = IS_MOBILE_THUMBNAIL ? 10000 : 30000;
 
 /**
@@ -12,7 +14,7 @@ export const FILE_TYPES = {
   IMAGE: 'image',
   VIDEO: 'video',
   DOCUMENT: 'document',
-  OTHER: 'other'
+  OTHER: 'other',
 };
 
 /**
@@ -36,29 +38,29 @@ export const FILE_HANDLERS = {
     hasThumbnails: true,
     usesPreviewModal: false,
     iconClass: 'fa-image',
-    iconColor: 'text-green-500'
+    iconColor: 'text-green-500',
   },
   [FILE_TYPES.VIDEO]: {
     generateThumbnails: generateVideoThumbnails,
     hasThumbnails: true,
     usesPreviewModal: false,
     iconClass: 'fa-video',
-    iconColor: 'text-purple-500'
+    iconColor: 'text-purple-500',
   },
   [FILE_TYPES.DOCUMENT]: {
     generateThumbnails: null,
     hasThumbnails: false,
     usesPreviewModal: true,
     iconClass: getDocumentIconClass,
-    iconColor: getDocumentIconColor
+    iconColor: getDocumentIconColor,
   },
   [FILE_TYPES.OTHER]: {
     generateThumbnails: null,
     hasThumbnails: false,
     usesPreviewModal: false,
     iconClass: 'fa-file',
-    iconColor: 'text-gray-400'
-  }
+    iconColor: 'text-gray-400',
+  },
 };
 
 /**
@@ -96,7 +98,7 @@ export const OFFSCREEN_CANVAS_SUPPORTED = (() => {
   // Disable worker-based generation on Safari to avoid failures
   if (isSafari) {
     console.log(
-      '[Thumbnail] Safari detected - using main thread for compatibility'
+      '[Thumbnail] Safari detected - using main thread for compatibility',
     );
     return false;
   }
@@ -122,7 +124,7 @@ function initThumbnailWorker() {
   try {
     thumbnailWorker = new Worker(
       new URL('../workers/thumbnail.worker.js', import.meta.url),
-      { type: 'module' }
+      { type: 'module' },
     );
 
     thumbnailWorker.onmessage = (e) => {
@@ -154,8 +156,13 @@ function initThumbnailWorker() {
     };
 
     thumbnailWorker.onerror = (err) => {
-      console.error('[ThumbnailWorker] Worker crashed — rejecting all pending tasks:', err);
-      pendingTasks.forEach((task) => task.reject(new Error('Thumbnail worker crashed')));
+      console.error(
+        '[ThumbnailWorker] Worker crashed — rejecting all pending tasks:',
+        err,
+      );
+      pendingTasks.forEach((task) =>
+        task.reject(new Error('Thumbnail worker crashed')),
+      );
       pendingTasks.clear();
       thumbnailWorker = null;
       thumbnailWorkerReady = false;
@@ -189,8 +196,14 @@ async function generateThumbnailsInWorker(file) {
     }, WORKER_TASK_TIMEOUT_MS);
 
     pendingTasks.set(id, {
-      resolve: (result) => { clearTimeout(timeoutId); resolve(result); },
-      reject: (err) => { clearTimeout(timeoutId); reject(err); },
+      resolve: (result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      },
+      reject: (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      },
     });
 
     thumbnailWorker.postMessage({
@@ -262,7 +275,7 @@ export async function generateThumbnails(file, options = {}) {
     } catch (err) {
       console.warn(
         '[Thumbnail] Worker failed, falling back to main thread:',
-        err.message
+        err.message,
       );
       // Fall through to main thread generation
     }
@@ -288,19 +301,19 @@ async function generateThumbnailsMainThread(file) {
       image,
       THUMBNAIL_SIZES.small.width,
       THUMBNAIL_SIZES.small.height,
-      THUMBNAIL_QUALITY.small
+      THUMBNAIL_QUALITY.small,
     ),
     createThumbnailContain(
       image,
       THUMBNAIL_SIZES.medium.width,
       THUMBNAIL_SIZES.medium.height,
-      THUMBNAIL_QUALITY.medium
+      THUMBNAIL_QUALITY.medium,
     ),
     createThumbnailContain(
       image,
       THUMBNAIL_SIZES.large.width,
       THUMBNAIL_SIZES.large.height,
-      THUMBNAIL_QUALITY.large
+      THUMBNAIL_QUALITY.large,
     ),
   ]);
 
@@ -394,19 +407,19 @@ export async function generateVideoThumbnails(file, seekTime = 0.5) {
             frameImage,
             THUMBNAIL_SIZES.small.width,
             THUMBNAIL_SIZES.small.height,
-            THUMBNAIL_QUALITY.small
+            THUMBNAIL_QUALITY.small,
           ),
           createThumbnailContain(
             frameImage,
             THUMBNAIL_SIZES.medium.width,
             THUMBNAIL_SIZES.medium.height,
-            THUMBNAIL_QUALITY.medium
+            THUMBNAIL_QUALITY.medium,
           ),
           createThumbnailContain(
             frameImage,
             THUMBNAIL_SIZES.large.width,
             THUMBNAIL_SIZES.large.height,
-            THUMBNAIL_QUALITY.large
+            THUMBNAIL_QUALITY.large,
           ),
         ]);
 
@@ -455,8 +468,8 @@ async function loadImageFromBlob(blob) {
       URL.revokeObjectURL(url);
       reject(
         new Error(
-          `Failed to load image from blob: ${error?.message || 'Unknown error'}`
-        )
+          `Failed to load image from blob: ${error?.message || 'Unknown error'}`,
+        ),
       );
     };
     img.src = url;
@@ -493,7 +506,12 @@ async function loadImage(file) {
  * @param quality - JPEG quality (0.0 to 1.0)
  * @returns Blob of the thumbnail as JPEG
  */
-async function createThumbnailCover(image, maxWidth, maxHeight, quality = 0.85) {
+async function createThumbnailCover(
+  image,
+  maxWidth,
+  maxHeight,
+  quality = 0.85,
+) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
@@ -522,12 +540,17 @@ async function createThumbnailCover(image, maxWidth, maxHeight, quality = 0.85) 
         }
       },
       'image/jpeg',
-      quality
+      quality,
     );
   });
 }
 
-async function createThumbnailContain(image, maxWidth, maxHeight, quality = 0.85) {
+async function createThumbnailContain(
+  image,
+  maxWidth,
+  maxHeight,
+  quality = 0.85,
+) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
@@ -554,7 +577,7 @@ async function createThumbnailContain(image, maxWidth, maxHeight, quality = 0.85
         }
       },
       'image/jpeg',
-      quality
+      quality,
     );
   });
 }
