@@ -28,7 +28,7 @@ import {
   faXmark,
   faCloudUpload,
 } from '@fortawesome/free-solid-svg-icons';
-import { encryptFilename } from '../../utils/crypto';
+import { encryptFilename, decryptFilename } from '../../utils/crypto';
 import {
   GalleryHeader,
   FavoritesSection,
@@ -122,6 +122,10 @@ const Dashboard = () => {
   // Folder selection + actions
   const [renamingFolder, setRenamingFolder] = useState(null); // folder object being renamed
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
+
+  // File rename state
+  const [renamingFile, setRenamingFile] = useState(null); // file object being renamed
+  const [isRenamingFile, setIsRenamingFile] = useState(false);
 
   // Photo viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -828,6 +832,68 @@ const Dashboard = () => {
     }
   };
 
+  // Rename a single file
+  const handleFileRenameSubmit = async (newName) => {
+    if (!renamingFile || !hasMasterKey()) return;
+    setIsRenamingFile(true);
+    try {
+      const masterKey = getMasterKey();
+      const fileNameEncrypted = await encryptFilename(
+        newName.trim(),
+        masterKey,
+      );
+      await fileService.updateFile(renamingFile.fileId, { fileNameEncrypted });
+      await fetchLibrary(currentFolderId, 1, false);
+      selection.clearSelection();
+    } finally {
+      setIsRenamingFile(false);
+      setRenamingFile(null);
+    }
+  };
+
+  // Dispatcher: opens the correct rename modal for whatever single item is selected
+  const handleRenameSelected = async () => {
+    if (!hasMasterKey()) return;
+    const masterKey = getMasterKey();
+
+    if (selectedFiles.length === 1 && selectedFolders.length === 0) {
+      const id = selectedFiles[0];
+      const fileObj =
+        (activeTab === 'folders' ? folderFiles : allFiles).find(
+          (f) => f.fileId === id,
+        ) || folderFiles.find((f) => f.fileId === id);
+      if (!fileObj) return;
+      let decryptedName = fileObj.decryptedName;
+      if (!decryptedName && fileObj.fileNameEncrypted) {
+        try {
+          decryptedName = await decryptFilename(
+            fileObj.fileNameEncrypted,
+            masterKey,
+          );
+        } catch {
+          /* fall through */
+        }
+      }
+      setRenamingFile({ ...fileObj, decryptedName: decryptedName || '' });
+    } else if (selectedFolders.length === 1 && selectedFiles.length === 0) {
+      const id = selectedFolders[0];
+      const folderObj = childFolders.find((f) => f.folderId === id);
+      if (!folderObj) return;
+      let decryptedName = folderObj.decryptedName;
+      if (!decryptedName && folderObj.nameEncrypted) {
+        try {
+          decryptedName = await decryptFilename(
+            folderObj.nameEncrypted,
+            masterKey,
+          );
+        } catch {
+          /* fall through */
+        }
+      }
+      setRenamingFolder({ ...folderObj, decryptedName: decryptedName || '' });
+    }
+  };
+
   // If vault state is loading, show loading spinner
   if (vaultStateLoading) {
     return (
@@ -897,6 +963,7 @@ const Dashboard = () => {
               }
               onDelete={handleDeleteSelected}
               onAddToAlbum={handleMoveToFolderBulk}
+              onRename={handleRenameSelected}
               onShare={handleShare}
               onClearSelection={selection.clearSelection}
             />
@@ -1241,6 +1308,21 @@ const Dashboard = () => {
         onRename={handleFolderRenameSubmit}
         isRenaming={isRenamingFolder}
         label="Folder"
+      />
+
+      {/* Rename File Modal */}
+      <RenameModal
+        isOpen={!!renamingFile}
+        onClose={() => {
+          setRenamingFile(null);
+          setIsRenamingFile(false);
+        }}
+        currentName={
+          renamingFile?.decryptedName || renamingFile?.fileNameEncrypted || ''
+        }
+        onRename={handleFileRenameSubmit}
+        isRenaming={isRenamingFile}
+        label="File"
       />
 
       {/* Recovery Key Download Prompt */}

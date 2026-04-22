@@ -4,20 +4,26 @@ import BlurhashCanvas from './BlurhashCanvas';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
 import { fileService } from '../../services';
-import { getFileType, FILE_HANDLERS, isVideo, formatVideoDuration } from '../../utils/thumbnail';
+import {
+  getFileType,
+  FILE_HANDLERS,
+  isVideo,
+  formatVideoDuration,
+} from '../../utils/thumbnail';
 import { decryptFilename } from '../../utils/crypto';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faVideo, 
-  faFile, 
+import {
+  faVideo,
+  faFile,
   faFilePdf,
   faFileWord,
   faFileLines,
-  faPlay, 
-  faSpinner, 
-  faSquareCheck, 
+  faFileCircleQuestion,
+  faPlay,
+  faSpinner,
+  faSquareCheck,
   faHeart,
-  faCheck 
+  faCheck,
 } from '@fortawesome/free-solid-svg-icons';
 
 const PhotoCard = ({
@@ -58,6 +64,7 @@ const PhotoCard = ({
   const handler = FILE_HANDLERS[fileType];
   const isVideoFile = isVideo(fileMime);
   const isDocFile = fileType === 'document';
+  const isOtherFile = fileType === 'other';
 
   // Decrypt filename for document files
   useEffect(() => {
@@ -67,7 +74,10 @@ const PhotoCard = ({
         return;
       }
       try {
-        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        const name = await decryptFilename(
+          file.fileNameEncrypted,
+          getMasterKey(),
+        );
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[PhotoCard] Failed to decrypt filename:', err);
@@ -87,7 +97,12 @@ const PhotoCard = ({
     const fileId = file.fileId;
 
     // Early return for files that don't support thumbnails
-    if (!handler.hasThumbnails || !file.thumbSmallUrl || !hasMasterKey() || !file.cipherFileKey) {
+    if (
+      !handler.hasThumbnails ||
+      !file.thumbSmallUrl ||
+      !hasMasterKey() ||
+      !file.cipherFileKey
+    ) {
       return;
     }
 
@@ -121,7 +136,7 @@ const PhotoCard = ({
               priority: isVisibleRef.current ? 'high' : 'normal',
               signal: abortController.signal,
               masterKeyBytes,
-            }
+            },
           );
 
           if (!abortController.signal.aborted) {
@@ -189,9 +204,9 @@ const PhotoCard = ({
           file.fileId,
           file.thumbMediumUrl,
           masterKey,
-          file.cipherFileKey
+          file.cipherFileKey,
         );
-        
+
         mediumPreloadedRef.current = true;
         console.log(`[PhotoCard] Preloaded medium for ${file.fileId} on hover`);
       } catch (err) {
@@ -218,27 +233,31 @@ const PhotoCard = ({
         <FontAwesomeIcon icon={faVideo} className="w-10 h-10 text-gray-400" />
       );
     }
-    
+
     // Use specific icons for document types
     if (fileType === 'document') {
-      const iconClass = typeof handler.iconClass === 'function' 
-        ? handler.iconClass(mimeType)
-        : handler.iconClass;
-      const iconColor = typeof handler.iconColor === 'function'
-        ? handler.iconColor(mimeType)
-        : handler.iconColor;
-      
+      const iconClass =
+        typeof handler.iconClass === 'function'
+          ? handler.iconClass(mimeType)
+          : handler.iconClass;
+      const iconColor =
+        typeof handler.iconColor === 'function'
+          ? handler.iconColor(mimeType)
+          : handler.iconColor;
+
       let icon;
       if (mimeType?.includes('pdf')) icon = faFilePdf;
-      else if (mimeType?.includes('word') || mimeType?.includes('docx')) icon = faFileWord;
-      else if (mimeType?.includes('text') || mimeType?.includes('txt')) icon = faFileLines;
+      else if (mimeType?.includes('word') || mimeType?.includes('docx'))
+        icon = faFileWord;
+      else if (mimeType?.includes('text') || mimeType?.includes('txt'))
+        icon = faFileLines;
       else icon = faFile;
-      
+
       return (
         <FontAwesomeIcon icon={icon} className={`w-10 h-10 ${iconColor}`} />
       );
     }
-    
+
     return (
       <FontAwesomeIcon icon={faFile} className="w-10 h-10 text-gray-400" />
     );
@@ -253,11 +272,7 @@ const PhotoCard = ({
         relative aspect-square overflow-hidden cursor-pointer
         transition-all duration-200 group bg-gray-200 dark:bg-zinc-700
         rounded-lg
-        ${
-          isSelected
-            ? 'border-2 border-blue-500'
-            : ''
-        }
+        ${isSelected ? 'border-2 border-blue-500' : ''}
       `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -274,38 +289,58 @@ const PhotoCard = ({
         e.dataTransfer.effectAllowed = 'move';
         const fileId = file.fileId || file.id;
         // If this file is part of a selection, drag all selected; otherwise just this one
-        const ids = selectedFileIds.includes(fileId) && selectedFileIds.length > 1
-          ? selectedFileIds
-          : [fileId];
+        const ids =
+          selectedFileIds.includes(fileId) && selectedFileIds.length > 1
+            ? selectedFileIds
+            : [fileId];
         setDragState({ type: 'files', fileIds: ids });
       }}
     >
-      {/* Document file card - show specific Font Awesome icon */}
-      {isDocFile ? (
+      {/* Unknown/unsupported file type card */}
+      {isOtherFile ? (
         <div className="w-full h-full bg-gray-100 dark:bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
-          <FontAwesomeIcon 
+          <FontAwesomeIcon
+            icon={faFileCircleQuestion}
+            className="text-4xl text-gray-400 dark:text-gray-500"
+          />
+          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+            {fileMime
+              ? fileMime.split('/').pop().toUpperCase().slice(0, 8)
+              : 'FILE'}
+          </span>
+        </div>
+      ) : isDocFile ? (
+        <div className="w-full h-full bg-gray-100 dark:bg-zinc-800 flex flex-col items-center justify-center gap-2 p-2">
+          <FontAwesomeIcon
             icon={
-              fileMime.includes('pdf') ? faFilePdf :
-              fileMime.includes('word') || fileMime.includes('docx') ? faFileWord :
-              fileMime.includes('text') || fileMime.includes('txt') ? faFileLines :
-              faFile
-            } 
+              fileMime.includes('pdf')
+                ? faFilePdf
+                : fileMime.includes('word') || fileMime.includes('docx')
+                  ? faFileWord
+                  : fileMime.includes('text') || fileMime.includes('txt')
+                    ? faFileLines
+                    : faFile
+            }
             className={`text-4xl ${
-              fileMime.includes('pdf') ? 'text-red-500 dark:text-red-400' :
-              fileMime.includes('word') || fileMime.includes('docx') ? 'text-blue-500 dark:text-blue-400' :
-              fileMime.includes('text') || fileMime.includes('txt') ? 'text-gray-500 dark:text-gray-300' :
-              'text-gray-500 dark:text-gray-400'
-            }`} 
+              fileMime.includes('pdf')
+                ? 'text-red-500 dark:text-red-400'
+                : fileMime.includes('word') || fileMime.includes('docx')
+                  ? 'text-blue-500 dark:text-blue-400'
+                  : fileMime.includes('text') || fileMime.includes('txt')
+                    ? 'text-gray-500 dark:text-gray-300'
+                    : 'text-gray-500 dark:text-gray-400'
+            }`}
           />
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            {fileType === 'document' ? (
-              fileMime.includes('pdf') ? 'PDF' :
-              fileMime.includes('word') || fileMime.includes('docx') ? 'DOCX' :
-              fileMime.includes('text') || fileMime.includes('txt') ? 'TXT' :
-              'DOC'
-            ) : (
-              fileType.toUpperCase()
-            )}
+            {fileType === 'document'
+              ? fileMime.includes('pdf')
+                ? 'PDF'
+                : fileMime.includes('word') || fileMime.includes('docx')
+                  ? 'DOCX'
+                  : fileMime.includes('text') || fileMime.includes('txt')
+                    ? 'TXT'
+                    : 'DOC'
+              : fileType.toUpperCase()}
           </span>
           {decryptedFileName && (
             <span className="text-xs text-gray-600 dark:text-gray-300 text-center line-clamp-2 w-full px-1 break-words">
@@ -355,7 +390,10 @@ const PhotoCard = ({
               {/* Play icon in center */}
               <div className="absolute inset-0 flex items-center justify-center z-15 pointer-events-none">
                 <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
-                  <FontAwesomeIcon icon={faPlay} className="w-6 h-6 text-white ml-0.5" />
+                  <FontAwesomeIcon
+                    icon={faPlay}
+                    className="w-6 h-6 text-white ml-0.5"
+                  />
                 </div>
               </div>
 
@@ -371,7 +409,10 @@ const PhotoCard = ({
           {/* Loading indicator */}
           {decrypting && !imageLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 dark:bg-zinc-700/80 z-20">
-              <FontAwesomeIcon icon={faSpinner} className="animate-spin w-6 h-6 text-gray-400" />
+              <FontAwesomeIcon
+                icon={faSpinner}
+                className="animate-spin w-6 h-6 text-gray-400"
+              />
             </div>
           )}
         </>
@@ -383,9 +424,7 @@ const PhotoCard = ({
           absolute top-2 start-2 w-3 h-3 z-30
           flex items-center justify-center
           transition-all duration-200
-          ${
-            isSelected || isHovered ? 'opacity-100' : 'opacity-0'
-          }
+          ${isSelected || isHovered ? 'opacity-100' : 'opacity-0'}
         `}
         onClick={(e) => {
           e.stopPropagation();
@@ -395,15 +434,17 @@ const PhotoCard = ({
           width: 19,
           height: 19,
           borderRadius: '50%',
-          border: isSelected ? '1.5px solid #378ADD' : '1.5px solid rgba(0,0,0,0.22)',
+          border: isSelected
+            ? '1.5px solid #378ADD'
+            : '1.5px solid rgba(0,0,0,0.22)',
           background: isSelected ? '#378ADD' : 'white',
         }}
       >
         {isSelected && (
-          <FontAwesomeIcon 
-            icon={faCheck} 
-            className="text-white" 
-            style={{ width: 10, height: 10 }} 
+          <FontAwesomeIcon
+            icon={faCheck}
+            className="text-white"
+            style={{ width: 10, height: 10 }}
           />
         )}
       </div>
@@ -419,8 +460,8 @@ const PhotoCard = ({
             isFavorite
               ? 'bg-red-500 text-white'
               : isHovered
-              ? 'bg-black/50 text-white/70 hover:text-white'
-              : 'opacity-0'
+                ? 'bg-black/50 text-white/70 hover:text-white'
+                : 'opacity-0'
           }
           ${favoriteLoading ? 'pointer-events-none' : ''}
         `}

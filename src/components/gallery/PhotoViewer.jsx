@@ -4,15 +4,21 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { fileService, cryptoService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
-import { isVideo, isSvg, formatVideoDuration } from '../../utils/thumbnail';
+import {
+  isVideo,
+  isSvg,
+  getFileType,
+  FILE_TYPES,
+  formatVideoDuration,
+} from '../../utils/thumbnail';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
 import RenameModal from './RenameModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faTriangleExclamation, 
-  faMagnifyingGlassPlus, 
-  faMagnifyingGlassMinus, 
-  faInfoCircle, 
+import {
+  faTriangleExclamation,
+  faMagnifyingGlassPlus,
+  faMagnifyingGlassMinus,
+  faInfoCircle,
   faEllipsisVertical,
   faDownload,
   faShare,
@@ -22,7 +28,8 @@ import {
   faChevronLeft,
   faChevronRight,
   faPlus,
-  faVideo
+  faVideo,
+  faFileCircleQuestion,
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -58,6 +65,7 @@ const PhotoViewer = ({
   // Determine if this is a video file
   const isVideoFile = isVideo(file?.mimeType);
   const isSvgFile = isSvg(file?.mimeType);
+  const isOtherFile = getFileType(file?.mimeType) === FILE_TYPES.OTHER;
 
   // Image/Video URLs - progressive quality
   const [displayUrl, setDisplayUrl] = useState(null);
@@ -65,7 +73,9 @@ const PhotoViewer = ({
   // qualityRef mirrors quality state so loadImage can read current quality
   // without being in its useCallback dep array (avoids infinite re-render loop)
   const qualityRef = useRef('none');
-  useEffect(() => { qualityRef.current = quality; }, [quality]);
+  useEffect(() => {
+    qualityRef.current = quality;
+  }, [quality]);
 
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -93,7 +103,10 @@ const PhotoViewer = ({
         return;
       }
       try {
-        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        const name = await decryptFilename(
+          file.fileNameEncrypted,
+          getMasterKey(),
+        );
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[PhotoViewer] Failed to decrypt filename:', err);
@@ -115,14 +128,14 @@ const PhotoViewer = ({
     try {
       const masterKey = getMasterKey();
       const encryptedName = await encryptFilename(newName, masterKey);
-      
+
       await fileService.updateFile(file.fileId, {
         fileNameEncrypted: encryptedName,
       });
 
       // Update local state
       setDecryptedFileName(newName);
-      
+
       // Update file object if there's a callback
       if (file) {
         file.fileNameEncrypted = encryptedName;
@@ -148,36 +161,42 @@ const PhotoViewer = ({
     }
   }, []);
 
-  const startAutoHideTimer = useCallback((timerRef, setVisible) => {
-    clearAutoHideTimer(timerRef);
-    timerRef.current = setTimeout(() => {
-      setVisible(false);
-    }, AUTO_HIDE_DELAY);
-  }, [clearAutoHideTimer]);
+  const startAutoHideTimer = useCallback(
+    (timerRef, setVisible) => {
+      clearAutoHideTimer(timerRef);
+      timerRef.current = setTimeout(() => {
+        setVisible(false);
+      }, AUTO_HIDE_DELAY);
+    },
+    [clearAutoHideTimer],
+  );
 
-  const handleMouseMove = useCallback((e) => {
-    const { clientY, currentTarget } = e;
-    const { height } = currentTarget.getBoundingClientRect();
-    const bottomZone = height * 0.75;
+  const handleMouseMove = useCallback(
+    (e) => {
+      const { clientY, currentTarget } = e;
+      const { height } = currentTarget.getBoundingClientRect();
+      const bottomZone = height * 0.75;
 
-    setShowCloseButton(true);
-    clearAutoHideTimer(closeButtonTimerRef);
-    startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
+      setShowCloseButton(true);
+      clearAutoHideTimer(closeButtonTimerRef);
+      startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
 
-    setShowLeftArrow(hasPrev);
-    clearAutoHideTimer(leftArrowTimerRef);
-    startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
+      setShowLeftArrow(hasPrev);
+      clearAutoHideTimer(leftArrowTimerRef);
+      startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
 
-    setShowRightArrow(hasNext);
-    clearAutoHideTimer(rightArrowTimerRef);
-    startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
+      setShowRightArrow(hasNext);
+      clearAutoHideTimer(rightArrowTimerRef);
+      startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
 
-    if (clientY > bottomZone) {
-      setShowBottomOverlay(true);
-      clearAutoHideTimer(bottomOverlayTimerRef);
-      startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
-    }
-  }, [hasPrev, hasNext, clearAutoHideTimer, startAutoHideTimer]);
+      if (clientY > bottomZone) {
+        setShowBottomOverlay(true);
+        clearAutoHideTimer(bottomOverlayTimerRef);
+        startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
+      }
+    },
+    [hasPrev, hasNext, clearAutoHideTimer, startAutoHideTimer],
+  );
 
   const handleMouseLeave = useCallback(() => {
     startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
@@ -230,22 +249,28 @@ const PhotoViewer = ({
 
         if (isSvgMime) {
           // SVG: skip JPEG thumbnail paths entirely — fetch and decrypt the original
-          console.log(`[PhotoViewer] SVG loadImage: mimeType=${fileData.mimeType} downloadUrl=${!!fileData.downloadUrl} cipherFileKey=${!!fileData.cipherFileKey}`);
+          console.log(
+            `[PhotoViewer] SVG loadImage: mimeType=${fileData.mimeType} downloadUrl=${!!fileData.downloadUrl} cipherFileKey=${!!fileData.cipherFileKey}`,
+          );
           if (fileData.downloadUrl) {
             const svgUrl = await thumbnailCache.getFullImage(
               fileId,
               fileData.downloadUrl,
               masterKey,
               fileData.cipherFileKey,
-              'image/svg+xml'
+              'image/svg+xml',
             );
-            console.log(`[PhotoViewer] SVG getFullImage result: ${svgUrl ? 'OK blob URL' : 'NULL'}`);
+            console.log(
+              `[PhotoViewer] SVG getFullImage result: ${svgUrl ? 'OK blob URL' : 'NULL'}`,
+            );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(svgUrl);
               setQuality('large');
             }
           } else {
-            console.warn(`[PhotoViewer] SVG has no downloadUrl — cannot preview: ${fileId}`);
+            console.warn(
+              `[PhotoViewer] SVG has no downloadUrl — cannot preview: ${fileId}`,
+            );
           }
         } else {
           // Step 2: Load medium thumbnail (if not already at medium/large quality)
@@ -260,9 +285,12 @@ const PhotoViewer = ({
                 fileId,
                 fileData.thumbMediumUrl,
                 masterKey,
-                fileData.cipherFileKey
+                fileData.cipherFileKey,
               );
-              if (currentFileIdRef.current === fileId && qualityRef.current !== 'large') {
+              if (
+                currentFileIdRef.current === fileId &&
+                qualityRef.current !== 'large'
+              ) {
                 setDisplayUrl(mediumUrl);
                 setQuality('medium');
 
@@ -282,7 +310,7 @@ const PhotoViewer = ({
               fileId,
               fileData.thumbLargeUrl,
               masterKey,
-              fileData.cipherFileKey
+              fileData.cipherFileKey,
             );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(largeUrl);
@@ -298,7 +326,7 @@ const PhotoViewer = ({
               fileData.downloadUrl,
               masterKey,
               fileData.cipherFileKey,
-              fileData.mimeType
+              fileData.mimeType,
             );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(fullUrl);
@@ -313,7 +341,7 @@ const PhotoViewer = ({
         }
       }
     },
-    [getMasterKey]
+    [getMasterKey],
   );
 
   // Track preloaded file IDs to avoid re-requesting (persists across renders)
@@ -356,7 +384,7 @@ const PhotoViewer = ({
     const newLeft = Math.max(0, currentIndex - FULL_PRELOAD_SIZE);
     const newRight = Math.min(
       files.length - 1,
-      currentIndex + FULL_PRELOAD_SIZE
+      currentIndex + FULL_PRELOAD_SIZE,
     );
 
     // Collect file IDs that need full preload
@@ -375,13 +403,12 @@ const PhotoViewer = ({
     if (adjacentFileIds.length === 0) return;
 
     console.log(
-      `[PhotoViewer] Preloading ${adjacentFileIds.length} FULL images around index ${currentIndex}`
+      `[PhotoViewer] Preloading ${adjacentFileIds.length} FULL images around index ${currentIndex}`,
     );
 
     try {
-      const { files: filesMetadata } = await fileService.getFilesBatch(
-        adjacentFileIds
-      );
+      const { files: filesMetadata } =
+        await fileService.getFilesBatch(adjacentFileIds);
       if (filesMetadata?.length > 0) {
         await thumbnailCache.batchPreloadFull(
           filesMetadata.map((f) => ({
@@ -390,7 +417,7 @@ const PhotoViewer = ({
             mimeType: f.mimeType,
             cipherFileKey: f.cipherFileKey,
           })),
-          masterKey
+          masterKey,
         );
       }
     } catch (error) {
@@ -415,7 +442,7 @@ const PhotoViewer = ({
     // If we're comfortably within the preloaded zone, skip
     if (!isFirstLoad && !approachingLeftBoundary && !approachingRightBoundary) {
       console.log(
-        `[PhotoViewer] Within zone [${zone.left}-${zone.right}], index=${currentIndex}, skipping preload`
+        `[PhotoViewer] Within zone [${zone.left}-${zone.right}], index=${currentIndex}, skipping preload`,
       );
       return;
     }
@@ -434,13 +461,13 @@ const PhotoViewer = ({
       // Extend zone to the left
       newLeft = Math.max(0, zone.left - PRELOAD_ZONE_SIZE);
       console.log(
-        `[PhotoViewer] Extending zone LEFT: [${newLeft}-${zone.right}]`
+        `[PhotoViewer] Extending zone LEFT: [${newLeft}-${zone.right}]`,
       );
     } else if (approachingRightBoundary && zone.right < files.length - 1) {
       // Extend zone to the right
       newRight = Math.min(files.length - 1, zone.right + PRELOAD_ZONE_SIZE);
       console.log(
-        `[PhotoViewer] Extending zone RIGHT: [${zone.left}-${newRight}]`
+        `[PhotoViewer] Extending zone RIGHT: [${zone.left}-${newRight}]`,
       );
     } else {
       // Already at edge of gallery, nothing to preload
@@ -473,7 +500,7 @@ const PhotoViewer = ({
 
     if (adjacentFileIds.length === 0) {
       console.log(
-        '[PhotoViewer] All files in new zone already preloaded/cached'
+        '[PhotoViewer] All files in new zone already preloaded/cached',
       );
       return;
     }
@@ -482,14 +509,13 @@ const PhotoViewer = ({
     adjacentFileIds.forEach((id) => preloadedFileIdsRef.current.add(id));
 
     console.log(
-      `[PhotoViewer] Batch preloading ${adjacentFileIds.length} adjacent files`
+      `[PhotoViewer] Batch preloading ${adjacentFileIds.length} adjacent files`,
     );
 
     try {
       // Batch fetch metadata for all adjacent files in ONE request
-      const { files: filesMetadata } = await fileService.getFilesBatch(
-        adjacentFileIds
-      );
+      const { files: filesMetadata } =
+        await fileService.getFilesBatch(adjacentFileIds);
 
       if (filesMetadata && filesMetadata.length > 0) {
         // Batch preload all images with controlled concurrency
@@ -501,14 +527,13 @@ const PhotoViewer = ({
             mimeType: f.mimeType,
             cipherFileKey: f.cipherFileKey,
           })),
-          masterKey
+          masterKey,
         );
       }
     } catch (error) {
       console.warn('[PhotoViewer] Batch preload failed:', error);
     }
   }, [getMasterKey, files, currentIndex]);
-
 
   // Main effect: Handle file changes INSTANTLY
   useEffect(() => {
@@ -521,17 +546,19 @@ const PhotoViewer = ({
     currentFileIdRef.current = fileId;
     setError(null);
 
-    if (isVideoFile) {
-      // Videos: no preview, show unsupported state immediately
+    if (isVideoFile || isOtherFile) {
+      // Videos / unknown types: no preview
       setDisplayUrl(null);
       setQuality('none');
-      console.log(`[PhotoViewer] Video file — preview not supported: ${fileId}`);
+      console.log(`[PhotoViewer] No-preview file type: ${fileId}`);
     } else if (isSvgFile) {
       // SVGs: skip L1 thumbnail cache (no JPEG thumbnails exist for SVG).
       // Do NOT call setQuality/setDisplayUrl before loadImage — that would change
       // `quality` state, which is a dep of `loadImage` useCallback, triggering
       // an infinite re-render loop.
-      console.log(`[PhotoViewer] SVG file detected — loading via downloadUrl path: ${fileId}`);
+      console.log(
+        `[PhotoViewer] SVG file detected — loading via downloadUrl path: ${fileId}`,
+      );
       loadImage(file, fileId);
     } else {
       // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
@@ -579,18 +606,27 @@ const PhotoViewer = ({
         console.error('Download failed: no master key');
         return;
       }
-      const fileData = fileDataRef.current || await fileService.getFile(file.fileId);
-      
+      // Always fetch fresh data if the cached ref belongs to a different file
+      // (e.g. navigated from an image to a ZIP — loadImage is never called for
+      //  OTHER-type files, so fileDataRef.current still holds the previous
+      //  image's cipherFileKey + downloadUrl, which would produce a corrupt download)
+      const fileData =
+        fileDataRef.current?.fileId === file.fileId
+          ? fileDataRef.current
+          : await fileService.getFile(file.fileId);
+
       // Download original encrypted file directly from B2 (no cache)
-      const encryptedData = await fileService.downloadFileContent(fileData.downloadUrl);
-      
+      const encryptedData = await fileService.downloadFileContent(
+        fileData.downloadUrl,
+      );
+
       // Decrypt to get the original file
       const decryptedData = await cryptoService.decryptFile(
         encryptedData,
         fileData.cipherFileKey,
-        masterKey
+        masterKey,
       );
-      
+
       // Create blob from original decrypted data
       const blob = new Blob([decryptedData], { type: fileData.mimeType });
       blobUrl = URL.createObjectURL(blob);
@@ -620,7 +656,7 @@ const PhotoViewer = ({
         fileData.downloadUrl,
         masterKey,
         fileData.cipherFileKey,
-        fileData.mimeType
+        fileData.mimeType,
       );
       const response = await fetch(videoUrl);
       const blob = await response.blob();
@@ -710,15 +746,7 @@ const PhotoViewer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isOpen,
-    onClose,
-    onNext,
-    onPrev,
-    hasNext,
-    hasPrev,
-    startAutoHideTimer,
-  ]);
+  }, [isOpen, onClose, onNext, onPrev, hasNext, hasPrev, startAutoHideTimer]);
 
   if (!isOpen) return null;
 
@@ -733,22 +761,35 @@ const PhotoViewer = ({
       onMouseLeave={handleMouseLeave}
     >
       {/* Full-screen media container */}
-      <div className="w-full h-full flex items-center justify-center" style={{ direction: 'ltr' }}>
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{ direction: 'ltr' }}
+      >
         {/* Error State */}
         {error && !displayUrl ? (
           <div className="flex flex-col items-center justify-center text-gray-400">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="w-16 h-16 mb-4" />
+            <FontAwesomeIcon
+              icon={faTriangleExclamation}
+              className="w-16 h-16 mb-4"
+            />
             <p>{error}</p>
           </div>
         ) : isVideoFile ? (
           /* Video — preview not supported */
           <div className="flex flex-col items-center justify-center gap-5 text-gray-300 px-6 text-center">
             <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
-              <FontAwesomeIcon icon={faVideo} className="w-12 h-12 text-white/70" />
+              <FontAwesomeIcon
+                icon={faVideo}
+                className="w-12 h-12 text-white/70"
+              />
             </div>
             <div className="space-y-2">
-              <p className="text-lg font-medium text-white">Video preview is not supported</p>
-              <p className="text-sm text-gray-400">You can download this video to watch it.</p>
+              <p className="text-lg font-medium text-white">
+                Video preview is not supported
+              </p>
+              <p className="text-sm text-gray-400">
+                You can download this video to watch it.
+              </p>
             </div>
             <button
               onClick={handleDownloadVideo}
@@ -757,6 +798,39 @@ const PhotoViewer = ({
             >
               <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
               {downloading ? 'Downloading...' : 'Download Video'}
+            </button>
+          </div>
+        ) : isOtherFile ? (
+          /* Unknown file type — no preview */
+          <div className="flex flex-col items-center justify-center gap-5 text-gray-300 px-6 text-center">
+            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
+              <FontAwesomeIcon
+                icon={faFileCircleQuestion}
+                className="w-12 h-12 text-white/70"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-white">
+                No preview available
+              </p>
+              {decryptedFileName && (
+                <p className="text-sm text-white/80 font-medium">
+                  {decryptedFileName}
+                </p>
+              )}
+              {file?.mimeType && (
+                <p className="text-xs text-gray-500 uppercase tracking-wider">
+                  {file.mimeType}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+              {downloading ? 'Downloading...' : 'Download File'}
             </button>
           </div>
         ) : (
@@ -781,32 +855,35 @@ const PhotoViewer = ({
                 }}
                 wheel={{
                   step: 0.01,
-                  smoothStep: 0.02
+                  smoothStep: 0.02,
                 }}
                 doubleClick={{ mode: 'reset' }}
-                panning={{ 
+                panning={{
                   disabled: false,
                 }}
-                velocityAnimation={{ 
+                velocityAnimation={{
                   sensitivity: 0.002,
-                  animationTime: 200
+                  animationTime: 200,
                 }}
               >
                 {({ zoomIn, zoomOut, resetTransform, state }) => (
                   <>
                     {/* Zoom Controls - unified design with percentage and hover activation */}
-                    <div
-                      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group"
-                    >
-                      <div className={`flex items-center gap-1 px-2 py-1.5 bg-black/60 rounded-full transition-opacity duration-300 ${
-                        showCloseButton ? 'opacity-100' : 'opacity-0'
-                      } group-hover:opacity-100`}>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group">
+                      <div
+                        className={`flex items-center gap-1 px-2 py-1.5 bg-black/60 rounded-full transition-opacity duration-300 ${
+                          showCloseButton ? 'opacity-100' : 'opacity-0'
+                        } group-hover:opacity-100`}
+                      >
                         <button
                           onClick={() => zoomIn()}
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom In"
                         >
-                          <FontAwesomeIcon icon={faMagnifyingGlassPlus} className="w-4 h-4" />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlassPlus}
+                            className="w-4 h-4"
+                          />
                         </button>
                         <span className="px-2 text-white text-sm font-medium min-w-[3rem] text-center">
                           {Math.round(zoomScale * 100)}%
@@ -816,7 +893,10 @@ const PhotoViewer = ({
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom Out"
                         >
-                          <FontAwesomeIcon icon={faMagnifyingGlassMinus} className="w-4 h-4" />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlassMinus}
+                            className="w-4 h-4"
+                          />
                         </button>
                       </div>
                     </div>
@@ -828,7 +908,7 @@ const PhotoViewer = ({
                       wrapperStyle={{
                         width: '100%',
                         height: '100%',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
                       }}
                     >
                       <img
@@ -843,7 +923,7 @@ const PhotoViewer = ({
                           margin: '0 auto',
                           display: 'block',
                           // Smooth transition when upgrading medium->large (same dimensions)
-                          transition: 'opacity 0.2s ease-in-out'
+                          transition: 'opacity 0.2s ease-in-out',
                         }}
                         draggable={false}
                         // Performance: decode image async for instant rendering
@@ -859,7 +939,6 @@ const PhotoViewer = ({
           </>
         )}
       </div>
-
 
       {/* Close button - top right overlay */}
       <div
@@ -901,7 +980,10 @@ const PhotoViewer = ({
                 }}
                 className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
               >
-                <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-3 text-gray-400" />
+                <FontAwesomeIcon
+                  icon={faPlus}
+                  className="w-5 h-5 mr-3 text-gray-400"
+                />
                 {t('addToAlbum', 'Add to Album')}
               </button>
 
@@ -917,9 +999,14 @@ const PhotoViewer = ({
                 {downloading ? (
                   <div className="animate-spin h-5 w-5 mr-3 border-2 border-white border-t-transparent rounded-full"></div>
                 ) : (
-                  <FontAwesomeIcon icon={faDownload} className="w-5 h-5 mr-3 text-gray-400" />
+                  <FontAwesomeIcon
+                    icon={faDownload}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
                 )}
-                {downloading ? t('downloading', 'Downloading...') : t('download', 'Download')}
+                {downloading
+                  ? t('downloading', 'Downloading...')
+                  : t('download', 'Download')}
               </button>
 
               {/* Share */}
@@ -930,7 +1017,10 @@ const PhotoViewer = ({
                 }}
                 className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
               >
-                <FontAwesomeIcon icon={faShare} className="w-5 h-5 mr-3 text-gray-400" />
+                <FontAwesomeIcon
+                  icon={faShare}
+                  className="w-5 h-5 mr-3 text-gray-400"
+                />
                 {t('share', 'Share')}
               </button>
 
@@ -942,7 +1032,10 @@ const PhotoViewer = ({
                 onClick={handleDeleteFile}
                 className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
               >
-                <FontAwesomeIcon icon={faTrash} className="w-5 h-5 mr-3 text-red-400" />
+                <FontAwesomeIcon
+                  icon={faTrash}
+                  className="w-5 h-5 mr-3 text-red-400"
+                />
                 {t('delete', 'Delete')}
               </button>
             </div>
@@ -964,8 +1057,7 @@ const PhotoViewer = ({
           className={`absolute top-4 left-4 z-20 px-3 py-1.5 bg-black/60 rounded-full text-xs text-gray-300 transition-all duration-300 ${
             showCloseButton ? 'opacity-100' : 'opacity-0'
           }`}
-        >
-          </div>
+        ></div>
       )}
 
       {/* Left navigation arrow - overlaid on image */}
@@ -1001,7 +1093,9 @@ const PhotoViewer = ({
         <div className="flex flex-col h-full">
           {/* Panel Header */}
           <div className="flex items-center justify-between p-4 border-b border-zinc-700">
-            <h3 className="text-white font-medium">{t('fileInfo', 'File Info')}</h3>
+            <h3 className="text-white font-medium">
+              {t('fileInfo', 'File Info')}
+            </h3>
             <button
               onClick={() => setShowInfoPanel(false)}
               className="p-2 hover:bg-zinc-800 rounded-full text-gray-400 hover:text-white transition-colors"
@@ -1045,8 +1139,8 @@ const PhotoViewer = ({
             {file?.width && file?.height && (
               <div className="space-y-1">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                {t('resolution', 'Resolution')}
-              </div>
+                  {t('resolution', 'Resolution')}
+                </div>
                 <div className="text-white text-sm">
                   {getMegapixels(file.width, file.height)} • {file.width} ×{' '}
                   {file.height}
