@@ -79,6 +79,8 @@ const PhotoViewer = ({
 
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null); // null | 0–100
+  const [downloadStage, setDownloadStage] = useState('idle'); // 'idle' | 'downloading' | 'decrypting'
   const [zoomScale, setZoomScale] = useState(1);
 
   const containerRef = useRef(null);
@@ -387,12 +389,16 @@ const PhotoViewer = ({
       currentIndex + FULL_PRELOAD_SIZE,
     );
 
-    // Collect file IDs that need full preload
+    // Collect file IDs that need full preload — skip videos and unsupported types
     const adjacentFileIds = [];
     for (let i = newLeft; i <= newRight; i++) {
-      const file = files[i];
-      const fileId = file?.fileId || file?.id;
-      if (fileId && !thumbnailCache.getFullImageFromMemory(fileId)) {
+      const f = files[i];
+      const fileId = f?.fileId || f?.id;
+      if (!fileId) continue;
+      // Never eagerly fetch videos or OTHER-type files: they have no preview
+      // and can be very large. They are only fetched on explicit download click.
+      if (isVideo(f?.mimeType) || getFileType(f?.mimeType) === FILE_TYPES.OTHER) continue;
+      if (!thumbnailCache.getFullImageFromMemory(fileId)) {
         adjacentFileIds.push(fileId);
       }
     }
@@ -480,11 +486,13 @@ const PhotoViewer = ({
       // Skip indices that were already in the previous zone
       if (!isFirstLoad && i >= zone.left && i <= zone.right) continue;
 
-      const file = files[i];
-      const fileId = file?.fileId || file?.id;
+      const f = files[i];
+      const fileId = f?.fileId || f?.id;
+      if (!fileId) continue;
+      // Skip videos and unsupported types — they have no thumbnails to preload
+      if (isVideo(f?.mimeType) || getFileType(f?.mimeType) === FILE_TYPES.OTHER) continue;
       // Skip if already preloaded OR has medium thumbnail in memory
       if (
-        fileId &&
         !preloadedFileIdsRef.current.has(fileId) &&
         !thumbnailCache.getMediumFromMemory(fileId)
       ) {
@@ -595,42 +603,51 @@ const PhotoViewer = ({
     preloadMediumAdjacent,
   ]);
 
-  const handleDownload = async () => {
+  /**
+   * Unified download handler for all file types (image, video, zip, etc.).
+   *
+   * Download flow:
+   *  1. Always fetches a fresh signed URL from the backend (avoids expired cached URLs).
+   *  2. Streams the encrypted bytes from B2 while reporting byte-level progress (0–100 %).
+   *  3. Decrypts the full buffer with AES-GCM (authenticated encryption requires the
+   *     complete ciphertext, so streaming decryption is not possible).
+   *  4. Triggers a browser download via a short-lived Blob URL.
+   *
+   * No network traffic is generated until the user explicitly clicks the button.
+   */
+  const handleDownload = useCallback(async () => {
+    if (downloading) return;
     setDownloading(true);
+    setDownloadProgress(0);
+    setDownloadStage('downloading');
     try {
-      let blobUrl;
-
-      // Download the original file directly, bypassing all cache
       const masterKey = getMasterKey();
       if (!masterKey) {
         console.error('Download failed: no master key');
         return;
       }
-      // Always fetch fresh data if the cached ref belongs to a different file
-      // (e.g. navigated from an image to a ZIP — loadImage is never called for
-      //  OTHER-type files, so fileDataRef.current still holds the previous
-      //  image's cipherFileKey + downloadUrl, which would produce a corrupt download)
-      const fileData =
-        fileDataRef.current?.fileId === file.fileId
-          ? fileDataRef.current
-          : await fileService.getFile(file.fileId);
 
-      // Download original encrypted file directly from B2 (no cache)
-      const encryptedData = await fileService.downloadFileContent(
+      // Always fetch a fresh signed URL to avoid expired URLs from the cache.
+      const fileData = await fileService.getFile(file.fileId, { skipCache: true });
+
+      // Stream encrypted bytes from B2 with progress tracking.
+      const encryptedData = await fileService.downloadFileContentWithProgress(
         fileData.downloadUrl,
+        setDownloadProgress,
       );
 
-      // Decrypt to get the original file
+      // AES-GCM decryption (full buffer required).
+      setDownloadStage('decrypting');
       const decryptedData = await cryptoService.decryptFile(
         encryptedData,
         fileData.cipherFileKey,
         masterKey,
       );
 
-      // Create blob from original decrypted data
-      const blob = new Blob([decryptedData], { type: fileData.mimeType });
-      blobUrl = URL.createObjectURL(blob);
-
+      // Trigger browser save dialog via a short-lived Blob URL.
+      const mimeType = fileData.mimeType || 'application/octet-stream';
+      const blob = new Blob([decryptedData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = decryptedFileName || 'file';
@@ -642,37 +659,10 @@ const PhotoViewer = ({
       console.error('Download failed:', err);
     } finally {
       setDownloading(false);
+      setDownloadProgress(null);
+      setDownloadStage('idle');
     }
-  };
-
-  const handleDownloadVideo = async () => {
-    setDownloading(true);
-    try {
-      const masterKey = getMasterKey();
-      if (!masterKey) return;
-      const fileData = await fileService.getFile(file.fileId);
-      const videoUrl = await thumbnailCache.getFullImage(
-        file.fileId,
-        fileData.downloadUrl,
-        masterKey,
-        fileData.cipherFileKey,
-        fileData.mimeType,
-      );
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = decryptedFileName || 'video';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    } catch (err) {
-      console.error('Video download failed:', err);
-    } finally {
-      setDownloading(false);
-    }
-  };
+  }, [downloading, getMasterKey, file, decryptedFileName]);
 
   const formatFileSize = (bytes) => {
     if (!bytes) return 'Unknown';
@@ -792,12 +782,30 @@ const PhotoViewer = ({
               </p>
             </div>
             <button
-              onClick={handleDownloadVideo}
+              onClick={handleDownload}
               disabled={downloading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              className="flex flex-col items-center gap-1.5 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 min-w-[160px]"
             >
-              <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
-              {downloading ? 'Downloading...' : 'Download Video'}
+              <span className="flex items-center gap-2">
+                {downloading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+                )}
+                {downloadStage === 'decrypting'
+                  ? 'Decrypting…'
+                  : downloadStage === 'downloading'
+                    ? `Downloading ${downloadProgress ?? 0}%`
+                    : 'Download Video'}
+              </span>
+              {downloadStage === 'downloading' && (
+                <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-200"
+                    style={{ width: `${downloadProgress ?? 0}%` }}
+                  />
+                </div>
+              )}
             </button>
           </div>
         ) : isOtherFile ? (
@@ -827,10 +835,28 @@ const PhotoViewer = ({
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              className="flex flex-col items-center gap-1.5 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 min-w-[160px]"
             >
-              <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
-              {downloading ? 'Downloading...' : 'Download File'}
+              <span className="flex items-center gap-2">
+                {downloading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+                )}
+                {downloadStage === 'decrypting'
+                  ? 'Decrypting…'
+                  : downloadStage === 'downloading'
+                    ? `Downloading ${downloadProgress ?? 0}%`
+                    : 'Download File'}
+              </span>
+              {downloadStage === 'downloading' && (
+                <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-200"
+                    style={{ width: `${downloadProgress ?? 0}%` }}
+                  />
+                </div>
+              )}
             </button>
           </div>
         ) : (

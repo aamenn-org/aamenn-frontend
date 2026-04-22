@@ -278,7 +278,53 @@ export const fileService = {
    */
   async downloadFileContent(downloadUrl) {
     const response = await fetch(downloadUrl);
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     return response.arrayBuffer();
+  },
+
+  /**
+   * Stream-download encrypted file content from B2 with byte-level progress.
+   * Uses the ReadableStream API and the exposed Content-Length header.
+   * Falls back to a plain arrayBuffer() fetch when Content-Length is absent.
+   *
+   * @param {string} downloadUrl - Signed B2 download URL
+   * @param {(percent: number) => void} onProgress - Called with 0–100 integers
+   * @returns {Promise<ArrayBuffer>}
+   */
+  async downloadFileContentWithProgress(downloadUrl, onProgress) {
+    const response = await fetch(downloadUrl);
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+    if (!total || !response.body) {
+      const buffer = await response.arrayBuffer();
+      onProgress(100);
+      return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress(Math.min(99, Math.round((loaded / total) * 100)));
+    }
+
+    onProgress(100);
+
+    const result = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return result.buffer;
   },
 
   // ==================== Chunked Upload API ====================
