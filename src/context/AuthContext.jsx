@@ -347,9 +347,23 @@ export const AuthProvider = ({ children }) => {
       return { success: false, error: 'Login failed' };
     } catch (error) {
       console.error('AuthContext: Login error:', error);
-      const message =
-        error.response?.data?.message || 'Login failed. Please try again.';
-      return { success: false, error: message };
+      // ApiError from interceptor has .message and .details directly
+      // Legacy axios errors have .response?.data?.message
+      let message;
+      if (error.isApiError) {
+        // Use the main message first, only fall back to details if message is generic
+        if (error.message && error.message !== 'An error occurred') {
+          message = error.message;
+        } else if (error.details) {
+          message = Object.values(error.details).join('. ');
+        } else {
+          message = 'Login failed. Please try again.';
+        }
+      } else {
+        const respMsg = error.response?.data?.message;
+        message = Array.isArray(respMsg) ? respMsg.join('. ') : respMsg;
+      }
+      return { success: false, error: message || 'Login failed. Please try again.' };
     }
   };
 
@@ -358,9 +372,11 @@ export const AuthProvider = ({ children }) => {
    * @param {string} email - User email
    * @param {string} password - User password
    * @param {string} displayName - User display name
+   * @param {string} emailOtp - 6-digit OTP for email verification
+   * @param {string} [deviceFingerprint] - Device fingerprint hash
    * @param {boolean} rememberMe - Whether to persist login (defaults to true for new users)
    */
-  const register = async (email, password, displayName, rememberMe = true) => {
+  const register = async (email, password, displayName, emailOtp, deviceFingerprint, rememberMe = true) => {
     try {
       const { encryptedMasterKey, kekSalt, kdfParams, masterKey } =
         await generateRegistrationKeys(password);
@@ -371,10 +387,12 @@ export const AuthProvider = ({ children }) => {
       const response = await authService.register({
         email,
         password,
+        emailOtp,
         encryptedMasterKey,
         kekSalt,
         kdfParams,
         displayName,
+        deviceFingerprint: deviceFingerprint || undefined,
         recoveryEncryptedMasterKey: recoveryData.recoveryEncryptedMasterKey,
         recoverySalt: recoveryData.recoverySalt,
         recoveryKdfParams: recoveryData.recoveryKdfParams,
@@ -404,10 +422,23 @@ export const AuthProvider = ({ children }) => {
       return { success: false, error: 'Registration failed' };
     } catch (error) {
       console.error('AuthContext: Register error:', error);
-      const message =
-        error.response?.data?.message ||
-        'Registration failed. Please try again.';
-      return { success: false, error: message };
+      // ApiError from interceptor has .message and .details directly
+      // Legacy axios errors have .response?.data?.message
+      let message;
+      if (error.isApiError) {
+        // Use the main message first, only fall back to details if message is generic
+        if (error.message && error.message !== 'An error occurred') {
+          message = error.message;
+        } else if (error.details) {
+          message = Object.values(error.details).join('. ');
+        } else {
+          message = 'Registration failed. Please try again.';
+        }
+      } else {
+        const respMsg = error.response?.data?.message;
+        message = Array.isArray(respMsg) ? respMsg.join('. ') : respMsg;
+      }
+      return { success: false, error: message || 'Registration failed. Please try again.' };
     }
   };
 

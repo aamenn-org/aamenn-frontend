@@ -3,7 +3,7 @@ const AuthBackground = ({ currentImage }) => {
     <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden">
       {/* Logo */}
       <div className="absolute top-8 left-8 z-10">
-        <div className="text-white text-2xl font-bold">AMMENN</div>
+        <div className="text-white text-2xl font-bold">AAMENN</div>
       </div>
 
       {/* Background Image */}

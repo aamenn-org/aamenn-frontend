@@ -49,6 +49,16 @@ export const adminService = {
     return response.data;
   },
 
+  async getFlaggedSignups(params = {}) {
+    const response = await api.get('/admin/flagged-signups', { params });
+    return response.data;
+  },
+
+  async resolveFlaggedSignup(userId) {
+    const response = await api.patch(`/admin/flagged-signups/${userId}/resolve`);
+    return response.data;
+  },
+
   async getFeedbacks(params = {}) {
     const response = await api.get('/feedback', { params });
     return response.data;

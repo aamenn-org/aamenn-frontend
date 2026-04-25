@@ -41,7 +41,17 @@ const LoginPage = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
+      let message;
+      if (err.isApiError) {
+        message = err.details
+          ? Object.values(err.details).join('. ')
+          : err.message;
+      } else {
+        const respMsg = err.response?.data?.message;
+        message = Array.isArray(respMsg) ? respMsg.join('. ') : respMsg;
+      }
       setError(
+        message ||
         t(
           'errors.unexpectedError',
           'An unexpected error occurred. Please try again.',
