@@ -13,7 +13,7 @@ import { useUpload } from '../../hooks/useUpload';
 import { getFileType, FILE_HANDLERS } from '../../utils/thumbnail';
 import { FilePreviewModal } from '../../components';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
-import { ShareModal, OnboardingModal } from '../../components/modals';
+import { ShareModal, OnboardingModal, FeedbackModal } from '../../components/modals';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faImage,
@@ -147,6 +147,9 @@ const Dashboard = () => {
 
   // Onboarding modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Feedback modal state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Loading states
   const [loadingMore, setLoadingMore] = useState(false);
@@ -931,6 +934,7 @@ const Dashboard = () => {
           onSectionChange={handleTabChange}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          onFeedback={() => setShowFeedbackModal(true)}
         />
 
         {/* Main content area */}
@@ -1352,6 +1356,12 @@ const Dashboard = () => {
       <OnboardingModal
         isOpen={showOnboarding}
         onComplete={() => setShowOnboarding(false)}
+      />
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
       />
 
       {/* Upload Progress Panel */}

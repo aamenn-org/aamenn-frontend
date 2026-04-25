@@ -13,6 +13,7 @@ import {
   faBars,
   faXmark,
   faBell,
+  faCommentDots,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
@@ -20,6 +21,7 @@ import Overview from './Overview';
 import UsersPage from './Users';
 import Storage from './Storage';
 import SystemHealth from './SystemHealth';
+import Feedback from './Feedback';
 
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
@@ -58,6 +60,7 @@ const AdminDashboard = () => {
     { path: '/dashboard/users', label: 'Users', icon: faUsers },
     { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
     { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
+    { path: '/dashboard/feedback', label: 'Feedback', icon: faCommentDots },
   ];
 
   const criticalAlerts = alerts.filter(
@@ -180,6 +183,7 @@ const AdminDashboard = () => {
             <Route path="users" element={<UsersPage />} />
             <Route path="storage" element={<Storage />} />
             <Route path="health" element={<SystemHealth />} />
+            <Route path="feedback" element={<Feedback />} />
           </Routes>
         </div>
       </main>

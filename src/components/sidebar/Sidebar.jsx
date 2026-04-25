@@ -18,6 +18,7 @@ import {
   faSun,
   faMoon,
   faXmark,
+  faCommentDots,
 } from '@fortawesome/free-solid-svg-icons';
 
 // ─── Storage bar inside sidebar ───────────────────────────────────────────────
@@ -67,6 +68,7 @@ const Sidebar = ({
   isOpen,
   onClose,
   storageRefreshTrigger = 0,
+  onFeedback,
 }) => {
   const navigate = useNavigate();
   const { user, logout, avatarUrl } = useAuth();
@@ -207,6 +209,17 @@ const Sidebar = ({
                 <FontAwesomeIcon icon={isDarkMode ? faSun : faMoon} className="w-4 h-4" />
               </span>
               <span className="truncate">{isDarkMode ? t('lightMode', 'Light Mode') : t('darkMode', 'Dark Mode')}</span>
+            </button>
+
+            {/* Feedback */}
+            <button
+              onClick={() => { onFeedback?.(); onClose?.(); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-white/60 hover:bg-white/10 hover:text-white/90"
+            >
+              <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                <FontAwesomeIcon icon={faCommentDots} className="w-4 h-4" />
+              </span>
+              <span className="truncate">Feedback</span>
             </button>
 
             {/* Settings — with avatar */}
