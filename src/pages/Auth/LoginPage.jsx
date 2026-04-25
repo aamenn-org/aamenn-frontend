@@ -6,14 +6,8 @@ import GoogleSignInButton from '../../components/GoogleSignInButton';
 import { useImageRotation } from '../../hooks';
 import AuthBackground from '../../components/auth/AuthBackground';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faEye, 
-  faEyeSlash 
-} from '@fortawesome/free-solid-svg-icons';
-import { 
-  faGoogle, 
-  faApple 
-} from '@fortawesome/free-brands-svg-icons';
+import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
 
 const LoginPage = () => {
   const { login } = useAuth();
@@ -25,7 +19,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  
+
   const { currentImage } = useImageRotation(4000);
 
   const handleSubmit = async (e) => {
@@ -47,7 +41,12 @@ const LoginPage = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError(t('errors.unexpectedError', 'An unexpected error occurred. Please try again.'));
+      setError(
+        t(
+          'errors.unexpectedError',
+          'An unexpected error occurred. Please try again.',
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -62,11 +61,13 @@ const LoginPage = () => {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <img src="/logo3.png" alt="AMMENN Logo" className="w-20 h-20" />
+            <img src="/logo3.png" alt="Aamenn Logo" className="w-20 h-20" />
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-3">{t('auth.welcomeBack', 'Welcome back')}</h1>
+            <h1 className="text-4xl font-bold text-white mb-3">
+              {t('auth.welcomeBack', 'Welcome back')}
+            </h1>
             <p className="text-gray-400">
               {t('auth.dontHaveAccount', "Don't have an account?")}{' '}
               <Link
@@ -112,7 +113,11 @@ const LoginPage = () => {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
               >
-                {showPassword ? <FontAwesomeIcon icon={faEyeSlash} className="w-5 h-5" /> : <FontAwesomeIcon icon={faEye} className="w-5 h-5" />}
+                {showPassword ? (
+                  <FontAwesomeIcon icon={faEyeSlash} className="w-5 h-5" />
+                ) : (
+                  <FontAwesomeIcon icon={faEye} className="w-5 h-5" />
+                )}
               </button>
             </div>
 
@@ -144,7 +149,9 @@ const LoginPage = () => {
               disabled={loading}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? t('auth.loggingIn', 'Logging in...') : t('auth.login', 'Log in')}
+              {loading
+                ? t('auth.loggingIn', 'Logging in...')
+                : t('auth.login', 'Log in')}
             </button>
           </form>
 
@@ -154,7 +161,9 @@ const LoginPage = () => {
               <div className="w-full border-t border-gray-800"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-black text-gray-400">{t('auth.orContinueWith', 'Or continue with')}</span>
+              <span className="px-2 bg-black text-gray-400">
+                {t('auth.orContinueWith', 'Or continue with')}
+              </span>
             </div>
           </div>
 

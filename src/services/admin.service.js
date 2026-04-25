@@ -48,6 +48,16 @@ export const adminService = {
     const response = await api.get('/admin/alerts');
     return response.data;
   },
+
+  async getFeedbacks(params = {}) {
+    const response = await api.get('/feedback', { params });
+    return response.data;
+  },
+
+  async getFeedbackStats() {
+    const response = await api.get('/feedback/stats');
+    return response.data;
+  },
 };
 
 export default adminService;
