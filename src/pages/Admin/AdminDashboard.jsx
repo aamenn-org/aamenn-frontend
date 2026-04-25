@@ -14,6 +14,7 @@ import {
   faXmark,
   faBell,
   faCommentDots,
+  faFlag,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
@@ -22,6 +23,7 @@ import UsersPage from './Users';
 import Storage from './Storage';
 import SystemHealth from './SystemHealth';
 import Feedback from './Feedback';
+import FlaggedSignups from './FlaggedSignups';
 
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
@@ -60,6 +62,7 @@ const AdminDashboard = () => {
     { path: '/dashboard/users', label: 'Users', icon: faUsers },
     { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
     { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
+    { path: '/dashboard/flagged-signups', label: 'Flagged Signups', icon: faFlag },
     { path: '/dashboard/feedback', label: 'Feedback', icon: faCommentDots },
   ];
 
@@ -183,6 +186,7 @@ const AdminDashboard = () => {
             <Route path="users" element={<UsersPage />} />
             <Route path="storage" element={<Storage />} />
             <Route path="health" element={<SystemHealth />} />
+            <Route path="flagged-signups" element={<FlaggedSignups />} />
             <Route path="feedback" element={<Feedback />} />
           </Routes>
         </div>
