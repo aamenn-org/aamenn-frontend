@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -85,7 +86,7 @@ const PublicRoute = ({ children }) => {
 };
 
 const ExternalRedirect = ({ to }) => {
-  React.useEffect(() => { window.location.replace(to); }, [to]);
+  useEffect(() => { window.location.replace(to); }, [to]);
   return null;
 };
 
