@@ -11,9 +11,10 @@ export const authService = {
   /**
    * Send a 6-digit OTP to verify email before registration
    * @param {string} email - User email
+   * @param {string} [turnstileToken] - Cloudflare Turnstile CAPTCHA token
    */
-  async sendSignupOtp(email) {
-    const response = await api.post('/auth/register/send-otp', { email });
+  async sendSignupOtp(email, turnstileToken) {
+    const response = await api.post('/auth/register/send-otp', { email, turnstileToken });
     return response.data;
   },
 

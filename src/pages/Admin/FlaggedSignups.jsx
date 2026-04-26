@@ -10,6 +10,7 @@ import {
   faNetworkWired,
   faUserSlash,
   faCheck,
+  faShieldAlt,
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -193,6 +194,9 @@ const FlaggedSignups = () => {
                     Signup IP
                   </th>
                   <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-300 font-medium">
+                    IP Type
+                  </th>
+                  <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-300 font-medium">
                     Fingerprint
                   </th>
                   <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-300 font-medium">
@@ -237,6 +241,28 @@ const FlaggedSignups = () => {
                           {user.signupIp || '—'}
                         </span>
                       </div>
+                    </td>
+
+                    {/* IP Type */}
+                    <td className="px-4 py-3">
+                      {user.signupIpType ? (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            user.signupIpType === 'residential'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              : user.signupIpType === 'vpn'
+                                ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                : user.signupIpType === 'datacenter'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          <FontAwesomeIcon icon={faShieldAlt} className="text-[10px]" />
+                          {user.signupIpType}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Fingerprint */}

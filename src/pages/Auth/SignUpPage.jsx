@@ -9,6 +9,7 @@ import GoogleSignInButton from '../../components/GoogleSignInButton';
 import RecoveryKeyDownloadPrompt from '../../components/RecoveryKeyDownloadPrompt';
 import { useImageRotation } from '../../hooks';
 import AuthBackground from '../../components/auth/AuthBackground';
+import { Turnstile } from '@marsidev/react-turnstile';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import {
@@ -53,6 +54,9 @@ const SignUpPage = () => {
 
   const allChecksPassed = Object.values(passwordChecks).every(Boolean);
   const [recoveryPhrase, setRecoveryPhrase] = useState(null);
+
+  // Turnstile CAPTCHA
+  const [turnstileToken, setTurnstileToken] = useState(null);
 
   // OTP step state
   const [step, setStep] = useState('form'); // 'form' | 'otp'
@@ -106,7 +110,7 @@ const SignUpPage = () => {
     setLoading(true);
 
     try {
-      await authService.sendSignupOtp(email.trim());
+      await authService.sendSignupOtp(email.trim(), turnstileToken);
       setStep('otp');
       setResendCountdown(OTP_RESEND_DELAY);
     } catch (err) {
@@ -128,7 +132,7 @@ const SignUpPage = () => {
     setLoading(true);
 
     try {
-      await authService.sendSignupOtp(email.trim());
+      await authService.sendSignupOtp(email.trim(), turnstileToken);
       setResendCountdown(OTP_RESEND_DELAY);
     } catch (err) {
       setError(
@@ -384,10 +388,23 @@ const SignUpPage = () => {
                     </label>
                   </div>
 
+                  {/* Turnstile CAPTCHA */}
+                  {import.meta.env.VITE_TURNSTILE_SITE_KEY && (
+                    <div className="flex justify-center">
+                      <Turnstile
+                        siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                        onSuccess={(token) => setTurnstileToken(token)}
+                        onExpire={() => setTurnstileToken(null)}
+                        onError={() => setTurnstileToken(null)}
+                        options={{ theme: 'dark', size: 'flexible' }}
+                      />
+                    </div>
+                  )}
+
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || (import.meta.env.VITE_TURNSTILE_SITE_KEY && !turnstileToken)}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading
