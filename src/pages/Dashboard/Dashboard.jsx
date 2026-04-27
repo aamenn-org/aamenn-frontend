@@ -107,6 +107,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadModalMode, setUploadModalMode] = useState('files'); // 'files' | 'folder'
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [pendingFileView, setPendingFileView] = useState(null);
 
@@ -355,7 +356,12 @@ const Dashboard = () => {
     resumeAll,
   } = useUpload({
     onFileUploaded: (uploadedFile) => {
-      setFolderFiles((prev) => [uploadedFile, ...prev]);
+      // Only add to the current folder view if the file belongs to the folder being viewed.
+      // uploadedFile.folderId is null for root; currentFolderId is null for root.
+      const fileFolderId = uploadedFile.folderId || null;
+      if (fileFolderId === currentFolderId) {
+        setFolderFiles((prev) => [uploadedFile, ...prev]);
+      }
       setAllFiles((prev) => [uploadedFile, ...prev]);
     },
   });
@@ -611,6 +617,81 @@ const Dashboard = () => {
     }
     setIsUploadPanelMinimized(false);
     await uploadFilesWithEncryption(files, { folderId: currentFolderId });
+  };
+
+  // Handle folder upload — creates folder tree first, then uploads files into correct folders.
+  const handleFolderUpload = async (files) => {
+    const masterKey = getMasterKey();
+    if (!masterKey) {
+      throw new Error(
+        'Session expired. Please unlock your vault before uploading.',
+      );
+    }
+
+    // 1. Extract unique folder paths from webkitRelativePath
+    //    e.g. "MyFolder/sub/image.jpg" → folder path "MyFolder/sub"
+    const folderPaths = new Set();
+    for (const file of files) {
+      const rel = file.webkitRelativePath || '';
+      if (!rel) continue;
+      const parts = rel.split('/');
+      // Build all ancestor paths: "MyFolder", "MyFolder/sub", etc.
+      for (let i = 1; i < parts.length; i++) {
+        folderPaths.add(parts.slice(0, i).join('/'));
+      }
+    }
+
+    // 2. Sort by depth (parents first) so we create parents before children
+    const sortedPaths = [...folderPaths].sort(
+      (a, b) => a.split('/').length - b.split('/').length,
+    );
+
+    // 3. Create folders top-down, building a map: relativePath → backendFolderId
+    const folderMap = new Map(); // "MyFolder/sub" → backend folder UUID
+    for (const folderPath of sortedPaths) {
+      const parts = folderPath.split('/');
+      const folderName = parts[parts.length - 1];
+      const parentPath = parts.slice(0, -1).join('/');
+      const parentFolderId = parentPath
+        ? folderMap.get(parentPath)
+        : currentFolderId || undefined;
+
+      try {
+        const nameEncrypted = await encryptFilename(folderName, masterKey);
+        const created = await folderService.createFolder({
+          nameEncrypted,
+          parentFolderId: parentFolderId || undefined,
+        });
+        folderMap.set(folderPath, created.folderId);
+      } catch (err) {
+        console.error(`Failed to create folder "${folderPath}":`, err);
+        // Continue with remaining folders — files for this folder will fall back to parent
+      }
+    }
+
+    // 4. Refresh library view immediately so newly created folders appear
+    if (activeTab === 'folders') {
+      await fetchLibrary(currentFolderId, 1, false);
+    }
+
+    // 5. Group files by their parent folder path
+    const groups = new Map(); // folderPath → File[]
+    for (const file of files) {
+      const rel = file.webkitRelativePath || '';
+      const parts = rel.split('/');
+      const parentPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+      if (!groups.has(parentPath)) groups.set(parentPath, []);
+      groups.get(parentPath).push(file);
+    }
+
+    // 6. Upload each group with the correct folderId
+    setIsUploadPanelMinimized(false);
+    for (const [folderPath, groupFiles] of groups) {
+      const folderId = folderPath
+        ? folderMap.get(folderPath) || currentFolderId
+        : currentFolderId;
+      await uploadFilesWithEncryption(groupFiles, { folderId });
+    }
   };
 
   // Handle share single file from PhotoViewer
@@ -947,7 +1028,8 @@ const Dashboard = () => {
             onSearch={setSearchQuery}
             searchValue={searchQuery}
             onNewFolder={() => setShowCreateFolderModal(true)}
-            onUpload={() => setShowUploadModal(true)}
+            onUpload={() => { setUploadModalMode('files'); setShowUploadModal(true); }}
+            onUploadFolder={() => { setUploadModalMode('folder'); setShowUploadModal(true); }}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             hasMasterKey={hasMasterKey()}
@@ -1159,7 +1241,8 @@ const Dashboard = () => {
       <UploadModal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
-        onUpload={handleUpload}
+        onUpload={uploadModalMode === 'folder' ? handleFolderUpload : handleUpload}
+        mode={uploadModalMode}
       />
 
       {/* Create Folder Modal */}

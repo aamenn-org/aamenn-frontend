@@ -32,8 +32,16 @@ const FilePreviewModal = ({
   hasNext,
   hasPrev,
   currentIndex,
+  // Share mode props (optional) — when provided, operates read-only with share key
+  shareKey = null,
+  encryptedFileKeys = null,
+  fileNames = null,
 }) => {
   const { getMasterKey } = useAuth();
+
+  // Share mode: read-only viewer for public share pages
+  const isShareMode = !!shareKey;
+  const getKey = () => isShareMode ? shareKey : getMasterKey();
   const [fileData, setFileData] = useState(null);
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [metadataError, setMetadataError] = useState(null);
@@ -45,15 +53,17 @@ const FilePreviewModal = ({
   // Decrypt filename
   useEffect(() => {
     const decrypt = async () => {
-      if (!file?.fileNameEncrypted || !getMasterKey()) {
+      const key = getKey();
+      // In share mode, use fileNames[fileId] (re-encrypted with share key)
+      const encName = isShareMode
+        ? (fileNames?.[fileId] || null)
+        : file?.fileNameEncrypted;
+      if (!encName || !key) {
         setDecryptedFileName(null);
         return;
       }
       try {
-        const name = await decryptFilename(
-          file.fileNameEncrypted,
-          getMasterKey(),
-        );
+        const name = await decryptFilename(encName, key);
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[FilePreviewModal] Failed to decrypt filename:', err);
@@ -61,7 +71,7 @@ const FilePreviewModal = ({
       }
     };
     decrypt();
-  }, [file?.fileNameEncrypted, getMasterKey]);
+  }, [fileId, file?.fileNameEncrypted, shareKey, getMasterKey, isShareMode, fileNames]);
 
   const fileName = decryptedFileName || 'Document';
 
@@ -69,9 +79,9 @@ const FilePreviewModal = ({
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
 
-  // Handle rename
+  // Handle rename (owner only)
   const handleRename = async (newName) => {
-    if (!fileId || !getMasterKey()) return;
+    if (isShareMode || !fileId || !getMasterKey()) return;
 
     setIsRenaming(true);
     try {
@@ -106,8 +116,14 @@ const FilePreviewModal = ({
       setMetadataError(null);
 
       try {
-        const data = await fileService.getFile(fileId);
-        setFileData(data);
+        // In share mode, file object already carries all data (downloadUrl, cipherFileKey, etc.)
+        if (isShareMode) {
+          const fileKey = encryptedFileKeys?.[fileId] || file?.cipherFileKey;
+          setFileData({ ...file, cipherFileKey: fileKey });
+        } else {
+          const data = await fileService.getFile(fileId);
+          setFileData(data);
+        }
       } catch (err) {
         console.error('[FilePreviewModal] Failed to load metadata:', err);
         setMetadataError(err.message || 'Failed to load file metadata');
@@ -117,7 +133,7 @@ const FilePreviewModal = ({
     };
 
     loadMetadata();
-  }, [isOpen, fileId]);
+  }, [isOpen, fileId, isShareMode, encryptedFileKeys, file]);
 
   const canPreview = isDocumentPreviewable(mimeType);
 
@@ -130,7 +146,7 @@ const FilePreviewModal = ({
   } = useDecryptedBlobUrl({
     downloadUrl: fileData?.downloadUrl,
     cipherFileKey: fileData?.cipherFileKey,
-    masterKey: getMasterKey(),
+    masterKey: getKey(),
     mimeType: mimeType,
     enabled: isOpen && !!fileData && canPreview,
   });
@@ -181,14 +197,16 @@ const FilePreviewModal = ({
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {/* Rename button */}
-            <button
-              onClick={() => setShowRenameModal(true)}
-              className="p-2 text-gray-300 hover:text-white hover:bg-zinc-800 rounded transition-colors"
-              title="Rename"
-            >
-              <FontAwesomeIcon icon={faPen} className="w-5 h-5" />
-            </button>
+            {/* Rename button — owner only */}
+            {!isShareMode && (
+              <button
+                onClick={() => setShowRenameModal(true)}
+                className="p-2 text-gray-300 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+                title="Rename"
+              >
+                <FontAwesomeIcon icon={faPen} className="w-5 h-5" />
+              </button>
+            )}
 
             {/* Download button */}
             {blobUrl && (
@@ -292,14 +310,16 @@ const FilePreviewModal = ({
         </>
       )}
 
-      {/* Rename Modal */}
-      <RenameModal
-        isOpen={showRenameModal}
-        onClose={() => setShowRenameModal(false)}
-        currentName={fileName}
-        onRename={handleRename}
-        isRenaming={isRenaming}
-      />
+      {/* Rename Modal — owner only */}
+      {!isShareMode && (
+        <RenameModal
+          isOpen={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          currentName={fileName}
+          onRename={handleRename}
+          isRenaming={isRenaming}
+        />
+      )}
     </div>
   );
 };
