@@ -58,9 +58,18 @@ const PhotoViewer = ({
   onAddToAlbum,
   onDelete,
   onShare,
+  // Share mode props (optional) — when provided, viewer operates read-only
+  // using the share key instead of the user's master key.
+  shareKey = null,
+  encryptedFileKeys = null,
+  fileNames = null,
 }) => {
   const { getMasterKey } = useAuth();
   const { t } = useTranslation(['photos', 'common']);
+
+  // Share mode: read-only viewer for public share pages
+  const isShareMode = !!shareKey;
+  const getKey = useCallback(() => isShareMode ? shareKey : getMasterKey(), [isShareMode, shareKey, getMasterKey]);
 
   // Determine if this is a video file
   const isVideoFile = isVideo(file?.mimeType);
@@ -100,15 +109,18 @@ const PhotoViewer = ({
   const [decryptedFileName, setDecryptedFileName] = useState(null);
   useEffect(() => {
     const decrypt = async () => {
-      if (!file?.fileNameEncrypted || !getMasterKey()) {
+      const key = getKey();
+      // In share mode, use fileNames[fileId] (re-encrypted with share key)
+      // instead of file.fileNameEncrypted (encrypted with master key)
+      const encName = isShareMode
+        ? (fileNames?.[file?.fileId] || null)
+        : file?.fileNameEncrypted;
+      if (!encName || !key) {
         setDecryptedFileName(null);
         return;
       }
       try {
-        const name = await decryptFilename(
-          file.fileNameEncrypted,
-          getMasterKey(),
-        );
+        const name = await decryptFilename(encName, key);
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[PhotoViewer] Failed to decrypt filename:', err);
@@ -116,7 +128,7 @@ const PhotoViewer = ({
       }
     };
     decrypt();
-  }, [file?.fileNameEncrypted, getMasterKey]);
+  }, [file?.fileId, file?.fileNameEncrypted, getKey, isShareMode, fileNames]);
 
   // Rename modal state
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -233,15 +245,23 @@ const PhotoViewer = ({
   // Load and upgrade image quality
   const loadImage = useCallback(
     async (targetFile, fileId) => {
-      const masterKey = getMasterKey();
-      if (!masterKey) {
+      const key = getKey();
+      if (!key) {
         setError('Unable to decrypt. Please log out and log in again.');
         return;
       }
 
       try {
-        // Step 1: Get file metadata (uses cache if offline)
-        const fileData = await fileService.getFile(fileId);
+        // Step 1: Get file metadata
+        // In share mode, the file object already carries all data (downloadUrl, thumbs, etc.)
+        // so we skip the authenticated fileService.getFile() call.
+        let fileData;
+        if (isShareMode) {
+          const fileKey = encryptedFileKeys?.[fileId] || targetFile.cipherFileKey;
+          fileData = { ...targetFile, cipherFileKey: fileKey };
+        } else {
+          fileData = await fileService.getFile(fileId);
+        }
         fileDataRef.current = fileData;
 
         // Check if we're still viewing the same file
@@ -258,7 +278,7 @@ const PhotoViewer = ({
             const svgUrl = await thumbnailCache.getFullImage(
               fileId,
               fileData.downloadUrl,
-              masterKey,
+              key,
               fileData.cipherFileKey,
               'image/svg+xml',
             );
@@ -286,7 +306,7 @@ const PhotoViewer = ({
               const mediumUrl = await thumbnailCache.getMediumThumbnail(
                 fileId,
                 fileData.thumbMediumUrl,
-                masterKey,
+                key,
                 fileData.cipherFileKey,
               );
               if (
@@ -311,7 +331,7 @@ const PhotoViewer = ({
             const largeUrl = await thumbnailCache.getLargeThumbnail(
               fileId,
               fileData.thumbLargeUrl,
-              masterKey,
+              key,
               fileData.cipherFileKey,
             );
             if (currentFileIdRef.current === fileId) {
@@ -326,7 +346,7 @@ const PhotoViewer = ({
             const fullUrl = await thumbnailCache.getFullImage(
               fileId,
               fileData.downloadUrl,
-              masterKey,
+              key,
               fileData.cipherFileKey,
               fileData.mimeType,
             );
@@ -343,7 +363,7 @@ const PhotoViewer = ({
         }
       }
     },
-    [getMasterKey],
+    [getKey, isShareMode, encryptedFileKeys],
   );
 
   // Track preloaded file IDs to avoid re-requesting (persists across renders)
@@ -371,8 +391,8 @@ const PhotoViewer = ({
 
   // Preload FULL images for ±2 adjacent (likely next clicks)
   const preloadFullAdjacent = useCallback(async () => {
-    const masterKey = getMasterKey();
-    if (!masterKey || !files.length || currentIndex === undefined) return;
+    const key = getKey();
+    if (!key || !files.length || currentIndex === undefined) return;
 
     const zone = fullPreloadZoneRef.current;
 
@@ -391,6 +411,7 @@ const PhotoViewer = ({
 
     // Collect file IDs that need full preload — skip videos and unsupported types
     const adjacentFileIds = [];
+    const adjacentFiles = [];
     for (let i = newLeft; i <= newRight; i++) {
       const f = files[i];
       const fileId = f?.fileId || f?.id;
@@ -400,6 +421,7 @@ const PhotoViewer = ({
       if (isVideo(f?.mimeType) || getFileType(f?.mimeType) === FILE_TYPES.OTHER) continue;
       if (!thumbnailCache.getFullImageFromMemory(fileId)) {
         adjacentFileIds.push(fileId);
+        adjacentFiles.push(f);
       }
     }
 
@@ -413,28 +435,36 @@ const PhotoViewer = ({
     );
 
     try {
-      const { files: filesMetadata } =
-        await fileService.getFilesBatch(adjacentFileIds);
-      if (filesMetadata?.length > 0) {
-        await thumbnailCache.batchPreloadFull(
-          filesMetadata.map((f) => ({
-            fileId: f.fileId,
-            downloadUrl: f.downloadUrl,
-            mimeType: f.mimeType,
-            cipherFileKey: f.cipherFileKey,
-          })),
-          masterKey,
-        );
+      // In share mode, file metadata is already available from props
+      let filesMetadata;
+      if (isShareMode) {
+        filesMetadata = adjacentFiles.map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: encryptedFileKeys?.[f.fileId] || f.cipherFileKey,
+        }));
+      } else {
+        const batch = await fileService.getFilesBatch(adjacentFileIds);
+        filesMetadata = (batch.files || []).map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: f.cipherFileKey,
+        }));
+      }
+      if (filesMetadata.length > 0) {
+        await thumbnailCache.batchPreloadFull(filesMetadata, key);
       }
     } catch (error) {
       console.warn('[PhotoViewer] Full preload failed:', error);
     }
-  }, [getMasterKey, files, currentIndex]);
+  }, [getKey, isShareMode, encryptedFileKeys, files, currentIndex]);
 
   // Preload MEDIUM images for ±10 zone (instant display when navigating)
   const preloadMediumAdjacent = useCallback(async () => {
-    const masterKey = getMasterKey();
-    if (!masterKey || !files.length || currentIndex === undefined) return;
+    const key = getKey();
+    if (!key || !files.length || currentIndex === undefined) return;
 
     const zone = preloadZoneRef.current;
 
@@ -457,6 +487,7 @@ const PhotoViewer = ({
     let newLeft = zone.left;
     let newRight = zone.right;
     const adjacentFileIds = [];
+    const adjacentFiles = [];
 
     if (isFirstLoad) {
       // First load: preload ±PRELOAD_ZONE_SIZE around current position
@@ -497,6 +528,7 @@ const PhotoViewer = ({
         !thumbnailCache.getMediumFromMemory(fileId)
       ) {
         adjacentFileIds.push(fileId);
+        adjacentFiles.push(f);
       }
     }
 
@@ -521,27 +553,36 @@ const PhotoViewer = ({
     );
 
     try {
-      // Batch fetch metadata for all adjacent files in ONE request
-      const { files: filesMetadata } =
-        await fileService.getFilesBatch(adjacentFileIds);
+      // In share mode, file metadata is already available from props
+      let filesMetadata;
+      if (isShareMode) {
+        filesMetadata = adjacentFiles.map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          thumbMediumUrl: f.thumbMediumUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: encryptedFileKeys?.[f.fileId] || f.cipherFileKey,
+        }));
+      } else {
+        // Batch fetch metadata for all adjacent files in ONE request
+        const batch = await fileService.getFilesBatch(adjacentFileIds);
+        filesMetadata = (batch.files || []).map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          thumbMediumUrl: f.thumbMediumUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: f.cipherFileKey,
+        }));
+      }
 
-      if (filesMetadata && filesMetadata.length > 0) {
+      if (filesMetadata.length > 0) {
         // Batch preload all images with controlled concurrency
-        await thumbnailCache.batchPreload(
-          filesMetadata.map((f) => ({
-            fileId: f.fileId,
-            downloadUrl: f.downloadUrl,
-            thumbMediumUrl: f.thumbMediumUrl,
-            mimeType: f.mimeType,
-            cipherFileKey: f.cipherFileKey,
-          })),
-          masterKey,
-        );
+        await thumbnailCache.batchPreload(filesMetadata, key);
       }
     } catch (error) {
       console.warn('[PhotoViewer] Batch preload failed:', error);
     }
-  }, [getMasterKey, files, currentIndex]);
+  }, [getKey, isShareMode, encryptedFileKeys, files, currentIndex]);
 
   // Main effect: Handle file changes INSTANTLY
   useEffect(() => {
@@ -621,14 +662,20 @@ const PhotoViewer = ({
     setDownloadProgress(0);
     setDownloadStage('downloading');
     try {
-      const masterKey = getMasterKey();
-      if (!masterKey) {
-        console.error('Download failed: no master key');
+      const key = getKey();
+      if (!key) {
+        console.error('Download failed: no key');
         return;
       }
 
-      // Always fetch a fresh signed URL to avoid expired URLs from the cache.
-      const fileData = await fileService.getFile(file.fileId, { skipCache: true });
+      // In share mode, use inline file data; otherwise fetch fresh signed URL.
+      let fileData;
+      if (isShareMode) {
+        const fileKey = encryptedFileKeys?.[file.fileId] || file.cipherFileKey;
+        fileData = { ...file, cipherFileKey: fileKey };
+      } else {
+        fileData = await fileService.getFile(file.fileId, { skipCache: true });
+      }
 
       // Stream encrypted bytes from B2 with progress tracking.
       const encryptedData = await fileService.downloadFileContentWithProgress(
@@ -641,7 +688,7 @@ const PhotoViewer = ({
       const decryptedData = await cryptoService.decryptFile(
         encryptedData,
         fileData.cipherFileKey,
-        masterKey,
+        key,
       );
 
       // Trigger browser save dialog via a short-lived Blob URL.
@@ -654,7 +701,8 @@ const PhotoViewer = ({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      // Delay revoke so the browser has time to start the download
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch (err) {
       console.error('Download failed:', err);
     } finally {
@@ -662,7 +710,7 @@ const PhotoViewer = ({
       setDownloadProgress(null);
       setDownloadStage('idle');
     }
-  }, [downloading, getMasterKey, file, decryptedFileName]);
+  }, [downloading, getKey, isShareMode, encryptedFileKeys, file, decryptedFileName]);
 
   const formatFileSize = (bytes) => {
     if (!bytes) return 'Unknown';
@@ -998,20 +1046,22 @@ const PhotoViewer = ({
           {/* Dropdown menu */}
           {showMenu && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden">
-              {/* Add to Album */}
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onAddToAlbum?.(file);
-                }}
-                className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon
-                  icon={faPlus}
-                  className="w-5 h-5 mr-3 text-gray-400"
-                />
-                {t('addToAlbum', 'Add to Album')}
-              </button>
+              {/* Add to Album — owner only */}
+              {!isShareMode && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onAddToAlbum?.(file);
+                  }}
+                  className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  <FontAwesomeIcon
+                    icon={faPlus}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
+                  {t('addToAlbum', 'Add to Album')}
+                </button>
+              )}
 
               {/* Download */}
               <button
@@ -1035,35 +1085,39 @@ const PhotoViewer = ({
                   : t('download', 'Download')}
               </button>
 
-              {/* Share */}
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onShare?.(file);
-                }}
-                className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon
-                  icon={faShare}
-                  className="w-5 h-5 mr-3 text-gray-400"
-                />
-                {t('share', 'Share')}
-              </button>
+              {/* Share — owner only */}
+              {!isShareMode && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onShare?.(file);
+                  }}
+                  className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  <FontAwesomeIcon
+                    icon={faShare}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
+                  {t('share', 'Share')}
+                </button>
+              )}
 
-              {/* Divider */}
-              <div className="border-t border-zinc-700" />
-
-              {/* Delete */}
-              <button
-                onClick={handleDeleteFile}
-                className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon
-                  icon={faTrash}
-                  className="w-5 h-5 mr-3 text-red-400"
-                />
-                {t('delete', 'Delete')}
-              </button>
+              {/* Divider + Delete — owner only */}
+              {!isShareMode && (
+                <>
+                  <div className="border-t border-zinc-700" />
+                  <button
+                    onClick={handleDeleteFile}
+                    className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
+                  >
+                    <FontAwesomeIcon
+                      icon={faTrash}
+                      className="w-5 h-5 mr-3 text-red-400"
+                    />
+                    {t('delete', 'Delete')}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1148,13 +1202,15 @@ const PhotoViewer = ({
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
                   {t('filename', 'Filename')}
                 </div>
-                <button
-                  onClick={() => setShowRenameModal(true)}
-                  className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('renameFile', 'Rename file')}
-                >
-                  <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
-                </button>
+                {!isShareMode && (
+                  <button
+                    onClick={() => setShowRenameModal(true)}
+                    className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
+                    title={t('renameFile', 'Rename file')}
+                  >
+                    <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <div className="text-white text-sm break-all">
                 {decryptedFileName || t('unknown', 'Unknown')}
@@ -1221,14 +1277,16 @@ const PhotoViewer = ({
         </div>
       </div>
 
-      {/* Rename Modal */}
-      <RenameModal
-        isOpen={showRenameModal}
-        onClose={() => setShowRenameModal(false)}
-        currentName={decryptedFileName || 'Unknown'}
-        onRename={handleRename}
-        isRenaming={isRenaming}
-      />
+      {/* Rename Modal — owner only */}
+      {!isShareMode && (
+        <RenameModal
+          isOpen={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          currentName={decryptedFileName || 'Unknown'}
+          onRename={handleRename}
+          isRenaming={isRenaming}
+        />
+      )}
     </div>
   );
 };

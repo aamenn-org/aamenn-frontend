@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faXmark,
   faCloudUpload,
+  faFolderOpen,
   faTrash,
   faFileVideo,
   faFilePdf,
@@ -49,9 +50,49 @@ function getFileIcon(mimeType) {
   return faFile;
 }
 
+// ─── Folder drag-drop helper ─────────────────────────────────────────────────
+// Recursively reads a dropped directory via the File System Access API
+// (webkitGetAsEntry) and returns an array of File objects with their
+// webkitRelativePath manually set so they look identical to files from
+// an <input webkitdirectory> selection.
+async function readEntryRecursive(entry, path = '') {
+  if (entry.isFile) {
+    return new Promise((resolve) => {
+      entry.file((file) => {
+        // File objects from entry.file() don't have webkitRelativePath set.
+        // We create a new File to attach the path, matching <input webkitdirectory> behavior.
+        const pathAugmented = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
+        Object.defineProperty(pathAugmented, 'webkitRelativePath', {
+          value: path ? `${path}/${file.name}` : file.name,
+          writable: false,
+        });
+        resolve([pathAugmented]);
+      });
+    });
+  }
+  if (entry.isDirectory) {
+    const dirReader = entry.createReader();
+    const entries = await new Promise((resolve) => {
+      const all = [];
+      const readBatch = () => {
+        dirReader.readEntries((batch) => {
+          if (batch.length === 0) { resolve(all); return; }
+          all.push(...batch);
+          readBatch();
+        });
+      };
+      readBatch();
+    });
+    const dirPath = path ? `${path}/${entry.name}` : entry.name;
+    const nested = await Promise.all(entries.map((e) => readEntryRecursive(e, dirPath)));
+    return nested.flat();
+  }
+  return [];
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const UploadModal = ({ isOpen, onClose, onUpload }) => {
+const UploadModal = ({ isOpen, onClose, onUpload, mode = 'files' }) => {
   const { t } = useTranslation('photos');
 
   const [isDragging, setIsDragging] = useState(false);
@@ -61,6 +102,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
   const [error, setError] = useState(null);
 
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   // Tracks temp object URLs created during canvas thumbnail generation so they can be
   // revoked if the component unmounts or the modal closes before the image finishes loading.
   const pendingPreviewUrlsRef = useRef(new Map());
@@ -142,12 +184,29 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
   }, []);
 
   const handleDrop = useCallback(
-    (e) => {
+    async (e) => {
       e.preventDefault();
       setIsDragging(false);
+
+      // In folder mode, try to recursively read dropped directories
+      if (mode === 'folder' && e.dataTransfer.items) {
+        const items = Array.from(e.dataTransfer.items);
+        const entries = items
+          .map((item) => item.webkitGetAsEntry?.() || item.getAsEntry?.())
+          .filter(Boolean);
+
+        if (entries.length > 0) {
+          const allFiles = (await Promise.all(entries.map((entry) => readEntryRecursive(entry)))).flat();
+          if (allFiles.length > 0) {
+            addFiles(allFiles);
+            return;
+          }
+        }
+      }
+
       addFiles(Array.from(e.dataTransfer.files));
     },
-    [addFiles],
+    [addFiles, mode],
   );
 
   const handleFileSelect = useCallback(
@@ -204,7 +263,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {t('uploadFiles', 'Upload Files')}
+            {mode === 'folder'
+              ? t('uploadFolder', 'Upload Folder')
+              : t('uploadFiles', 'Upload Files')}
           </h2>
           <button
             onClick={onClose}
@@ -231,30 +292,37 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => (mode === 'folder' ? folderInputRef.current?.click() : fileInputRef.current?.click())}
         >
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mx-auto mb-4">
             <FontAwesomeIcon
-              icon={faCloudUpload}
-              className="w-6 h-6 text-blue-500"
+              icon={mode === 'folder' ? faFolderOpen : faCloudUpload}
+              className={`w-6 h-6 ${mode === 'folder' ? 'text-amber-500' : 'text-blue-500'}`}
             />
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
-            {t(
-              'upload.dragDrop',
-              'Drag and drop your files here, or click to browse',
-            )}
+            {mode === 'folder'
+              ? t('upload.dragDropFolder', 'Drag and drop a folder here, or click to browse')
+              : t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {t(
-              'upload.supported',
-              'All file types supported · Images & videos include previews',
-            )}
+            {mode === 'folder'
+              ? t('upload.folderSupported', 'The entire folder structure will be preserved')
+              : t('upload.supported', 'All file types supported · Images & videos include previews')}
           </p>
           <input
             ref={fileInputRef}
             type="file"
             multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          {/* Hidden folder input — webkitdirectory triggers native folder picker */}
+          <input
+            ref={folderInputRef}
+            type="file"
+            // eslint-disable-next-line react/no-unknown-property
+            webkitdirectory=""
             className="hidden"
             onChange={handleFileSelect}
           />
@@ -301,7 +369,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]">
-                        {file.name}
+                        {file.webkitRelativePath || file.name}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatBytes(file.size)}
@@ -355,9 +423,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             )}
             {queuing
               ? t('upload.queuing', 'Adding...')
-              : t('upload.uploadFiles', 'Upload {{count}} file', {
-                  count: files.length,
-                })}
+              : mode === 'folder'
+                ? t('upload.uploadFolder', 'Upload {{count}} file', { count: files.length })
+                : t('upload.uploadFiles', 'Upload {{count}} file', { count: files.length })}
           </button>
         </div>
       </div>

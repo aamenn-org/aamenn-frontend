@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context';
 import GoogleSignInButton from '../../components/GoogleSignInButton';
@@ -12,6 +12,7 @@ import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
 const LoginPage = () => {
   const { login } = useAuth();
   const { t } = useTranslation('common');
+  const [searchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,8 +31,10 @@ const LoginPage = () => {
     try {
       const result = await login(email.trim(), password.trim(), rememberMe);
       if (result.success) {
-        // Redirect based on role
-        if (result.role === 'admin') {
+        const redirectTo = searchParams.get('redirect');
+        if (redirectTo && redirectTo.startsWith('/')) {
+          window.location.href = redirectTo;
+        } else if (result.role === 'admin') {
           window.location.href = '/dashboard';
         } else {
           window.location.href = '/folders';

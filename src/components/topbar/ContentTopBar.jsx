@@ -4,6 +4,7 @@ import {
   faPlus,
   faFolderPlus,
   faCloudUpload,
+  faFolderOpen,
   faTableCells,
   faList,
   faSearch,
@@ -90,6 +91,7 @@ const ContentTopBar = ({
   searchValue = '',
   onNewFolder,
   onUpload,
+  onUploadFolder,
   viewMode = 'list',
   onViewModeChange,
   hasMasterKey,
@@ -185,6 +187,13 @@ const ContentTopBar = ({
               >
                 <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 text-blue-500" />
                 Upload Files
+              </button>
+              <button
+                onClick={() => { setShowNewMenu(false); onUploadFolder?.(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
+              >
+                <FontAwesomeIcon icon={faCloudUpload} className="w-4 h-4 text-blue-500" />
+                Upload Folder
               </button>
             </div>
           )}
