@@ -49,6 +49,38 @@ export const paymentService = {
     const response = await api.get('/payments/history');
     return response.data.payments;
   },
+
+  /**
+   * Get public InstaPay configuration (username, qr image url, enabled)
+   */
+  async getInstapayInfo() {
+    const response = await api.get('/payments/instapay/info');
+    return response.data;
+  },
+
+  /**
+   * Submit InstaPay transfer proof for verification
+   * @param {{ planId: string, screenshot: File, instapayReference: string, senderName?: string }} payload
+   */
+  async submitInstapay(payload) {
+    const formData = new FormData();
+    formData.append('screenshot', payload.screenshot);
+    formData.append('planId', payload.planId);
+    formData.append('instapayReference', payload.instapayReference);
+    if (payload.senderName) {
+      formData.append('senderName', payload.senderName);
+    }
+    const response = await api.post('/payments/instapay/submit', formData);
+    return response.data;
+  },
+
+  /**
+   * Get the current user's most recent InstaPay submission (or null)
+   */
+  async getInstapayStatus() {
+    const response = await api.get('/payments/instapay/status');
+    return response.data.submission;
+  },
 };
 
 export default paymentService;

@@ -64,6 +64,36 @@ export const adminService = {
     const response = await api.patch(`/admin/plans/${planId}`, data);
     return response.data;
   },
+
+  // ─── InstaPay Verification ─────────────────────────────────────────
+
+  async getInstapayPending() {
+    const response = await api.get('/admin/instapay/pending');
+    return response.data.submissions;
+  },
+
+  async getInstapayPendingCount() {
+    const response = await api.get('/admin/instapay/pending/count');
+    return response.data.count;
+  },
+
+  async getInstapayHistory() {
+    const response = await api.get('/admin/instapay/history');
+    return response.data.submissions;
+  },
+
+  async getInstapaySubmission(id) {
+    const response = await api.get(`/admin/instapay/${id}`);
+    return response.data.submission;
+  },
+
+  async reviewInstapay(id, action, adminNote) {
+    const response = await api.post(`/admin/instapay/${id}/review`, {
+      action,
+      adminNote,
+    });
+    return response.data.submission;
+  },
 };
 
 export default adminService;

@@ -14,6 +14,7 @@ import {
   faXmark,
   faBell,
   faTag,
+  faMoneyBillTransfer,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
@@ -22,12 +23,14 @@ import UsersPage from './Users';
 import Storage from './Storage';
 import SystemHealth from './SystemHealth';
 import Plans from './Plans';
+import InstapayPayments from './InstapayPayments';
 
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
+  const [instapayPendingCount, setInstapayPendingCount] = useState(0);
 
   // Fetch alerts on mount
   useEffect(() => {
@@ -42,6 +45,21 @@ const AdminDashboard = () => {
     fetchAlerts();
     // Refresh alerts every 5 minutes
     const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch InstaPay pending count for sidebar badge
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const count = await adminService.getInstapayPendingCount();
+        setInstapayPendingCount(count || 0);
+      } catch (error) {
+        console.error('Failed to fetch InstaPay pending count:', error);
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -61,6 +79,12 @@ const AdminDashboard = () => {
     { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
     { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
     { path: '/dashboard/plans', label: 'Plans', icon: faTag },
+    {
+      path: '/dashboard/instapay',
+      label: 'InstaPay',
+      icon: faMoneyBillTransfer,
+      badge: instapayPendingCount,
+    },
   ];
 
   const criticalAlerts = alerts.filter(
@@ -112,7 +136,12 @@ const AdminDashboard = () => {
               }
             >
               <FontAwesomeIcon icon={item.icon} className="w-5 h-5" />
-              <span className="ml-3">{item.label}</span>
+              <span className="ml-3 flex-1">{item.label}</span>
+              {item.badge > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold bg-red-500 text-white rounded-full">
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -192,6 +221,7 @@ const AdminDashboard = () => {
             <Route path="storage" element={<Storage />} />
             <Route path="health" element={<SystemHealth />} />
             <Route path="plans" element={<Plans />} />
+            <Route path="instapay" element={<InstapayPayments />} />
           </Routes>
         </div>
       </main>

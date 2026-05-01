@@ -4,3 +4,4 @@ export { default as UsersPage } from './Users';
 export { default as Storage } from './Storage';
 export { default as SystemHealth } from './SystemHealth';
 export { default as Plans } from './Plans';
+export { default as InstapayPayments } from './InstapayPayments';

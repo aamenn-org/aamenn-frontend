@@ -13,6 +13,31 @@ import {
   faClock,
 } from '@fortawesome/free-solid-svg-icons';
 import PlanSelector from './PlanSelector';
+import PaymentMethodChooser from './PaymentMethodChooser';
+import InstapayPaymentModal from '../../../components/modals/InstapayPaymentModal';
+
+const INSTAPAY_STATUS_LABELS = {
+  pending_verification: {
+    label: 'Pending Verification',
+    color:
+      'text-yellow-700 bg-yellow-50 border-yellow-200 dark:text-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-900/40',
+  },
+  approved: {
+    label: 'Approved',
+    color:
+      'text-green-700 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-900/20 dark:border-green-900/40',
+  },
+  rejected: {
+    label: 'Rejected',
+    color:
+      'text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-900/20 dark:border-red-900/40',
+  },
+  expired: {
+    label: 'Expired',
+    color:
+      'text-gray-700 bg-gray-50 border-gray-200 dark:text-gray-300 dark:bg-gray-900/20 dark:border-gray-900/40',
+  },
+};
 
 const STATUS_LABELS = {
   active: {
@@ -52,18 +77,45 @@ const SubscriptionSection = () => {
   const [error, setError] = useState('');
   const [renewLoading, setRenewLoading] = useState(false);
   const [showPlanSelector, setShowPlanSelector] = useState(false);
+  const [instapayInfo, setInstapayInfo] = useState({
+    enabled: false,
+    username: null,
+    qrImageUrl: null,
+  });
+  const [instapaySubmission, setInstapaySubmission] = useState(null);
+  const [pendingPlan, setPendingPlan] = useState(null);
+  const [showMethodChooser, setShowMethodChooser] = useState(false);
+  const [showInstapayModal, setShowInstapayModal] = useState(false);
+
+  const refreshInstapayStatus = async () => {
+    try {
+      const submission = await paymentService.getInstapayStatus();
+      setInstapaySubmission(submission);
+    } catch (err) {
+      console.error('Failed to fetch InstaPay status:', err);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [sub, paymentList, planList] = await Promise.all([
-          paymentService.getSubscription(),
-          paymentService.getPaymentHistory(),
-          paymentService.getPlans(),
-        ]);
+        const [sub, paymentList, planList, info, submission] =
+          await Promise.all([
+            paymentService.getSubscription(),
+            paymentService.getPaymentHistory(),
+            paymentService.getPlans(),
+            paymentService.getInstapayInfo().catch(() => ({
+              enabled: false,
+              username: null,
+              qrImageUrl: null,
+            })),
+            paymentService.getInstapayStatus().catch(() => null),
+          ]);
         setSubscription(sub);
         setPayments(paymentList || []);
         setPlans(planList || []);
+        setInstapayInfo(info);
+        setInstapaySubmission(submission);
       } catch (err) {
         console.error('Failed to fetch subscription data:', err);
         setError('Failed to load subscription information');
@@ -90,13 +142,42 @@ const SubscriptionSection = () => {
 
   const handleSelectPlan = async (planId) => {
     setError('');
+    const plan = plans.find((p) => p.id === planId);
+    if (!plan) {
+      setError('Selected plan not found');
+      return;
+    }
+    setPendingPlan(plan);
+    setShowPlanSelector(false);
+    setShowMethodChooser(true);
+  };
+
+  const handlePickPaymob = async () => {
+    if (!pendingPlan) return;
+    setError('');
     try {
-      const { checkoutUrl } = await paymentService.initiateCheckout(planId);
+      const { checkoutUrl } = await paymentService.initiateCheckout(
+        pendingPlan.id,
+      );
       window.location.href = checkoutUrl;
     } catch (err) {
       console.error('Failed to initiate checkout:', err);
-      setError(err.message || 'Failed to start payment');
+      setError(
+        err.response?.data?.message || err.message || 'Failed to start payment',
+      );
+      setShowMethodChooser(false);
     }
+  };
+
+  const handlePickInstapay = () => {
+    setShowMethodChooser(false);
+    setShowInstapayModal(true);
+  };
+
+  const closeAllPaymentModals = () => {
+    setShowMethodChooser(false);
+    setShowInstapayModal(false);
+    setPendingPlan(null);
   };
 
   if (loading) {
@@ -123,6 +204,50 @@ const SubscriptionSection = () => {
           {error}
         </div>
       )}
+
+      {/* InstaPay submission banner */}
+      {instapaySubmission &&
+        INSTAPAY_STATUS_LABELS[instapaySubmission.status] && (
+          <div
+            className={`p-4 rounded-xl border text-sm ${INSTAPAY_STATUS_LABELS[instapaySubmission.status].color}`}
+          >
+            <div className="flex items-start gap-3">
+              <FontAwesomeIcon
+                icon={
+                  instapaySubmission.status === 'approved'
+                    ? faCheck
+                    : instapaySubmission.status === 'rejected'
+                      ? faExclamationTriangle
+                      : faClock
+                }
+                className="w-5 h-5 mt-0.5 flex-shrink-0"
+              />
+              <div className="flex-1">
+                <p className="font-medium">
+                  InstaPay Payment —{' '}
+                  {INSTAPAY_STATUS_LABELS[instapaySubmission.status].label}
+                </p>
+                <p className="opacity-80 mt-0.5">
+                  Plan:{' '}
+                  {instapaySubmission.plan?.displayName || 'Selected plan'} ·
+                  Submitted{' '}
+                  {new Date(instapaySubmission.createdAt).toLocaleString()}
+                </p>
+                {instapaySubmission.status === 'pending_verification' && (
+                  <p className="opacity-80 mt-1">
+                    We'll verify and confirm within 12 hours.
+                  </p>
+                )}
+                {instapaySubmission.status === 'rejected' &&
+                  instapaySubmission.adminNote && (
+                    <p className="opacity-90 mt-1">
+                      <strong>Reason:</strong> {instapaySubmission.adminNote}
+                    </p>
+                  )}
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Current Subscription Card */}
       <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-700 p-6">
@@ -288,6 +413,27 @@ const SubscriptionSection = () => {
           currentPlanId={subscription?.planId}
           onSelect={handleSelectPlan}
           onClose={() => setShowPlanSelector(false)}
+        />
+      )}
+
+      {/* Payment Method Chooser */}
+      {showMethodChooser && pendingPlan && (
+        <PaymentMethodChooser
+          plan={pendingPlan}
+          instapayEnabled={instapayInfo.enabled}
+          onPickPaymob={handlePickPaymob}
+          onPickInstapay={handlePickInstapay}
+          onClose={closeAllPaymentModals}
+        />
+      )}
+
+      {/* InstaPay Modal */}
+      {showInstapayModal && pendingPlan && (
+        <InstapayPaymentModal
+          plan={pendingPlan}
+          info={instapayInfo}
+          onClose={closeAllPaymentModals}
+          onSubmitted={refreshInstapayStatus}
         />
       )}
 
