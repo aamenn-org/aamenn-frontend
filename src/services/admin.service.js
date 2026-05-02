@@ -93,6 +93,8 @@ export const adminService = {
       adminNote,
     });
     return response.data.submission;
+  },
+
   async getFlaggedSignups(params = {}) {
     const response = await api.get('/admin/flagged-signups', { params });
     return response.data;
