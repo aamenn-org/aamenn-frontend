@@ -56,7 +56,7 @@ const ShareModal = ({ isOpen, onClose, items }) => {
       const fileItems = items.filter((i) => !!i.fileId);
       const folderItems = items.filter((i) => !!i.folderId);
  
-      const { shareKeyRaw, shareKey, fileKeys } = await generateUnifiedShareKeys(
+      const { shareKeyRaw, shareKey, fileKeys, fileNames } = await generateUnifiedShareKeys(
         fileItems,
         folderItems,
         masterKey,
@@ -74,6 +74,7 @@ const ShareModal = ({ isOpen, onClose, items }) => {
         shareKey,
         items: shareItemsList,
         fileKeys: Object.keys(fileKeys).length > 0 ? fileKeys : undefined,
+        fileNames: Object.keys(fileNames).length > 0 ? fileNames : undefined,
         expiresInSeconds,
       });
  

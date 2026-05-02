@@ -9,13 +9,25 @@ import {
 
 export const authService = {
   /**
+   * Send a 6-digit OTP to verify email before registration
+   * @param {string} email - User email
+   * @param {string} [turnstileToken] - Cloudflare Turnstile CAPTCHA token
+   */
+  async sendSignupOtp(email, turnstileToken) {
+    const response = await api.post('/auth/register/send-otp', { email, turnstileToken });
+    return response.data;
+  },
+
+  /**
    * Register a new user
    * @param {Object} data - Registration data
    * @param {string} data.email - User email
    * @param {string} data.password - User password
+   * @param {string} data.emailOtp - 6-digit OTP for email verification
    * @param {string} data.encryptedMasterKey - Encrypted master key (base64)
    * @param {string} data.kekSalt - KEK salt (base64)
    * @param {Object} data.kdfParams - KDF parameters
+   * @param {string} [data.deviceFingerprint] - Device fingerprint hash
    */
   async register(data) {
     const response = await api.post('/auth/register', data);

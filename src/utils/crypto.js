@@ -33,6 +33,7 @@ export {
   generateRandomBytes,
   computeSHA1,
   computeSHA256,
+  encryptAesGcm,
   encryptFile,
   encryptFileKey,
   encryptFilename,
@@ -79,7 +80,7 @@ export function base64ToArrayBuffer(base64) {
 /**
  * AES-GCM decrypt base64(IV + ciphertext) with key. Returns ArrayBuffer.
  */
-async function _aesGcmDecrypt(key, base64) {
+export async function _aesGcmDecrypt(key, base64) {
   const combined = new Uint8Array(base64ToArrayBuffer(base64));
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, key, combined.slice(12));
 }
@@ -613,10 +614,10 @@ export async function importShareKeyRaw(shareKeyRawBase64) {
 
 /* Generate a single unified share key for any mix of files and folders.
  *
- * @param {Array<{fileId: string, cipherFileKey: string}>} fileItems - Directly selected files
- * @param {Array<{folderId: string, files: Array<{fileId: string, cipherFileKey: string}>}>} folderItems - Selected folders with their files pre-fetched recursively
+ * @param {Array<{fileId: string, cipherFileKey: string, fileNameEncrypted?: string}>} fileItems - Directly selected files
+ * @param {Array<{folderId: string, files: Array<{fileId: string, cipherFileKey: string, fileNameEncrypted?: string}>}>} folderItems - Selected folders with their files pre-fetched recursively
  * @param {CryptoKey} masterKey - User's master key
- * @returns {Promise<{shareKeyRaw: string, shareKey: string, fileKeys: Record<string, string>}>}
+ * @returns {Promise<{shareKeyRaw: string, shareKey: string, fileKeys: Record<string, string>, fileNames: Record<string, string>}>}
  */
 export async function generateUnifiedShareKeys(fileItems, folderItems, masterKey) {
   if (!isCryptoAvailable()) throw new Error('Web Crypto API not available');
@@ -630,18 +631,29 @@ const labelBytes = new TextEncoder().encode('Shared Items');
   const shareKey = await encryptAesGcm(shareKeyForEncryption, labelBytes);
  
   const fileKeys = {};
+  const fileNames = {};
+
+  // Helper: re-encrypt a file's key and name with the share key
+  const processFile = async (file) => {
+    if (!file.cipherFileKey || fileKeys[file.fileId]) return;
+    const fileKeyBytes = await _aesGcmDecrypt(masterKey, file.cipherFileKey);
+    fileKeys[file.fileId] = await encryptAesGcm(shareKeyForEncryption, fileKeyBytes);
+
+    if (file.fileNameEncrypted) {
+      try {
+        const nameBytes = await _aesGcmDecrypt(masterKey, file.fileNameEncrypted);
+        fileNames[file.fileId] = await encryptAesGcm(shareKeyForEncryption, nameBytes);
+      } catch { /* filename re-encryption is best-effort */ }
+    }
+  };
 
   for (const file of fileItems) {
-    if (!file.cipherFileKey || fileKeys[file.fileId]) continue;
-  const fileKeyBytes = await _aesGcmDecrypt(masterKey, file.cipherFileKey);
-    fileKeys[file.fileId] = await encryptAesGcm(shareKeyForEncryption, fileKeyBytes);
+    await processFile(file);
   }
 
   for (const folder of folderItems) {
     for (const file of (folder.files || [])) {
-      if (!file.cipherFileKey || fileKeys[file.fileId]) continue;
-      const fileKeyBytes = await _aesGcmDecrypt(masterKey, file.cipherFileKey);
-      fileKeys[file.fileId] = await encryptAesGcm(shareKeyForEncryption, fileKeyBytes);
+      await processFile(file);
     }
   }
  
@@ -649,6 +661,7 @@ const labelBytes = new TextEncoder().encode('Shared Items');
     shareKeyRaw: arrayBufferToBase64(shareKeyRawBytes),
     shareKey,
     fileKeys,
+    fileNames,
   };
 }
  

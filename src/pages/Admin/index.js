@@ -5,3 +5,4 @@ export { default as Storage } from './Storage';
 export { default as SystemHealth } from './SystemHealth';
 export { default as Plans } from './Plans';
 export { default as InstapayPayments } from './InstapayPayments';
+export { default as Feedback } from './Feedback';

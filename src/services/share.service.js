@@ -55,6 +55,18 @@ export const shareService = {
     const response = await api.get(`/shares/${slug}/browse/${folderId}`);
     return response.data;
   },
+
+  /**
+   * Save shared files to the authenticated user's account (requires auth).
+   * File keys and filenames are re-encrypted with the user's master key on the client side.
+   * @param {string} slug
+   * @param {Array<{originalFileId: string, cipherFileKey: string, fileNameEncrypted: string}>} files
+   * @returns {Promise<{success: boolean, savedCount: number}>}
+   */
+  async saveToAccount(slug, files) {
+    const response = await api.post(`/shares/${slug}/save-to-account`, { files });
+    return response.data;
+  },
 };
 
 export default shareService;

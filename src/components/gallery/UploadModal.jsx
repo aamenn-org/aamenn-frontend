@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faXmark,
   faCloudUpload,
+  faFolderOpen,
   faTrash,
   faFileVideo,
   faFilePdf,
@@ -18,16 +19,7 @@ import {
 // ─── Pure helpers (no component state) ──────────────────────────────────────
 
 function isAcceptedType(file) {
-  if (!file.type) return false;
-  if (
-    file.type.startsWith('image/') ||
-    file.type.startsWith('video/') ||
-    file.type.startsWith('text/')
-  ) return true;
-  return (
-    file.type === 'application/pdf' ||
-    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  );
+  return !!file.name;
 }
 
 // Stable identity key for a File object — avoids using object reference as Map key
@@ -40,7 +32,8 @@ function formatBytes(bytes) {
   if (!bytes || bytes <= 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -48,14 +41,58 @@ function getFileIcon(mimeType) {
   if (mimeType.startsWith('image/')) return faImage;
   if (mimeType.startsWith('video/')) return faFileVideo;
   if (mimeType === 'application/pdf') return faFilePdf;
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return faFileWord;
+  if (
+    mimeType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  )
+    return faFileWord;
   if (mimeType.startsWith('text/')) return faFileLines;
   return faFile;
 }
 
+// ─── Folder drag-drop helper ─────────────────────────────────────────────────
+// Recursively reads a dropped directory via the File System Access API
+// (webkitGetAsEntry) and returns an array of File objects with their
+// webkitRelativePath manually set so they look identical to files from
+// an <input webkitdirectory> selection.
+async function readEntryRecursive(entry, path = '') {
+  if (entry.isFile) {
+    return new Promise((resolve) => {
+      entry.file((file) => {
+        // File objects from entry.file() don't have webkitRelativePath set.
+        // We create a new File to attach the path, matching <input webkitdirectory> behavior.
+        const pathAugmented = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
+        Object.defineProperty(pathAugmented, 'webkitRelativePath', {
+          value: path ? `${path}/${file.name}` : file.name,
+          writable: false,
+        });
+        resolve([pathAugmented]);
+      });
+    });
+  }
+  if (entry.isDirectory) {
+    const dirReader = entry.createReader();
+    const entries = await new Promise((resolve) => {
+      const all = [];
+      const readBatch = () => {
+        dirReader.readEntries((batch) => {
+          if (batch.length === 0) { resolve(all); return; }
+          all.push(...batch);
+          readBatch();
+        });
+      };
+      readBatch();
+    });
+    const dirPath = path ? `${path}/${entry.name}` : entry.name;
+    const nested = await Promise.all(entries.map((e) => readEntryRecursive(e, dirPath)));
+    return nested.flat();
+  }
+  return [];
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const UploadModal = ({ isOpen, onClose, onUpload }) => {
+const UploadModal = ({ isOpen, onClose, onUpload, mode = 'files' }) => {
   const { t } = useTranslation('photos');
 
   const [isDragging, setIsDragging] = useState(false);
@@ -65,6 +102,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
   const [error, setError] = useState(null);
 
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   // Tracks temp object URLs created during canvas thumbnail generation so they can be
   // revoked if the component unmounts or the modal closes before the image finishes loading.
   const pendingPreviewUrlsRef = useRef(new Map());
@@ -123,7 +161,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
 
       setFiles((prev) => {
         const existingKeys = new Set(prev.map(stableFileKey));
-        const deduped = accepted.filter((f) => f.size > 0 && !existingKeys.has(stableFileKey(f)));
+        const deduped = accepted.filter(
+          (f) => f.size > 0 && !existingKeys.has(stableFileKey(f)),
+        );
         deduped.forEach((f) => generatePreview(f, stableFileKey(f)));
         return [...prev, ...deduped];
       });
@@ -144,12 +184,29 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
   }, []);
 
   const handleDrop = useCallback(
-    (e) => {
+    async (e) => {
       e.preventDefault();
       setIsDragging(false);
+
+      // In folder mode, try to recursively read dropped directories
+      if (mode === 'folder' && e.dataTransfer.items) {
+        const items = Array.from(e.dataTransfer.items);
+        const entries = items
+          .map((item) => item.webkitGetAsEntry?.() || item.getAsEntry?.())
+          .filter(Boolean);
+
+        if (entries.length > 0) {
+          const allFiles = (await Promise.all(entries.map((entry) => readEntryRecursive(entry)))).flat();
+          if (allFiles.length > 0) {
+            addFiles(allFiles);
+            return;
+          }
+        }
+      }
+
       addFiles(Array.from(e.dataTransfer.files));
     },
-    [addFiles],
+    [addFiles, mode],
   );
 
   const handleFileSelect = useCallback(
@@ -181,7 +238,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
       // handles state reset. Actual encryption + upload progress is shown by UploadProgressPanel.
       onClose();
     } catch (err) {
-      setError(err?.message || t('upload.error', 'Upload failed. Please try again.'));
+      setError(
+        err?.message || t('upload.error', 'Upload failed. Please try again.'),
+      );
       setQueuing(false);
     }
   }, [files, queuing, onUpload, onClose, t]);
@@ -204,14 +263,19 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {t('uploadFiles', 'Upload Files')}
+            {mode === 'folder'
+              ? t('uploadFolder', 'Upload Folder')
+              : t('uploadFiles', 'Upload Files')}
           </h2>
           <button
             onClick={onClose}
             disabled={queuing}
             className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50"
           >
-            <FontAwesomeIcon icon={faXmark} className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <FontAwesomeIcon
+              icon={faXmark}
+              className="w-5 h-5 text-gray-500 dark:text-gray-400"
+            />
           </button>
         </div>
 
@@ -219,30 +283,46 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         <div
           className={`
             border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-            ${isDragging
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-              : 'border-gray-200 dark:border-zinc-600 hover:border-gray-300 dark:hover:border-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700/50'
+            ${
+              isDragging
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-zinc-600 hover:border-gray-300 dark:hover:border-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700/50'
             }
           `}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => (mode === 'folder' ? folderInputRef.current?.click() : fileInputRef.current?.click())}
         >
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <FontAwesomeIcon icon={faCloudUpload} className="w-6 h-6 text-blue-500" />
+            <FontAwesomeIcon
+              icon={mode === 'folder' ? faFolderOpen : faCloudUpload}
+              className={`w-6 h-6 ${mode === 'folder' ? 'text-amber-500' : 'text-blue-500'}`}
+            />
           </div>
           <p className="text-gray-600 dark:text-gray-300 mb-2">
-            {t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
+            {mode === 'folder'
+              ? t('upload.dragDropFolder', 'Drag and drop a folder here, or click to browse')
+              : t('upload.dragDrop', 'Drag and drop your files here, or click to browse')}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {t('upload.supported', 'Supported: Images, Videos, PDF, DOCX, TXT')}
+            {mode === 'folder'
+              ? t('upload.folderSupported', 'The entire folder structure will be preserved')
+              : t('upload.supported', 'All file types supported · Images & videos include previews')}
           </p>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,video/*,.pdf,.docx,.txt,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          {/* Hidden folder input — webkitdirectory triggers native folder picker */}
+          <input
+            ref={folderInputRef}
+            type="file"
+            // eslint-disable-next-line react/no-unknown-property
+            webkitdirectory=""
             className="hidden"
             onChange={handleFileSelect}
           />
@@ -251,7 +331,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Inline error */}
         {error && (
           <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-            <FontAwesomeIcon icon={faCircleExclamation} className="w-4 h-4 shrink-0" />
+            <FontAwesomeIcon
+              icon={faCircleExclamation}
+              className="w-4 h-4 shrink-0"
+            />
             <span>{error}</span>
           </div>
         )}
@@ -286,7 +369,7 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]">
-                        {file.name}
+                        {file.webkitRelativePath || file.name}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatBytes(file.size)}
@@ -298,7 +381,10 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
                     disabled={queuing}
                     className="p-1 hover:bg-gray-200 dark:hover:bg-zinc-600 rounded transition-colors ml-2 flex-shrink-0 disabled:opacity-50"
                   >
-                    <FontAwesomeIcon icon={faTrash} className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <FontAwesomeIcon
+                      icon={faTrash}
+                      className="w-4 h-4 text-gray-500 dark:text-gray-400"
+                    />
                   </button>
                 </div>
               );
@@ -309,7 +395,9 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
         {/* Total size summary (only meaningful when multiple files selected) */}
         {files.length > 1 && (
           <p className="mt-2 text-xs text-right text-gray-500 dark:text-gray-400">
-            {t('upload.totalSize', 'Total: {{size}}', { size: formatBytes(totalSize) })}
+            {t('upload.totalSize', 'Total: {{size}}', {
+              size: formatBytes(totalSize),
+            })}
           </p>
         )}
 
@@ -328,11 +416,16 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
             className="px-4 py-2 bg-blue-500 text-white font-medium hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {queuing && (
-              <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
+              <FontAwesomeIcon
+                icon={faSpinner}
+                className="w-4 h-4 animate-spin"
+              />
             )}
             {queuing
               ? t('upload.queuing', 'Adding...')
-              : t('upload.uploadFiles', 'Upload {{count}} file', { count: files.length })}
+              : mode === 'folder'
+                ? t('upload.uploadFolder', 'Upload {{count}} file', { count: files.length })
+                : t('upload.uploadFiles', 'Upload {{count}} file', { count: files.length })}
           </button>
         </div>
       </div>

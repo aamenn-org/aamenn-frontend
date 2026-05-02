@@ -4,15 +4,21 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { fileService, cryptoService } from '../../services';
 import { useAuth } from '../../context';
 import { thumbnailCache } from '../../services/cache/thumbnail-cache';
-import { isVideo, isSvg, formatVideoDuration } from '../../utils/thumbnail';
+import {
+  isVideo,
+  isSvg,
+  getFileType,
+  FILE_TYPES,
+  formatVideoDuration,
+} from '../../utils/thumbnail';
 import { decryptFilename, encryptFilename } from '../../utils/crypto';
 import RenameModal from './RenameModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faTriangleExclamation, 
-  faMagnifyingGlassPlus, 
-  faMagnifyingGlassMinus, 
-  faInfoCircle, 
+import {
+  faTriangleExclamation,
+  faMagnifyingGlassPlus,
+  faMagnifyingGlassMinus,
+  faInfoCircle,
   faEllipsisVertical,
   faDownload,
   faShare,
@@ -22,7 +28,8 @@ import {
   faChevronLeft,
   faChevronRight,
   faPlus,
-  faVideo
+  faVideo,
+  faFileCircleQuestion,
 } from '@fortawesome/free-solid-svg-icons';
 
 /**
@@ -51,13 +58,23 @@ const PhotoViewer = ({
   onAddToAlbum,
   onDelete,
   onShare,
+  // Share mode props (optional) — when provided, viewer operates read-only
+  // using the share key instead of the user's master key.
+  shareKey = null,
+  encryptedFileKeys = null,
+  fileNames = null,
 }) => {
   const { getMasterKey } = useAuth();
   const { t } = useTranslation(['photos', 'common']);
 
+  // Share mode: read-only viewer for public share pages
+  const isShareMode = !!shareKey;
+  const getKey = useCallback(() => isShareMode ? shareKey : getMasterKey(), [isShareMode, shareKey, getMasterKey]);
+
   // Determine if this is a video file
   const isVideoFile = isVideo(file?.mimeType);
   const isSvgFile = isSvg(file?.mimeType);
+  const isOtherFile = getFileType(file?.mimeType) === FILE_TYPES.OTHER;
 
   // Image/Video URLs - progressive quality
   const [displayUrl, setDisplayUrl] = useState(null);
@@ -65,10 +82,14 @@ const PhotoViewer = ({
   // qualityRef mirrors quality state so loadImage can read current quality
   // without being in its useCallback dep array (avoids infinite re-render loop)
   const qualityRef = useRef('none');
-  useEffect(() => { qualityRef.current = quality; }, [quality]);
+  useEffect(() => {
+    qualityRef.current = quality;
+  }, [quality]);
 
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null); // null | 0–100
+  const [downloadStage, setDownloadStage] = useState('idle'); // 'idle' | 'downloading' | 'decrypting'
   const [zoomScale, setZoomScale] = useState(1);
 
   const containerRef = useRef(null);
@@ -88,12 +109,18 @@ const PhotoViewer = ({
   const [decryptedFileName, setDecryptedFileName] = useState(null);
   useEffect(() => {
     const decrypt = async () => {
-      if (!file?.fileNameEncrypted || !getMasterKey()) {
+      const key = getKey();
+      // In share mode, use fileNames[fileId] (re-encrypted with share key)
+      // instead of file.fileNameEncrypted (encrypted with master key)
+      const encName = isShareMode
+        ? (fileNames?.[file?.fileId] || null)
+        : file?.fileNameEncrypted;
+      if (!encName || !key) {
         setDecryptedFileName(null);
         return;
       }
       try {
-        const name = await decryptFilename(file.fileNameEncrypted, getMasterKey());
+        const name = await decryptFilename(encName, key);
         setDecryptedFileName(name);
       } catch (err) {
         console.warn('[PhotoViewer] Failed to decrypt filename:', err);
@@ -101,7 +128,7 @@ const PhotoViewer = ({
       }
     };
     decrypt();
-  }, [file?.fileNameEncrypted, getMasterKey]);
+  }, [file?.fileId, file?.fileNameEncrypted, getKey, isShareMode, fileNames]);
 
   // Rename modal state
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -115,14 +142,14 @@ const PhotoViewer = ({
     try {
       const masterKey = getMasterKey();
       const encryptedName = await encryptFilename(newName, masterKey);
-      
+
       await fileService.updateFile(file.fileId, {
         fileNameEncrypted: encryptedName,
       });
 
       // Update local state
       setDecryptedFileName(newName);
-      
+
       // Update file object if there's a callback
       if (file) {
         file.fileNameEncrypted = encryptedName;
@@ -148,36 +175,42 @@ const PhotoViewer = ({
     }
   }, []);
 
-  const startAutoHideTimer = useCallback((timerRef, setVisible) => {
-    clearAutoHideTimer(timerRef);
-    timerRef.current = setTimeout(() => {
-      setVisible(false);
-    }, AUTO_HIDE_DELAY);
-  }, [clearAutoHideTimer]);
+  const startAutoHideTimer = useCallback(
+    (timerRef, setVisible) => {
+      clearAutoHideTimer(timerRef);
+      timerRef.current = setTimeout(() => {
+        setVisible(false);
+      }, AUTO_HIDE_DELAY);
+    },
+    [clearAutoHideTimer],
+  );
 
-  const handleMouseMove = useCallback((e) => {
-    const { clientY, currentTarget } = e;
-    const { height } = currentTarget.getBoundingClientRect();
-    const bottomZone = height * 0.75;
+  const handleMouseMove = useCallback(
+    (e) => {
+      const { clientY, currentTarget } = e;
+      const { height } = currentTarget.getBoundingClientRect();
+      const bottomZone = height * 0.75;
 
-    setShowCloseButton(true);
-    clearAutoHideTimer(closeButtonTimerRef);
-    startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
+      setShowCloseButton(true);
+      clearAutoHideTimer(closeButtonTimerRef);
+      startAutoHideTimer(closeButtonTimerRef, setShowCloseButton);
 
-    setShowLeftArrow(hasPrev);
-    clearAutoHideTimer(leftArrowTimerRef);
-    startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
+      setShowLeftArrow(hasPrev);
+      clearAutoHideTimer(leftArrowTimerRef);
+      startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
 
-    setShowRightArrow(hasNext);
-    clearAutoHideTimer(rightArrowTimerRef);
-    startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
+      setShowRightArrow(hasNext);
+      clearAutoHideTimer(rightArrowTimerRef);
+      startAutoHideTimer(rightArrowTimerRef, setShowRightArrow);
 
-    if (clientY > bottomZone) {
-      setShowBottomOverlay(true);
-      clearAutoHideTimer(bottomOverlayTimerRef);
-      startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
-    }
-  }, [hasPrev, hasNext, clearAutoHideTimer, startAutoHideTimer]);
+      if (clientY > bottomZone) {
+        setShowBottomOverlay(true);
+        clearAutoHideTimer(bottomOverlayTimerRef);
+        startAutoHideTimer(bottomOverlayTimerRef, setShowBottomOverlay);
+      }
+    },
+    [hasPrev, hasNext, clearAutoHideTimer, startAutoHideTimer],
+  );
 
   const handleMouseLeave = useCallback(() => {
     startAutoHideTimer(leftArrowTimerRef, setShowLeftArrow);
@@ -212,15 +245,23 @@ const PhotoViewer = ({
   // Load and upgrade image quality
   const loadImage = useCallback(
     async (targetFile, fileId) => {
-      const masterKey = getMasterKey();
-      if (!masterKey) {
+      const key = getKey();
+      if (!key) {
         setError('Unable to decrypt. Please log out and log in again.');
         return;
       }
 
       try {
-        // Step 1: Get file metadata (uses cache if offline)
-        const fileData = await fileService.getFile(fileId);
+        // Step 1: Get file metadata
+        // In share mode, the file object already carries all data (downloadUrl, thumbs, etc.)
+        // so we skip the authenticated fileService.getFile() call.
+        let fileData;
+        if (isShareMode) {
+          const fileKey = encryptedFileKeys?.[fileId] || targetFile.cipherFileKey;
+          fileData = { ...targetFile, cipherFileKey: fileKey };
+        } else {
+          fileData = await fileService.getFile(fileId);
+        }
         fileDataRef.current = fileData;
 
         // Check if we're still viewing the same file
@@ -230,22 +271,28 @@ const PhotoViewer = ({
 
         if (isSvgMime) {
           // SVG: skip JPEG thumbnail paths entirely — fetch and decrypt the original
-          console.log(`[PhotoViewer] SVG loadImage: mimeType=${fileData.mimeType} downloadUrl=${!!fileData.downloadUrl} cipherFileKey=${!!fileData.cipherFileKey}`);
+          console.log(
+            `[PhotoViewer] SVG loadImage: mimeType=${fileData.mimeType} downloadUrl=${!!fileData.downloadUrl} cipherFileKey=${!!fileData.cipherFileKey}`,
+          );
           if (fileData.downloadUrl) {
             const svgUrl = await thumbnailCache.getFullImage(
               fileId,
               fileData.downloadUrl,
-              masterKey,
+              key,
               fileData.cipherFileKey,
-              'image/svg+xml'
+              'image/svg+xml',
             );
-            console.log(`[PhotoViewer] SVG getFullImage result: ${svgUrl ? 'OK blob URL' : 'NULL'}`);
+            console.log(
+              `[PhotoViewer] SVG getFullImage result: ${svgUrl ? 'OK blob URL' : 'NULL'}`,
+            );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(svgUrl);
               setQuality('large');
             }
           } else {
-            console.warn(`[PhotoViewer] SVG has no downloadUrl — cannot preview: ${fileId}`);
+            console.warn(
+              `[PhotoViewer] SVG has no downloadUrl — cannot preview: ${fileId}`,
+            );
           }
         } else {
           // Step 2: Load medium thumbnail (if not already at medium/large quality)
@@ -259,10 +306,13 @@ const PhotoViewer = ({
               const mediumUrl = await thumbnailCache.getMediumThumbnail(
                 fileId,
                 fileData.thumbMediumUrl,
-                masterKey,
-                fileData.cipherFileKey
+                key,
+                fileData.cipherFileKey,
               );
-              if (currentFileIdRef.current === fileId && qualityRef.current !== 'large') {
+              if (
+                currentFileIdRef.current === fileId &&
+                qualityRef.current !== 'large'
+              ) {
                 setDisplayUrl(mediumUrl);
                 setQuality('medium');
 
@@ -281,8 +331,8 @@ const PhotoViewer = ({
             const largeUrl = await thumbnailCache.getLargeThumbnail(
               fileId,
               fileData.thumbLargeUrl,
-              masterKey,
-              fileData.cipherFileKey
+              key,
+              fileData.cipherFileKey,
             );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(largeUrl);
@@ -296,9 +346,9 @@ const PhotoViewer = ({
             const fullUrl = await thumbnailCache.getFullImage(
               fileId,
               fileData.downloadUrl,
-              masterKey,
+              key,
               fileData.cipherFileKey,
-              fileData.mimeType
+              fileData.mimeType,
             );
             if (currentFileIdRef.current === fileId) {
               setDisplayUrl(fullUrl);
@@ -313,7 +363,7 @@ const PhotoViewer = ({
         }
       }
     },
-    [getMasterKey]
+    [getKey, isShareMode, encryptedFileKeys],
   );
 
   // Track preloaded file IDs to avoid re-requesting (persists across renders)
@@ -341,8 +391,8 @@ const PhotoViewer = ({
 
   // Preload FULL images for ±2 adjacent (likely next clicks)
   const preloadFullAdjacent = useCallback(async () => {
-    const masterKey = getMasterKey();
-    if (!masterKey || !files.length || currentIndex === undefined) return;
+    const key = getKey();
+    if (!key || !files.length || currentIndex === undefined) return;
 
     const zone = fullPreloadZoneRef.current;
 
@@ -356,16 +406,22 @@ const PhotoViewer = ({
     const newLeft = Math.max(0, currentIndex - FULL_PRELOAD_SIZE);
     const newRight = Math.min(
       files.length - 1,
-      currentIndex + FULL_PRELOAD_SIZE
+      currentIndex + FULL_PRELOAD_SIZE,
     );
 
-    // Collect file IDs that need full preload
+    // Collect file IDs that need full preload — skip videos and unsupported types
     const adjacentFileIds = [];
+    const adjacentFiles = [];
     for (let i = newLeft; i <= newRight; i++) {
-      const file = files[i];
-      const fileId = file?.fileId || file?.id;
-      if (fileId && !thumbnailCache.getFullImageFromMemory(fileId)) {
+      const f = files[i];
+      const fileId = f?.fileId || f?.id;
+      if (!fileId) continue;
+      // Never eagerly fetch videos or OTHER-type files: they have no preview
+      // and can be very large. They are only fetched on explicit download click.
+      if (isVideo(f?.mimeType) || getFileType(f?.mimeType) === FILE_TYPES.OTHER) continue;
+      if (!thumbnailCache.getFullImageFromMemory(fileId)) {
         adjacentFileIds.push(fileId);
+        adjacentFiles.push(f);
       }
     }
 
@@ -375,33 +431,40 @@ const PhotoViewer = ({
     if (adjacentFileIds.length === 0) return;
 
     console.log(
-      `[PhotoViewer] Preloading ${adjacentFileIds.length} FULL images around index ${currentIndex}`
+      `[PhotoViewer] Preloading ${adjacentFileIds.length} FULL images around index ${currentIndex}`,
     );
 
     try {
-      const { files: filesMetadata } = await fileService.getFilesBatch(
-        adjacentFileIds
-      );
-      if (filesMetadata?.length > 0) {
-        await thumbnailCache.batchPreloadFull(
-          filesMetadata.map((f) => ({
-            fileId: f.fileId,
-            downloadUrl: f.downloadUrl,
-            mimeType: f.mimeType,
-            cipherFileKey: f.cipherFileKey,
-          })),
-          masterKey
-        );
+      // In share mode, file metadata is already available from props
+      let filesMetadata;
+      if (isShareMode) {
+        filesMetadata = adjacentFiles.map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: encryptedFileKeys?.[f.fileId] || f.cipherFileKey,
+        }));
+      } else {
+        const batch = await fileService.getFilesBatch(adjacentFileIds);
+        filesMetadata = (batch.files || []).map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: f.cipherFileKey,
+        }));
+      }
+      if (filesMetadata.length > 0) {
+        await thumbnailCache.batchPreloadFull(filesMetadata, key);
       }
     } catch (error) {
       console.warn('[PhotoViewer] Full preload failed:', error);
     }
-  }, [getMasterKey, files, currentIndex]);
+  }, [getKey, isShareMode, encryptedFileKeys, files, currentIndex]);
 
   // Preload MEDIUM images for ±10 zone (instant display when navigating)
   const preloadMediumAdjacent = useCallback(async () => {
-    const masterKey = getMasterKey();
-    if (!masterKey || !files.length || currentIndex === undefined) return;
+    const key = getKey();
+    if (!key || !files.length || currentIndex === undefined) return;
 
     const zone = preloadZoneRef.current;
 
@@ -415,7 +478,7 @@ const PhotoViewer = ({
     // If we're comfortably within the preloaded zone, skip
     if (!isFirstLoad && !approachingLeftBoundary && !approachingRightBoundary) {
       console.log(
-        `[PhotoViewer] Within zone [${zone.left}-${zone.right}], index=${currentIndex}, skipping preload`
+        `[PhotoViewer] Within zone [${zone.left}-${zone.right}], index=${currentIndex}, skipping preload`,
       );
       return;
     }
@@ -424,6 +487,7 @@ const PhotoViewer = ({
     let newLeft = zone.left;
     let newRight = zone.right;
     const adjacentFileIds = [];
+    const adjacentFiles = [];
 
     if (isFirstLoad) {
       // First load: preload ±PRELOAD_ZONE_SIZE around current position
@@ -434,13 +498,13 @@ const PhotoViewer = ({
       // Extend zone to the left
       newLeft = Math.max(0, zone.left - PRELOAD_ZONE_SIZE);
       console.log(
-        `[PhotoViewer] Extending zone LEFT: [${newLeft}-${zone.right}]`
+        `[PhotoViewer] Extending zone LEFT: [${newLeft}-${zone.right}]`,
       );
     } else if (approachingRightBoundary && zone.right < files.length - 1) {
       // Extend zone to the right
       newRight = Math.min(files.length - 1, zone.right + PRELOAD_ZONE_SIZE);
       console.log(
-        `[PhotoViewer] Extending zone RIGHT: [${zone.left}-${newRight}]`
+        `[PhotoViewer] Extending zone RIGHT: [${zone.left}-${newRight}]`,
       );
     } else {
       // Already at edge of gallery, nothing to preload
@@ -453,15 +517,18 @@ const PhotoViewer = ({
       // Skip indices that were already in the previous zone
       if (!isFirstLoad && i >= zone.left && i <= zone.right) continue;
 
-      const file = files[i];
-      const fileId = file?.fileId || file?.id;
+      const f = files[i];
+      const fileId = f?.fileId || f?.id;
+      if (!fileId) continue;
+      // Skip videos and unsupported types — they have no thumbnails to preload
+      if (isVideo(f?.mimeType) || getFileType(f?.mimeType) === FILE_TYPES.OTHER) continue;
       // Skip if already preloaded OR has medium thumbnail in memory
       if (
-        fileId &&
         !preloadedFileIdsRef.current.has(fileId) &&
         !thumbnailCache.getMediumFromMemory(fileId)
       ) {
         adjacentFileIds.push(fileId);
+        adjacentFiles.push(f);
       }
     }
 
@@ -473,7 +540,7 @@ const PhotoViewer = ({
 
     if (adjacentFileIds.length === 0) {
       console.log(
-        '[PhotoViewer] All files in new zone already preloaded/cached'
+        '[PhotoViewer] All files in new zone already preloaded/cached',
       );
       return;
     }
@@ -482,33 +549,40 @@ const PhotoViewer = ({
     adjacentFileIds.forEach((id) => preloadedFileIdsRef.current.add(id));
 
     console.log(
-      `[PhotoViewer] Batch preloading ${adjacentFileIds.length} adjacent files`
+      `[PhotoViewer] Batch preloading ${adjacentFileIds.length} adjacent files`,
     );
 
     try {
-      // Batch fetch metadata for all adjacent files in ONE request
-      const { files: filesMetadata } = await fileService.getFilesBatch(
-        adjacentFileIds
-      );
+      // In share mode, file metadata is already available from props
+      let filesMetadata;
+      if (isShareMode) {
+        filesMetadata = adjacentFiles.map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          thumbMediumUrl: f.thumbMediumUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: encryptedFileKeys?.[f.fileId] || f.cipherFileKey,
+        }));
+      } else {
+        // Batch fetch metadata for all adjacent files in ONE request
+        const batch = await fileService.getFilesBatch(adjacentFileIds);
+        filesMetadata = (batch.files || []).map((f) => ({
+          fileId: f.fileId,
+          downloadUrl: f.downloadUrl,
+          thumbMediumUrl: f.thumbMediumUrl,
+          mimeType: f.mimeType,
+          cipherFileKey: f.cipherFileKey,
+        }));
+      }
 
-      if (filesMetadata && filesMetadata.length > 0) {
+      if (filesMetadata.length > 0) {
         // Batch preload all images with controlled concurrency
-        await thumbnailCache.batchPreload(
-          filesMetadata.map((f) => ({
-            fileId: f.fileId,
-            downloadUrl: f.downloadUrl,
-            thumbMediumUrl: f.thumbMediumUrl,
-            mimeType: f.mimeType,
-            cipherFileKey: f.cipherFileKey,
-          })),
-          masterKey
-        );
+        await thumbnailCache.batchPreload(filesMetadata, key);
       }
     } catch (error) {
       console.warn('[PhotoViewer] Batch preload failed:', error);
     }
-  }, [getMasterKey, files, currentIndex]);
-
+  }, [getKey, isShareMode, encryptedFileKeys, files, currentIndex]);
 
   // Main effect: Handle file changes INSTANTLY
   useEffect(() => {
@@ -521,17 +595,19 @@ const PhotoViewer = ({
     currentFileIdRef.current = fileId;
     setError(null);
 
-    if (isVideoFile) {
-      // Videos: no preview, show unsupported state immediately
+    if (isVideoFile || isOtherFile) {
+      // Videos / unknown types: no preview
       setDisplayUrl(null);
       setQuality('none');
-      console.log(`[PhotoViewer] Video file — preview not supported: ${fileId}`);
+      console.log(`[PhotoViewer] No-preview file type: ${fileId}`);
     } else if (isSvgFile) {
       // SVGs: skip L1 thumbnail cache (no JPEG thumbnails exist for SVG).
       // Do NOT call setQuality/setDisplayUrl before loadImage — that would change
       // `quality` state, which is a dep of `loadImage` useCallback, triggering
       // an infinite re-render loop.
-      console.log(`[PhotoViewer] SVG file detected — loading via downloadUrl path: ${fileId}`);
+      console.log(
+        `[PhotoViewer] SVG file detected — loading via downloadUrl path: ${fileId}`,
+      );
       loadImage(file, fileId);
     } else {
       // INSTANT: Check memory cache for VIEWER (medium/large only, skip small)
@@ -568,75 +644,73 @@ const PhotoViewer = ({
     preloadMediumAdjacent,
   ]);
 
-  const handleDownload = async () => {
+  /**
+   * Unified download handler for all file types (image, video, zip, etc.).
+   *
+   * Download flow:
+   *  1. Always fetches a fresh signed URL from the backend (avoids expired cached URLs).
+   *  2. Streams the encrypted bytes from B2 while reporting byte-level progress (0–100 %).
+   *  3. Decrypts the full buffer with AES-GCM (authenticated encryption requires the
+   *     complete ciphertext, so streaming decryption is not possible).
+   *  4. Triggers a browser download via a short-lived Blob URL.
+   *
+   * No network traffic is generated until the user explicitly clicks the button.
+   */
+  const handleDownload = useCallback(async () => {
+    if (downloading) return;
     setDownloading(true);
+    setDownloadProgress(0);
+    setDownloadStage('downloading');
     try {
-      let blobUrl;
-
-      // Download the original file directly, bypassing all cache
-      const masterKey = getMasterKey();
-      if (!masterKey) {
-        console.error('Download failed: no master key');
+      const key = getKey();
+      if (!key) {
+        console.error('Download failed: no key');
         return;
       }
-      const fileData = fileDataRef.current || await fileService.getFile(file.fileId);
-      
-      // Download original encrypted file directly from B2 (no cache)
-      const encryptedData = await fileService.downloadFileContent(fileData.downloadUrl);
-      
-      // Decrypt to get the original file
+
+      // In share mode, use inline file data; otherwise fetch fresh signed URL.
+      let fileData;
+      if (isShareMode) {
+        const fileKey = encryptedFileKeys?.[file.fileId] || file.cipherFileKey;
+        fileData = { ...file, cipherFileKey: fileKey };
+      } else {
+        fileData = await fileService.getFile(file.fileId, { skipCache: true });
+      }
+
+      // Stream encrypted bytes from B2 with progress tracking.
+      const encryptedData = await fileService.downloadFileContentWithProgress(
+        fileData.downloadUrl,
+        setDownloadProgress,
+      );
+
+      // AES-GCM decryption (full buffer required).
+      setDownloadStage('decrypting');
       const decryptedData = await cryptoService.decryptFile(
         encryptedData,
         fileData.cipherFileKey,
-        masterKey
+        key,
       );
-      
-      // Create blob from original decrypted data
-      const blob = new Blob([decryptedData], { type: fileData.mimeType });
-      blobUrl = URL.createObjectURL(blob);
 
+      // Trigger browser save dialog via a short-lived Blob URL.
+      const mimeType = fileData.mimeType || 'application/octet-stream';
+      const blob = new Blob([decryptedData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = decryptedFileName || 'file';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      // Delay revoke so the browser has time to start the download
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch (err) {
       console.error('Download failed:', err);
     } finally {
       setDownloading(false);
+      setDownloadProgress(null);
+      setDownloadStage('idle');
     }
-  };
-
-  const handleDownloadVideo = async () => {
-    setDownloading(true);
-    try {
-      const masterKey = getMasterKey();
-      if (!masterKey) return;
-      const fileData = await fileService.getFile(file.fileId);
-      const videoUrl = await thumbnailCache.getFullImage(
-        file.fileId,
-        fileData.downloadUrl,
-        masterKey,
-        fileData.cipherFileKey,
-        fileData.mimeType
-      );
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = decryptedFileName || 'video';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    } catch (err) {
-      console.error('Video download failed:', err);
-    } finally {
-      setDownloading(false);
-    }
-  };
+  }, [downloading, getKey, isShareMode, encryptedFileKeys, file, decryptedFileName]);
 
   const formatFileSize = (bytes) => {
     if (!bytes) return 'Unknown';
@@ -710,15 +784,7 @@ const PhotoViewer = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isOpen,
-    onClose,
-    onNext,
-    onPrev,
-    hasNext,
-    hasPrev,
-    startAutoHideTimer,
-  ]);
+  }, [isOpen, onClose, onNext, onPrev, hasNext, hasPrev, startAutoHideTimer]);
 
   if (!isOpen) return null;
 
@@ -733,30 +799,112 @@ const PhotoViewer = ({
       onMouseLeave={handleMouseLeave}
     >
       {/* Full-screen media container */}
-      <div className="w-full h-full flex items-center justify-center" style={{ direction: 'ltr' }}>
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{ direction: 'ltr' }}
+      >
         {/* Error State */}
         {error && !displayUrl ? (
           <div className="flex flex-col items-center justify-center text-gray-400">
-            <FontAwesomeIcon icon={faTriangleExclamation} className="w-16 h-16 mb-4" />
+            <FontAwesomeIcon
+              icon={faTriangleExclamation}
+              className="w-16 h-16 mb-4"
+            />
             <p>{error}</p>
           </div>
         ) : isVideoFile ? (
           /* Video — preview not supported */
           <div className="flex flex-col items-center justify-center gap-5 text-gray-300 px-6 text-center">
             <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
-              <FontAwesomeIcon icon={faVideo} className="w-12 h-12 text-white/70" />
+              <FontAwesomeIcon
+                icon={faVideo}
+                className="w-12 h-12 text-white/70"
+              />
             </div>
             <div className="space-y-2">
-              <p className="text-lg font-medium text-white">Video preview is not supported</p>
-              <p className="text-sm text-gray-400">You can download this video to watch it.</p>
+              <p className="text-lg font-medium text-white">
+                Video preview is not supported
+              </p>
+              <p className="text-sm text-gray-400">
+                You can download this video to watch it.
+              </p>
             </div>
             <button
-              onClick={handleDownloadVideo}
+              onClick={handleDownload}
               disabled={downloading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              className="flex flex-col items-center gap-1.5 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 min-w-[160px]"
             >
-              <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
-              {downloading ? 'Downloading...' : 'Download Video'}
+              <span className="flex items-center gap-2">
+                {downloading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+                )}
+                {downloadStage === 'decrypting'
+                  ? 'Decrypting…'
+                  : downloadStage === 'downloading'
+                    ? `Downloading ${downloadProgress ?? 0}%`
+                    : 'Download Video'}
+              </span>
+              {downloadStage === 'downloading' && (
+                <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-200"
+                    style={{ width: `${downloadProgress ?? 0}%` }}
+                  />
+                </div>
+              )}
+            </button>
+          </div>
+        ) : isOtherFile ? (
+          /* Unknown file type — no preview */
+          <div className="flex flex-col items-center justify-center gap-5 text-gray-300 px-6 text-center">
+            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center">
+              <FontAwesomeIcon
+                icon={faFileCircleQuestion}
+                className="w-12 h-12 text-white/70"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-white">
+                No preview available
+              </p>
+              {decryptedFileName && (
+                <p className="text-sm text-white/80 font-medium">
+                  {decryptedFileName}
+                </p>
+              )}
+              {file?.mimeType && (
+                <p className="text-xs text-gray-500 uppercase tracking-wider">
+                  {file.mimeType}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="flex flex-col items-center gap-1.5 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 min-w-[160px]"
+            >
+              <span className="flex items-center gap-2">
+                {downloading ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <FontAwesomeIcon icon={faDownload} className="w-4 h-4" />
+                )}
+                {downloadStage === 'decrypting'
+                  ? 'Decrypting…'
+                  : downloadStage === 'downloading'
+                    ? `Downloading ${downloadProgress ?? 0}%`
+                    : 'Download File'}
+              </span>
+              {downloadStage === 'downloading' && (
+                <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-200"
+                    style={{ width: `${downloadProgress ?? 0}%` }}
+                  />
+                </div>
+              )}
             </button>
           </div>
         ) : (
@@ -781,32 +929,35 @@ const PhotoViewer = ({
                 }}
                 wheel={{
                   step: 0.01,
-                  smoothStep: 0.02
+                  smoothStep: 0.02,
                 }}
                 doubleClick={{ mode: 'reset' }}
-                panning={{ 
+                panning={{
                   disabled: false,
                 }}
-                velocityAnimation={{ 
+                velocityAnimation={{
                   sensitivity: 0.002,
-                  animationTime: 200
+                  animationTime: 200,
                 }}
               >
                 {({ zoomIn, zoomOut, resetTransform, state }) => (
                   <>
                     {/* Zoom Controls - unified design with percentage and hover activation */}
-                    <div
-                      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group"
-                    >
-                      <div className={`flex items-center gap-1 px-2 py-1.5 bg-black/60 rounded-full transition-opacity duration-300 ${
-                        showCloseButton ? 'opacity-100' : 'opacity-0'
-                      } group-hover:opacity-100`}>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group">
+                      <div
+                        className={`flex items-center gap-1 px-2 py-1.5 bg-black/60 rounded-full transition-opacity duration-300 ${
+                          showCloseButton ? 'opacity-100' : 'opacity-0'
+                        } group-hover:opacity-100`}
+                      >
                         <button
                           onClick={() => zoomIn()}
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom In"
                         >
-                          <FontAwesomeIcon icon={faMagnifyingGlassPlus} className="w-4 h-4" />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlassPlus}
+                            className="w-4 h-4"
+                          />
                         </button>
                         <span className="px-2 text-white text-sm font-medium min-w-[3rem] text-center">
                           {Math.round(zoomScale * 100)}%
@@ -816,7 +967,10 @@ const PhotoViewer = ({
                           className="p-1.5 hover:bg-white/20 rounded-full text-white transition-colors"
                           title="Zoom Out"
                         >
-                          <FontAwesomeIcon icon={faMagnifyingGlassMinus} className="w-4 h-4" />
+                          <FontAwesomeIcon
+                            icon={faMagnifyingGlassMinus}
+                            className="w-4 h-4"
+                          />
                         </button>
                       </div>
                     </div>
@@ -828,7 +982,7 @@ const PhotoViewer = ({
                       wrapperStyle={{
                         width: '100%',
                         height: '100%',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
                       }}
                     >
                       <img
@@ -843,7 +997,7 @@ const PhotoViewer = ({
                           margin: '0 auto',
                           display: 'block',
                           // Smooth transition when upgrading medium->large (same dimensions)
-                          transition: 'opacity 0.2s ease-in-out'
+                          transition: 'opacity 0.2s ease-in-out',
                         }}
                         draggable={false}
                         // Performance: decode image async for instant rendering
@@ -859,7 +1013,6 @@ const PhotoViewer = ({
           </>
         )}
       </div>
-
 
       {/* Close button - top right overlay */}
       <div
@@ -893,17 +1046,22 @@ const PhotoViewer = ({
           {/* Dropdown menu */}
           {showMenu && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden">
-              {/* Add to Album */}
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onAddToAlbum?.(file);
-                }}
-                className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon icon={faPlus} className="w-5 h-5 mr-3 text-gray-400" />
-                {t('addToAlbum', 'Add to Album')}
-              </button>
+              {/* Add to Album — owner only */}
+              {!isShareMode && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onAddToAlbum?.(file);
+                  }}
+                  className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  <FontAwesomeIcon
+                    icon={faPlus}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
+                  {t('addToAlbum', 'Add to Album')}
+                </button>
+              )}
 
               {/* Download */}
               <button
@@ -917,34 +1075,49 @@ const PhotoViewer = ({
                 {downloading ? (
                   <div className="animate-spin h-5 w-5 mr-3 border-2 border-white border-t-transparent rounded-full"></div>
                 ) : (
-                  <FontAwesomeIcon icon={faDownload} className="w-5 h-5 mr-3 text-gray-400" />
+                  <FontAwesomeIcon
+                    icon={faDownload}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
                 )}
-                {downloading ? t('downloading', 'Downloading...') : t('download', 'Download')}
+                {downloading
+                  ? t('downloading', 'Downloading...')
+                  : t('download', 'Download')}
               </button>
 
-              {/* Share */}
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onShare?.(file);
-                }}
-                className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon icon={faShare} className="w-5 h-5 mr-3 text-gray-400" />
-                {t('share', 'Share')}
-              </button>
+              {/* Share — owner only */}
+              {!isShareMode && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onShare?.(file);
+                  }}
+                  className="w-full flex items-center px-4 py-3 text-white hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  <FontAwesomeIcon
+                    icon={faShare}
+                    className="w-5 h-5 mr-3 text-gray-400"
+                  />
+                  {t('share', 'Share')}
+                </button>
+              )}
 
-              {/* Divider */}
-              <div className="border-t border-zinc-700" />
-
-              {/* Delete */}
-              <button
-                onClick={handleDeleteFile}
-                className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
-              >
-                <FontAwesomeIcon icon={faTrash} className="w-5 h-5 mr-3 text-red-400" />
-                {t('delete', 'Delete')}
-              </button>
+              {/* Divider + Delete — owner only */}
+              {!isShareMode && (
+                <>
+                  <div className="border-t border-zinc-700" />
+                  <button
+                    onClick={handleDeleteFile}
+                    className="w-full flex items-center px-4 py-3 text-red-400 hover:bg-zinc-800 transition-colors text-sm"
+                  >
+                    <FontAwesomeIcon
+                      icon={faTrash}
+                      className="w-5 h-5 mr-3 text-red-400"
+                    />
+                    {t('delete', 'Delete')}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -964,8 +1137,7 @@ const PhotoViewer = ({
           className={`absolute top-4 left-4 z-20 px-3 py-1.5 bg-black/60 rounded-full text-xs text-gray-300 transition-all duration-300 ${
             showCloseButton ? 'opacity-100' : 'opacity-0'
           }`}
-        >
-          </div>
+        ></div>
       )}
 
       {/* Left navigation arrow - overlaid on image */}
@@ -1001,7 +1173,9 @@ const PhotoViewer = ({
         <div className="flex flex-col h-full">
           {/* Panel Header */}
           <div className="flex items-center justify-between p-4 border-b border-zinc-700">
-            <h3 className="text-white font-medium">{t('fileInfo', 'File Info')}</h3>
+            <h3 className="text-white font-medium">
+              {t('fileInfo', 'File Info')}
+            </h3>
             <button
               onClick={() => setShowInfoPanel(false)}
               className="p-2 hover:bg-zinc-800 rounded-full text-gray-400 hover:text-white transition-colors"
@@ -1028,13 +1202,15 @@ const PhotoViewer = ({
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
                   {t('filename', 'Filename')}
                 </div>
-                <button
-                  onClick={() => setShowRenameModal(true)}
-                  className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('renameFile', 'Rename file')}
-                >
-                  <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
-                </button>
+                {!isShareMode && (
+                  <button
+                    onClick={() => setShowRenameModal(true)}
+                    className="p-1 hover:bg-zinc-800 rounded text-gray-400 hover:text-white transition-colors"
+                    title={t('renameFile', 'Rename file')}
+                  >
+                    <FontAwesomeIcon icon={faPen} className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <div className="text-white text-sm break-all">
                 {decryptedFileName || t('unknown', 'Unknown')}
@@ -1045,8 +1221,8 @@ const PhotoViewer = ({
             {file?.width && file?.height && (
               <div className="space-y-1">
                 <div className="text-gray-500 text-xs uppercase tracking-wide">
-                {t('resolution', 'Resolution')}
-              </div>
+                  {t('resolution', 'Resolution')}
+                </div>
                 <div className="text-white text-sm">
                   {getMegapixels(file.width, file.height)} • {file.width} ×{' '}
                   {file.height}
@@ -1101,14 +1277,16 @@ const PhotoViewer = ({
         </div>
       </div>
 
-      {/* Rename Modal */}
-      <RenameModal
-        isOpen={showRenameModal}
-        onClose={() => setShowRenameModal(false)}
-        currentName={decryptedFileName || 'Unknown'}
-        onRename={handleRename}
-        isRenaming={isRenaming}
-      />
+      {/* Rename Modal — owner only */}
+      {!isShareMode && (
+        <RenameModal
+          isOpen={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          currentName={decryptedFileName || 'Unknown'}
+          onRename={handleRename}
+          isRenaming={isRenaming}
+        />
+      )}
     </div>
   );
 };

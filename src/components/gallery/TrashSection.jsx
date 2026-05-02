@@ -1,22 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
-import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { fileService } from '../../services';
 import { useAuth } from '../../context';
 import VirtualizedPhotoGrid from './VirtualizedPhotoGrid';
+import FileListView from '../fileList/FileListView';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faTrash, 
-  faArrowRotateLeft, 
-  faTrashCan 
+import {
+  faTrash,
+  faArrowRotateLeft,
+  faTrashCan,
 } from '@fortawesome/free-solid-svg-icons';
 
-const TrashSection = ({ onViewFile, gridSize }) => {
+const TrashSection = ({
+  onViewFile,
+  gridSize = 'small',
+  viewMode = 'list',
+  selectedFiles = [],
+  onSelectFile,
+  onFilesLoaded,
+  onClearSelection,
+}) => {
   const { user } = useAuth();
   const { t } = useTranslation('photos');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [emptying, setEmptying] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -26,52 +33,60 @@ const TrashSection = ({ onViewFile, gridSize }) => {
     hasMore: true,
   });
 
-  const fetchTrash = useCallback(async (page = 1, append = false) => {
-    try {
-      if (!append) {
-        setLoading(true);
-      }
+  const fetchTrash = useCallback(
+    async (page = 1, append = false) => {
+      try {
+        if (!append) {
+          setLoading(true);
+        }
 
-      const response = await fileService.listTrash({
-        page,
-        limit: pagination.limit,
-      });
-
-      const filesData = response.files || [];
-      const paginationData = response.pagination || {};
-
-      if (append) {
-        setFiles((prev) => {
-          const existingIds = new Set(prev.map((f) => f.fileId || f.id));
-          const newFiles = filesData.filter(
-            (f) => !existingIds.has(f.fileId || f.id)
-          );
-          return [...prev, ...newFiles];
+        const response = await fileService.listTrash({
+          page,
+          limit: pagination.limit,
         });
-      } else {
-        setFiles(filesData);
-      }
 
-      setPagination((prev) => ({
-        ...prev,
-        page,
-        total: paginationData.total || 0,
-        totalPages: paginationData.totalPages || 1,
-        hasMore: page < (paginationData.totalPages || 1),
-      }));
-    } catch (error) {
-      console.error('Failed to fetch trash:', error);
-      if (!append) {
-        setFiles([]);
+        const filesData = response.files || [];
+        const paginationData = response.pagination || {};
+
+        if (append) {
+          setFiles((prev) => {
+            const existingIds = new Set(prev.map((f) => f.fileId || f.id));
+            const newFiles = filesData.filter(
+              (f) => !existingIds.has(f.fileId || f.id),
+            );
+            return [...prev, ...newFiles];
+          });
+        } else {
+          setFiles(filesData);
+        }
+
+        setPagination((prev) => ({
+          ...prev,
+          page,
+          total: paginationData.total || 0,
+          totalPages: paginationData.totalPages || 1,
+          hasMore: page < (paginationData.totalPages || 1),
+        }));
+      } catch (error) {
+        console.error('Failed to fetch trash:', error);
+        if (!append) {
+          setFiles([]);
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.limit]);
+    },
+    [pagination.limit],
+  );
 
   useEffect(() => {
     fetchTrash(1, false);
   }, [fetchTrash]);
+
+  // Sync files list to Dashboard so it can build selectableItems
+  useEffect(() => {
+    onFilesLoaded?.(files);
+  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMoreFiles = useCallback(() => {
     if (pagination.hasMore && !loading) {
@@ -80,13 +95,7 @@ const TrashSection = ({ onViewFile, gridSize }) => {
   }, [pagination.page, pagination.hasMore, loading, fetchTrash]);
 
   const handleSelectFile = (file) => {
-    const fileId = file.fileId;
-    setSelectedFiles((prev) => {
-      if (prev.includes(fileId)) {
-        return prev.filter((id) => id !== fileId);
-      }
-      return [...prev, fileId];
-    });
+    onSelectFile?.(file);
   };
 
   const handleRestore = async () => {
@@ -101,7 +110,7 @@ const TrashSection = ({ onViewFile, gridSize }) => {
 
     try {
       await fileService.restoreFilesBulk(selectedFiles);
-      setSelectedFiles([]);
+      onClearSelection?.();
       await fetchTrash(1, false);
     } catch (error) {
       console.error('Failed to restore files:', error);
@@ -121,7 +130,7 @@ const TrashSection = ({ onViewFile, gridSize }) => {
 
     try {
       await fileService.deleteFilesPermanentlyBulk(selectedFiles);
-      setSelectedFiles([]);
+      onClearSelection?.();
       await fetchTrash(1, false);
     } catch (error) {
       console.error('Failed to delete files:', error);
@@ -140,12 +149,19 @@ const TrashSection = ({ onViewFile, gridSize }) => {
     setEmptying(true);
     try {
       await fileService.emptyTrash((deletedIds) => {
+        // Progressive UI feedback: remove each batch from state as it completes
         const idSet = new Set(deletedIds);
-        flushSync(() => {
-          setFiles((prev) => prev.filter((f) => !idSet.has(f.fileId || f.id)));
-          setSelectedFiles((prev) => prev.filter((id) => !idSet.has(id)));
-        });
+        setFiles((prev) => prev.filter((f) => !idSet.has(f.fileId || f.id)));
       });
+      // Guaranteed final clear — ensures UI reflects reality regardless of batching
+      setFiles([]);
+      onClearSelection?.();
+      setPagination((prev) => ({
+        ...prev,
+        total: 0,
+        totalPages: 0,
+        hasMore: false,
+      }));
     } catch (error) {
       console.error('Failed to empty trash:', error);
       alert('Failed to empty trash. Please try again.');
@@ -157,104 +173,113 @@ const TrashSection = ({ onViewFile, gridSize }) => {
 
   const getDaysRemaining = (deletedAt) => {
     if (!deletedAt || !user?.trashRetentionDays) return null;
-    
+
     const deleted = new Date(deletedAt);
     const expiresAt = new Date(deleted);
     expiresAt.setDate(expiresAt.getDate() + user.trashRetentionDays);
-    
+
     const now = new Date();
     const daysLeft = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
-    
+
     return daysLeft > 0 ? daysLeft : 0;
   };
 
-  if (loading && files.length === 0) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {[...Array(10)].map((_, i) => (
-          <div
-            key={i}
-            className="aspect-square bg-gray-200 dark:bg-zinc-700 rounded-xl animate-pulse"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (files.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="w-24 h-24 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mb-6">
-          <FontAwesomeIcon icon={faTrash} className="w-12 h-12 text-gray-300 dark:text-gray-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-          {t('trash.empty.title', 'Trash is empty')}
-        </h3>
-        <p className="text-gray-500 dark:text-gray-400 text-center max-w-md">
-          {t('trash.empty.description', 'Deleted files will appear here and be automatically removed after {{days}} days.', { days: user?.trashRetentionDays || 30 })}
-        </p>
-      </div>
-    );
-  }
+  const hasContent = files.length > 0 || pagination.total > 0;
 
   return (
-    <div className="space-y-4">
-      {/* Header with actions */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          {selectedFiles.length > 0 && (
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              {t('selected', '{{count}} selected', { count: selectedFiles.length })}
-            </span>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Trash action bar — visible whenever there are files or a selection */}
+      {(selectedFiles.length > 0 || hasContent) && (
+        <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-gray-200 dark:border-zinc-700 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {selectedFiles.length > 0 && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {t('selected', '{{count}} selected', {
+                  count: selectedFiles.length,
+                })}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {selectedFiles.length > 0 && (
+              <>
+                <button
+                  onClick={handleRestore}
+                  className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors rounded-lg"
+                >
+                  <FontAwesomeIcon
+                    icon={faArrowRotateLeft}
+                    className="w-4 h-4 mr-2"
+                  />
+                  {t('restore', 'Restore')}
+                </button>
+                <button
+                  onClick={handleDeletePermanently}
+                  className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors rounded-lg"
+                >
+                  <FontAwesomeIcon icon={faTrashCan} className="w-4 h-4 mr-2" />
+                  {t('deleteForever', 'Delete Forever')}
+                </button>
+              </>
+            )}
+
+            {hasContent && (
+              <button
+                onClick={handleEmptyTrash}
+                disabled={emptying}
+                className="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {emptying
+                  ? t('emptyingTrash', 'Emptying...')
+                  : t('emptyTrash', 'Empty Trash')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Files — list or grid based on viewMode */}
+      {viewMode === 'list' ? (
+        <FileListView
+          folders={[]}
+          files={files}
+          selectedFiles={selectedFiles}
+          selectedFolders={[]}
+          onSelectFile={handleSelectFile}
+          onViewFile={onViewFile}
+          loading={loading}
+          hasMore={pagination.hasMore}
+          onLoadMore={loadMoreFiles}
+          emptyMessage={t('trash.empty.title', 'Trash is empty')}
+          emptyIcon={faTrash}
+        />
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading && files.length === 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {[...Array(10)].map((_, i) => (
+                <div
+                  key={i}
+                  className="aspect-square bg-gray-200 dark:bg-zinc-700 rounded-xl animate-pulse"
+                />
+              ))}
+            </div>
+          ) : (
+            <VirtualizedPhotoGrid
+              files={files}
+              selectedFiles={selectedFiles}
+              onSelectFile={handleSelectFile}
+              onViewFile={onViewFile}
+              loading={loading}
+              hasMore={pagination.hasMore}
+              onLoadMore={loadMoreFiles}
+              gridSize={gridSize}
+              emptyMessage={t('trash.empty.title', 'Trash is empty')}
+            />
           )}
         </div>
-
-        <div className="flex items-center space-x-3">
-          {selectedFiles.length > 0 && (
-            <>
-              <button
-                onClick={handleRestore}
-                className="inline-flex items-center px-4 py-2 bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors rounded-lg"
-              >
-                <FontAwesomeIcon icon={faArrowRotateLeft} className="w-4 h-4 mr-2" />
-                {t('restore', 'Restore')}
-              </button>
-              <button
-                onClick={handleDeletePermanently}
-                className="inline-flex items-center px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors rounded-lg"
-              >
-                <FontAwesomeIcon icon={faTrashCan} className="w-4 h-4 mr-2" />
-                {t('deleteForever', 'Delete Forever')}
-              </button>
-            </>
-          )}
-
-          {(files.length > 0 || pagination.total > 0) && (
-            <button
-              onClick={handleEmptyTrash}
-              disabled={emptying}
-              className="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {emptying ? t('emptyingTrash', 'Emptying...') : t('emptyTrash', 'Empty Trash')}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Files grid */}
-      <VirtualizedPhotoGrid
-        files={files}
-        selectedFiles={selectedFiles}
-        onSelectFile={handleSelectFile}
-        onViewFile={onViewFile}
-        loading={loading}
-        hasMore={pagination.hasMore}
-        onLoadMore={loadMoreFiles}
-        gridSize={gridSize}
-        emptyMessage={t('trash.empty.title', 'Trash is empty')}
-        showDaysRemaining={true}
-        getDaysRemaining={getDaysRemaining}
-      />
+      )}
     </div>
   );
 };

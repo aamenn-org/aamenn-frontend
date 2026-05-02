@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -84,12 +85,17 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
+const ExternalRedirect = ({ to }) => {
+  useEffect(() => { window.location.replace(to); }, [to]);
+  return null;
+};
+
 function AppRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
       <Route path="/share/:slug" element={<ShareViewer />} />
-      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/terms" element={<ExternalRedirect to="https://aamenn.com/terms" />} />
       <Route
         path="/login"
         element={

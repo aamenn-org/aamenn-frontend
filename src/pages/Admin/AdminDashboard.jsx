@@ -15,6 +15,8 @@ import {
   faBell,
   faTag,
   faMoneyBillTransfer,
+  faCommentDots,
+  faFlag,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Sub-pages
@@ -24,6 +26,8 @@ import Storage from './Storage';
 import SystemHealth from './SystemHealth';
 import Plans from './Plans';
 import InstapayPayments from './InstapayPayments';
+import Feedback from './Feedback';
+import FlaggedSignups from './FlaggedSignups';
 
 const AdminDashboard = () => {
   const { logout, user } = useAuth();
@@ -85,6 +89,8 @@ const AdminDashboard = () => {
       icon: faMoneyBillTransfer,
       badge: instapayPendingCount,
     },
+    { path: '/dashboard/flagged-signups', label: 'Flagged Signups', icon: faFlag },
+    { path: '/dashboard/feedback', label: 'Feedback', icon: faCommentDots },
   ];
 
   const criticalAlerts = alerts.filter(
@@ -222,6 +228,8 @@ const AdminDashboard = () => {
             <Route path="health" element={<SystemHealth />} />
             <Route path="plans" element={<Plans />} />
             <Route path="instapay" element={<InstapayPayments />} />
+            <Route path="flagged-signups" element={<FlaggedSignups />} />
+            <Route path="feedback" element={<Feedback />} />
           </Routes>
         </div>
       </main>
