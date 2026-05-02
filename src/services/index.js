@@ -28,6 +28,7 @@ export { default as folderService } from './folder.service';
 export { default as adminService } from './admin.service';
 export { default as shareService } from './share.service';
 export { default as contactsService } from './contacts.service';
+export { default as paymentService } from './payment.service';
 export { default as feedbackService } from './feedback.service';
 
 // Unified crypto facade
@@ -37,7 +38,4 @@ export { default as cryptoService } from './crypto.service';
 export { thumbnailCache } from './cache';
 
 // Upload optimization
-export {
-  triggerWarmup,
-  resetPrewarmer,
-} from './upload-prewarmer';
+export { triggerWarmup, resetPrewarmer } from './upload-prewarmer';

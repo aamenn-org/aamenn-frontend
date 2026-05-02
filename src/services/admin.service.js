@@ -15,7 +15,11 @@ export const adminService = {
    * @deprecated Use getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit }) instead
    */
   async getTopUsersByStorage(limit = 10) {
-    const res = await this.getUsers({ sortBy: 'storage', sortOrder: 'DESC', limit });
+    const res = await this.getUsers({
+      sortBy: 'storage',
+      sortOrder: 'DESC',
+      limit,
+    });
     return Array.isArray(res) ? res : res?.users || [];
   },
 
@@ -30,7 +34,9 @@ export const adminService = {
   },
 
   async setUserStorageLimit(userId, storageLimitGb) {
-    const response = await api.patch(`/admin/users/${userId}/storage-limit`, { storageLimitGb });
+    const response = await api.patch(`/admin/users/${userId}/storage-limit`, {
+      storageLimitGb,
+    });
     return response.data;
   },
 
@@ -49,6 +55,44 @@ export const adminService = {
     return response.data;
   },
 
+  async getPlans() {
+    const response = await api.get('/admin/plans');
+    return response.data;
+  },
+
+  async updatePlan(planId, data) {
+    const response = await api.patch(`/admin/plans/${planId}`, data);
+    return response.data;
+  },
+
+  // ─── InstaPay Verification ─────────────────────────────────────────
+
+  async getInstapayPending() {
+    const response = await api.get('/admin/instapay/pending');
+    return response.data.submissions;
+  },
+
+  async getInstapayPendingCount() {
+    const response = await api.get('/admin/instapay/pending/count');
+    return response.data.count;
+  },
+
+  async getInstapayHistory() {
+    const response = await api.get('/admin/instapay/history');
+    return response.data.submissions;
+  },
+
+  async getInstapaySubmission(id) {
+    const response = await api.get(`/admin/instapay/${id}`);
+    return response.data.submission;
+  },
+
+  async reviewInstapay(id, action, adminNote) {
+    const response = await api.post(`/admin/instapay/${id}/review`, {
+      action,
+      adminNote,
+    });
+    return response.data.submission;
   async getFlaggedSignups(params = {}) {
     const response = await api.get('/admin/flagged-signups', { params });
     return response.data;

@@ -13,6 +13,8 @@ import {
   faBars,
   faXmark,
   faBell,
+  faTag,
+  faMoneyBillTransfer,
   faCommentDots,
   faFlag,
 } from '@fortawesome/free-solid-svg-icons';
@@ -22,6 +24,8 @@ import Overview from './Overview';
 import UsersPage from './Users';
 import Storage from './Storage';
 import SystemHealth from './SystemHealth';
+import Plans from './Plans';
+import InstapayPayments from './InstapayPayments';
 import Feedback from './Feedback';
 import FlaggedSignups from './FlaggedSignups';
 
@@ -30,6 +34,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
+  const [instapayPendingCount, setInstapayPendingCount] = useState(0);
 
   // Fetch alerts on mount
   useEffect(() => {
@@ -44,6 +49,21 @@ const AdminDashboard = () => {
     fetchAlerts();
     // Refresh alerts every 5 minutes
     const interval = setInterval(fetchAlerts, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch InstaPay pending count for sidebar badge
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const count = await adminService.getInstapayPendingCount();
+        setInstapayPendingCount(count || 0);
+      } catch (error) {
+        console.error('Failed to fetch InstaPay pending count:', error);
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -62,12 +82,19 @@ const AdminDashboard = () => {
     { path: '/dashboard/users', label: 'Users', icon: faUsers },
     { path: '/dashboard/storage', label: 'Storage', icon: faHardDrive },
     { path: '/dashboard/health', label: 'System Health', icon: faChartArea },
+    { path: '/dashboard/plans', label: 'Plans', icon: faTag },
+    {
+      path: '/dashboard/instapay',
+      label: 'InstaPay',
+      icon: faMoneyBillTransfer,
+      badge: instapayPendingCount,
+    },
     { path: '/dashboard/flagged-signups', label: 'Flagged Signups', icon: faFlag },
     { path: '/dashboard/feedback', label: 'Feedback', icon: faCommentDots },
   ];
 
   const criticalAlerts = alerts.filter(
-    (a) => a.type === 'error' || a.type === 'warning'
+    (a) => a.type === 'error' || a.type === 'warning',
   );
 
   return (
@@ -115,7 +142,12 @@ const AdminDashboard = () => {
               }
             >
               <FontAwesomeIcon icon={item.icon} className="w-5 h-5" />
-              <span className="ml-3">{item.label}</span>
+              <span className="ml-3 flex-1">{item.label}</span>
+              {item.badge > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold bg-red-500 text-white rounded-full">
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -154,7 +186,10 @@ const AdminDashboard = () => {
             {/* Alerts indicator */}
             {criticalAlerts.length > 0 && (
               <div className="relative">
-                <FontAwesomeIcon icon={faBell} className="text-orange-500 w-6 h-6" />
+                <FontAwesomeIcon
+                  icon={faBell}
+                  className="text-orange-500 w-6 h-6"
+                />
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
                   {criticalAlerts.length}
                 </span>
@@ -167,13 +202,18 @@ const AdminDashboard = () => {
         {criticalAlerts.length > 0 && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 px-4 lg:px-6 py-3">
             <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
-              <FontAwesomeIcon icon={faTriangleExclamation} className="w-[18px] h-[18px] flex-shrink-0" />
+              <FontAwesomeIcon
+                icon={faTriangleExclamation}
+                className="w-[18px] h-[18px] flex-shrink-0"
+              />
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                 <span className="font-medium">
                   {criticalAlerts.length} active alert
                   {criticalAlerts.length > 1 ? 's' : ''}
                 </span>
-                <span className="text-sm truncate">- {criticalAlerts[0]?.message}</span>
+                <span className="text-sm truncate">
+                  - {criticalAlerts[0]?.message}
+                </span>
               </div>
             </div>
           </div>
@@ -186,6 +226,8 @@ const AdminDashboard = () => {
             <Route path="users" element={<UsersPage />} />
             <Route path="storage" element={<Storage />} />
             <Route path="health" element={<SystemHealth />} />
+            <Route path="plans" element={<Plans />} />
+            <Route path="instapay" element={<InstapayPayments />} />
             <Route path="flagged-signups" element={<FlaggedSignups />} />
             <Route path="feedback" element={<Feedback />} />
           </Routes>

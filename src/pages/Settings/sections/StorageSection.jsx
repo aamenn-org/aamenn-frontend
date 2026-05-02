@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { userService } from '../../../services';
 import { useAuth } from '../../../context';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faDatabase, faCheck, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
+import {
+  faDatabase,
+  faCheck,
+  faTriangleExclamation,
+} from '@fortawesome/free-solid-svg-icons';
 
 // Format bytes to human readable format
 const formatBytes = (bytes, decimals = 2) => {
@@ -87,7 +91,8 @@ const StorageSection = () => {
 
   const usedBytes = storageData?.usedBytes || 0;
   const totalBytes = storageData?.limitBytes || 1073741824; // 1GB default
-  const percentage = storageData?.percentUsed || Math.min((usedBytes / totalBytes) * 100, 100);
+  const percentage =
+    storageData?.percentUsed || Math.min((usedBytes / totalBytes) * 100, 100);
   const fileCount = storageData?.fileCount || 0;
 
   // Determine color based on usage
@@ -137,7 +142,10 @@ const StorageSection = () => {
           <div className="p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
-                <FontAwesomeIcon icon={faDatabase} className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                <FontAwesomeIcon
+                  icon={faDatabase}
+                  className="w-5 h-5 text-primary-600 dark:text-primary-400"
+                />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -153,7 +161,10 @@ const StorageSection = () => {
           <div className="p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <FontAwesomeIcon icon={faDatabase} className="w-5 h-5 text-green-600 dark:text-green-400" />
+                <FontAwesomeIcon
+                  icon={faDatabase}
+                  className="w-5 h-5 text-green-600 dark:text-green-400"
+                />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -171,14 +182,17 @@ const StorageSection = () => {
         {percentage >= 80 && (
           <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-900/30 rounded-lg">
             <div className="flex gap-3">
-              <FontAwesomeIcon icon={faTriangleExclamation} className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+              <FontAwesomeIcon
+                icon={faTriangleExclamation}
+                className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"
+              />
               <div>
                 <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
                   Storage Almost Full
                 </p>
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  You're running low on storage. Consider deleting some files to
-                  free up space.
+                  You're running low on storage. Consider upgrading your plan or
+                  deleting some files to free up space.
                 </p>
               </div>
             </div>
@@ -192,7 +206,8 @@ const StorageSection = () => {
           Trash Settings
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Configure how long deleted files are kept in trash before permanent deletion.
+          Configure how long deleted files are kept in trash before permanent
+          deletion.
         </p>
 
         <div className="space-y-4">
@@ -210,19 +225,25 @@ const StorageSection = () => {
                 min="1"
                 max="365"
                 value={trashRetentionDays}
-                onChange={(e) => setTrashRetentionDays(parseInt(e.target.value, 10))}
+                onChange={(e) =>
+                  setTrashRetentionDays(parseInt(e.target.value, 10))
+                }
                 className="w-32 px-4 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-600 text-gray-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <button
                 onClick={handleSaveRetention}
-                disabled={savingRetention || trashRetentionDays === user?.trashRetentionDays}
+                disabled={
+                  savingRetention ||
+                  trashRetentionDays === user?.trashRetentionDays
+                }
                 className="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {savingRetention ? 'Saving...' : 'Save'}
               </button>
             </div>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Files in trash will be automatically deleted after {trashRetentionDays} days.
+              Files in trash will be automatically deleted after{' '}
+              {trashRetentionDays} days.
             </p>
           </div>
 
