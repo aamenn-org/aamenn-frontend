@@ -349,7 +349,7 @@ const SubscriptionSection = () => {
                       ? new Date(subscription.graceEndsAt).toLocaleDateString()
                       : 'the grace period ends'}{' '}
                     to keep your storage. After that, your storage will be
-                    downgraded to the free 5GB tier.
+                    downgraded to the free 4GB tier.
                   </p>
                 </div>
               </div>
@@ -394,7 +394,7 @@ const SubscriptionSection = () => {
               Free Plan
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              You're on the free 5GB plan. Upgrade to get more storage.
+              You're on the free 4GB plan. Upgrade to get more storage.
             </p>
             <button
               onClick={() => setShowPlanSelector(true)}

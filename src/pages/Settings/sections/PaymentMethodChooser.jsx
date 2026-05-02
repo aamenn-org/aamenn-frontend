@@ -52,29 +52,27 @@ const PaymentMethodChooser = ({
         </div>
 
         <div className="p-6 space-y-3">
-          <button
-            onClick={onPickPaymob}
-            className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 dark:border-zinc-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/10 transition-all text-left"
+          <div
+            className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 dark:border-zinc-700 opacity-60 cursor-not-allowed"
           >
-            <div className="p-3 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
+            <div className="p-3 bg-gray-100 dark:bg-gray-700/30 rounded-lg">
               <FontAwesomeIcon
                 icon={faCreditCard}
-                className="w-6 h-6 text-primary-600 dark:text-primary-400"
+                className="w-6 h-6 text-gray-400 dark:text-gray-500"
               />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-900 dark:text-white">
+              <p className="font-semibold text-gray-500 dark:text-gray-400">
                 Card / Wallet
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Visa, Mastercard, Vodafone Cash, Fawry — instant activation
+              <p className="text-sm text-gray-400 dark:text-gray-500">
+                Coming soon — Visa, Mastercard, Vodafone Cash, Fawry
               </p>
             </div>
-            <FontAwesomeIcon
-              icon={faChevronRight}
-              className="w-4 h-4 text-gray-400"
-            />
-          </button>
+            <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+              Soon
+            </span>
+          </div>
 
           {instapayEnabled && (
             <button
