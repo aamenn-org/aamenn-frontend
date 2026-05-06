@@ -277,7 +277,7 @@ const AuthPage = () => {
       <footer className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-gray-100 dark:border-zinc-800 py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <p className="text-sm text-gray-400 dark:text-gray-500">
-            © 2023 AAMENN. All rights reserved.
+            © 2023 Aamenn. All rights reserved.
           </p>
           <div className="flex space-x-6">
             <Link

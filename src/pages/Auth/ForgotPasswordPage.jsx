@@ -122,7 +122,7 @@ const ForgotPasswordPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <img src="/logo3.png" alt="Aamenn Logo" className="w-16 h-16" />
+          <img src="/newlogo.png" alt="Aamenn Logo" className="w-16 h-16" />
         </div>
 
         {error && (

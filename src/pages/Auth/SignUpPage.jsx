@@ -223,8 +223,8 @@ const SignUpPage = () => {
         <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
           <div className="w-full max-w-md">
             {/* Logo */}
-            <div className="flex justify-center mb-6">
-              <img src="/logo3.png" alt="Aamenn Logo" className="w-20 h-20" />
+            <div className="flex justify-center mb-12">
+              <img src="/loginbanner.png" alt="Aamenn Logo" className="w-75 h-25" />
             </div>
 
             <div className="mb-8">

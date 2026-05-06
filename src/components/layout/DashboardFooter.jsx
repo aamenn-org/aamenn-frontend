@@ -9,7 +9,7 @@ const DashboardFooter = () => {
         <div className="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
           <div className="flex items-center space-x-2 text-sm text-gray-400">
             <FontAwesomeIcon icon={faHeart} className="w-4 h-4" />
-            <span> 2023 AAMENN. Privacy First.</span>
+            <span> 2023 Aamenn. Privacy First.</span>
           </div>
           <div className="flex items-center space-x-6">
             <Link

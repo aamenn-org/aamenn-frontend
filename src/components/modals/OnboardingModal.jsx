@@ -10,7 +10,7 @@ const OnboardingModal = ({ isOpen, onComplete }) => {
   const isRTL = i18n.language === 'ar';
 
   const screens = [
-    { image: '/onboarding1.png', alt: 'Welcome to AAMENN' },
+    { image: '/onboarding1.png', alt: 'Welcome to Aamenn' },
     { image: '/onboarding2.png', alt: 'Secure Your Files' },
     { image: '/onboarding3.png', alt: 'Organize with Folders' },
     { image: '/onboarding4.png', alt: 'Share Safely' },

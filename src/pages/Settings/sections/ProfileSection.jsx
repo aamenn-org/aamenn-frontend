@@ -303,7 +303,7 @@ const ProfileSection = () => {
             {isGoogleUser && (
               <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">
                 {/* Note: You can now change your display name locally even if you use Google. */}
-                This will only change your name on AAMENN.
+                This will only change your name on Aamenn.
               </p>
             )}
           </div>

@@ -54,9 +54,9 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
 
             <Link to="/folders" className="flex items-center space-x-2">
               <div className="w-7 h-7 flex items-center justify-center">
-                <img src="/logo3.png" alt="" />
+                <img src="/newlogo.png" alt="" />
               </div>
-              <span className="text-lg font-bold">AAMENN</span>
+              <span className="text-lg font-bold">Aamenn</span>
             </Link>
           </div>
 

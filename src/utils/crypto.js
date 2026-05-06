@@ -1,7 +1,7 @@
 /**
  * Zero-Knowledge Encryption Utilities
  *
- * This module implements client-side encryption for AAMENN.
+ * This module implements client-side encryption for Aamenn.
  * The server NEVER sees plaintext data - all encryption/decryption
  * happens in the browser using the Web Crypto API.
  *

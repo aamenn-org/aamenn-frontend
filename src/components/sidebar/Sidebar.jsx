@@ -117,9 +117,9 @@ const Sidebar = ({
         <div className="flex items-center justify-between px-3 h-14 flex-shrink-0 border-b border-white/10">
           <Link to="/folders" className="flex items-center gap-2" onClick={() => { handleSection('folders'); }}>
             <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
-              <img src="/logo3.png" alt="Aamenn" />
+              <img src="/newlogo.png" alt="Aamenn" />
             </div>
-            <span className="text-white text-base font-bold tracking-wide">AAMENN</span>
+            <span className="text-white text-base font-bold tracking-wide">Aamenn</span>
           </Link>
           {/* Mobile close button */}
           <button
