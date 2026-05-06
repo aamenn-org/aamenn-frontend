@@ -1,0 +1,34 @@
+{
+  "title": "Albums",
+  "createAlbum": "Create Album",
+  "editAlbum": "Edit Album",
+  "deleteAlbum": "Delete Album",
+  "albumName": "Album Name",
+  "albumNamePlaceholder": "Enter album name",
+  "description": "Description",
+  "descriptionPlaceholder": "Enter album description (optional)",
+  "coverPhoto": "Cover Photo",
+  "selectCover": "Select Cover",
+  "photos": "{{count}} photos",
+  "created": "Created {{date}}",
+  "empty": {
+    "title": "No albums yet",
+    "description": "Create your first album to organize your photos"
+  },
+  "confirmDelete": {
+    "title": "Delete Album",
+    "message": "Are you sure you want to delete \"{{name}}\"? The photos will not be deleted.",
+    "confirm": "Delete Album"
+  },
+  "success": {
+    "created": "Album created successfully",
+    "updated": "Album updated successfully",
+    "deleted": "Album deleted successfully"
+  },
+  "errors": {
+    "createFailed": "Failed to create album",
+    "updateFailed": "Failed to update album",
+    "deleteFailed": "Failed to delete album",
+    "loadFailed": "Failed to load albums"
+  }
+}

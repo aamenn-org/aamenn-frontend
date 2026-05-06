@@ -1,0 +1,82 @@
+{
+  "tabs": {
+    "photos": "Media",
+    "files": "Files",
+    "albums": "Albums",
+    "folders": "Folders",
+    "favorites": "Favorites",
+    "contacts": "Contacts",
+    "trash": "Trash"
+  },
+  "cancel": "Cancel",
+  "uploadFiles": "Upload Files",
+  "upload": {
+    "dragDrop": "Drag and drop your files here, or click to browse",
+    "supported": "Supported: Images, Videos, PDF, DOCX, TXT",
+    "encrypting": "Encrypting and uploading...",
+    "uploading": "Uploading...",
+    "uploadFiles": "Upload {{count}} file",
+    "complete": "Complete",
+    "uploadingFiles": "Uploading {{count}} files..."
+  },
+  "delete": "Delete",
+  "share": "Share",
+  "addToAlbum": "Add to Album",
+  "selected": "{{count}} selected",
+  "storage": {
+    "title": "Storage",
+    "limitReached": "Storage limit reached. Delete files to upload more."
+  },
+  "gridSize": {
+    "small": "Small",
+    "medium": "Medium",
+    "large": "Large"
+  },
+  "fileInfo": "File Info",
+  "moreOptions": "More options",
+  "filename": "Filename",
+  "renameFile": "Rename file",
+  "resolution": "Resolution",
+  "size": "Size",
+  "type": "Type",
+  "format": "Format",
+  "duration": "Duration",
+  "unknown": "Unknown",
+  "download": "Download",
+  "downloading": "Downloading...",
+  "restore": "Restore",
+  "deleteForever": "Delete Forever",
+  "emptyTrash": "Empty Trash",
+  "video": {
+    "rewind": "Rewind 10s",
+    "forward": "Forward 10s",
+    "fullscreen": "Fullscreen (F)"
+  },
+  "favorites": {
+    "empty": {
+      "title": "No favorites yet",
+      "description": "Click the heart icon on any photo to add it to your favorites."
+    }
+  },
+  "trash": {
+    "empty": {
+      "title": "Trash is empty",
+      "description": "Deleted files will appear here and be automatically removed after {{days}} days."
+    }
+  },
+  "empty": {
+    "photos": "No photos yet"
+  },
+  "vault": {
+    "locked": "Vault Locked",
+    "unlockDescription": "Enter your Vault Password to unlock your encrypted files",
+    "createPassword": "Create Password",
+    "setupDescription": "Set up encryption for your files",
+    "passwordMinLength": "Vault Password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "passwordPlaceholder": "Create a strong password",
+    "passwordMinLengthHint": "Must be at least 8 characters",
+    "confirmPasswordPlaceholder": "Confirm your password",
+    "settingUp": "Setting up..."
+  }
+}
