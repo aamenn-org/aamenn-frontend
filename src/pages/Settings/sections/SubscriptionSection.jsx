@@ -390,7 +390,7 @@ const SubscriptionSection = () => {
             )}
 
             {/* Renew Button */}
-            {(subscription.status === 'active' ||
+            {/* {(subscription.status === 'active' ||
               subscription.status === 'grace') && (
               <button
                 onClick={handleRenew}
@@ -402,7 +402,7 @@ const SubscriptionSection = () => {
                   ? 'Redirecting to payment...'
                   : 'Renew Subscription'}
               </button>
-            )}
+            )} */}
 
             {/* Change Plan */}
             <button
